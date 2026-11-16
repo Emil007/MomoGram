@@ -3,6 +3,15 @@
 // Easy 64, Kinoko 64, Star 64, Time Trial 64, then the demo puzzle.
 import { registerImporter } from './index';
 import { Pack, PackLevel, PackPuzzle, Text, rowsFromBits } from '../format';
+import { gbPackMusic } from '../../audio/gb/games';
+
+/** the game's own music, played by MomoGram's Game Boy sound emulation (src/audio/gb) */
+function withMusic(p: Pack, rom: Uint8Array): Pack {
+  let m = null;
+  try { m = gbPackMusic(rom); } catch (e) { console.warn('GB music', e); }
+  if (m) { p.theme = { ...p.theme, music: m.music }; p.assets = [...(p.assets ?? []), m.asset]; }
+  return p;
+}
 
 const gbTitle = (d: Uint8Array) => String.fromCharCode(...d.subarray(0x134, 0x143)).replace(/\0.*$/, '').trim();
 const isGb = (d: Uint8Array) => d.length >= 0x8000 && d[0x104] === 0xce && d[0x105] === 0xed && d[0x106] === 0x66;
@@ -96,11 +105,11 @@ function readPicross2(d: Uint8Array): Pack {
 registerImporter({
   name: 'Picross 2 (Game Boy)',
   detect: d => isGb(d) && /^PICROSS 2/.test(gbTitle(d)),
-  read: d => [readPicross2(d)],
+  read: d => [withMusic(readPicross2(d), d)],
 });
 
 registerImporter({
   name: "Mario's Picross (Game Boy)",
   detect: d => isGb(d) && /MARIO.?S PICROSS/i.test(gbTitle(d)) && findMarioRecords(d) >= 0,
-  read: d => [readMario(d, gbTitle(d).includes("'") ? 'USA/EUR' : 'JPN')],
+  read: d => [withMusic(readMario(d, gbTitle(d).includes("'") ? 'USA/EUR' : 'JPN'), d)],
 });
