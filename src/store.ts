@@ -64,13 +64,14 @@ export interface Settings {
   packColors: boolean; // colour the screens like the pack's original game
   difficulty: 'auto' | 'easy' | 'normal' | 'hard'; // auto = the level's own rules
   logicHints: boolean;
-  toolsRight: boolean; // landscape: tool column on the right instead of the left
+  toolsRight: boolean;
+  musicMode: 'random-pack' | 'random-all' | 'fixed'; // in-game music
 }
 
 const DEFAULTS: Settings = {
   lang: '', music: true, musicVolume: 0.7, sfx: true, hints: 'ask', unlockAll: false,
   normalStyle: 'stage_jazz_SEQ', freeStyle: 'stage_musicbox_SEQ', lefty: false, showTimer: true,
-  packMusic: true, packColors: true, difficulty: 'auto', logicHints: false, toolsRight: false,
+  packMusic: true, packColors: true, difficulty: 'auto', logicHints: false, toolsRight: false, musicMode: 'random-pack',
 };
 
 function readJson<T>(k: string, def: T): T {

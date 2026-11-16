@@ -279,6 +279,43 @@ function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), STARTER,
 
 // ---------------------------------------------------------------- pack look & sound
 
+const DS_STAGES: Array<[string, string]> = [
+  ['stage_jazz_SEQ', 'Jazz'], ['stage_reggae_SEQ', 'Reggae'], ['stage_bossanova_SEQ', 'Bossa Nova'], ['stage_waltz_SEQ', 'Waltz'],
+  ['stage_musette_SEQ', 'Musette'], ['stage_musicbox_SEQ', 'Music Box'], ['stage_rock_SEQ', 'Rock'], ['stage_house_SEQ', 'House'], ['stage_sine_SEQ', 'Sine'],
+];
+
+type Track = { pack: Pack | null; ref: string }; // pack null = Picross DS sound archive sequence
+/** in-game tracks a pack offers (Picross DS: its nine music styles) */
+function packTracks(pack: Pack | null): Track[] {
+  if (!pack || pack.id === 'picross-ds' || pack.id === 'daily' || pack.id === 'momogram-starter' || !pack.theme?.music || !settings.packMusic) {
+    return ctx.ds ? DS_STAGES.map(([ref]) => ({ pack: null, ref })) : [];
+  }
+  const m = pack.theme.music;
+  const refs = [...new Set([m.play, m.play2, m.menu, m.title].filter((r): r is string => !!r))];
+  return refs.map(ref => ({ pack, ref }));
+}
+let lastTrack = '';
+/** music while playing: random from this pack (default), random from everything, or the fixed choice from the options */
+function playMusicFor(pack: Pack, rules: 'easy' | 'normal' | 'free') {
+  const fixed = rules === 'free' ? settings.freeStyle : settings.normalStyle;
+  let pool: Track[] = [];
+  if (settings.musicMode === 'random-all') {
+    pool = [...packTracks(null), ...(settings.packMusic ? ctx.packs.flatMap(p => p.theme?.music ? packTracks(p) : []) : [])];
+  } else if (settings.musicMode === 'random-pack') {
+    pool = packTracks(pack);
+  } else {
+    return usePack(pack, 'play', fixed);
+  }
+  if (!pool.length) return usePack(pack, 'play', fixed);
+  // a different track than last time when there is a choice
+  const choices = pool.length > 1 ? pool.filter(t => (t.pack?.id ?? '') + t.ref !== lastTrack) : pool;
+  const tr = choices[Math.floor(Math.random() * choices.length)];
+  lastTrack = (tr.pack?.id ?? '') + tr.ref;
+  applyThemeCss(root(), packColors(pack));
+  if (!tr.pack) Snd.play(tr.ref);
+  else Snd.playPack(tr.pack.id, tr.ref).then(ok => { if (!ok) Snd.play(fixed); });
+}
+
 /** colours of the pack's original game (or null for MomoGram's own) */
 function packColors(pack: Pack | null): ThemeColors | null {
   return pack?.theme?.palette && settings.packColors ? themeColors(pack.theme.palette) : null;
@@ -318,7 +355,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const board = new Board(pz.rows, rules);
   if (restore) board.restore(restore);
   const isDs = pack.id === 'picross-ds';
-  usePack(pack, 'play', rules === 'free' ? settings.freeStyle : settings.normalStyle);
+  playMusicFor(pack, rules);
 
   // slim status bar instead of a second screen: picture, level, LCD timer; the board gets the rest
   const timeEl = h('span', { class: 'time' }, '00:00');
@@ -628,7 +665,7 @@ function groupLevels(pack: Pack, g: string) {
 
 function optionsScreen() {
   const sel = (key: keyof typeof settings, opts: Array<[string, string]>) => {
-    const s = h('select', { onChange: (e: Event) => { (settings as any)[key] = (e.target as HTMLSelectElement).value; saveSettings(); if (key === 'lang') { setLang(settings.lang as Lang); optionsScreen(); } } });
+    const s = h('select', { onChange: (e: Event) => { (settings as any)[key] = (e.target as HTMLSelectElement).value; saveSettings(); if (key === 'lang') setLang(settings.lang as Lang); if (key === 'lang' || key === 'musicMode') optionsScreen(); } });
     for (const [v, l] of opts) s.append(h('option', { value: v, selected: String(settings[key]) === v ? true : undefined }, l));
     return s;
   };
@@ -636,10 +673,7 @@ function optionsScreen() {
     const c = h('input', { type: 'checkbox', checked: settings[key] ? true : undefined, onChange: (e: Event) => { (settings as any)[key] = (e.target as HTMLInputElement).checked; saveSettings(); after?.(); } });
     return c;
   };
-  const styles: Array<[string, string]> = [
-    ['stage_jazz_SEQ', 'Jazz'], ['stage_reggae_SEQ', 'Reggae'], ['stage_bossanova_SEQ', 'Bossa Nova'], ['stage_waltz_SEQ', 'Waltz'],
-    ['stage_musette_SEQ', 'Musette'], ['stage_musicbox_SEQ', 'Music Box'], ['stage_rock_SEQ', 'Rock'], ['stage_house_SEQ', 'House'], ['stage_sine_SEQ', 'Sine'],
-  ];
+  const styles = DS_STAGES;
   const vol = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: settings.musicVolume, onInput: (e: Event) => { settings.musicVolume = +(e.target as HTMLInputElement).value; saveSettings(); Snd.setVolume(settings.musicVolume); } });
   const row = (label: string, ctl: Node) => h('label', { class: 'opt' }, h('span', {}, label), ctl);
   screen(header(t('options'), home), h('div', { class: 'options' },
@@ -647,8 +681,9 @@ function optionsScreen() {
     row(t('music'), chk('music', () => settings.music ? Snd.play('title_SEQ') : Snd.stop())),
     row(t('volume'), vol),
     row(t('sfx'), chk('sfx')),
-    row(t('normalMusic'), sel('normalStyle', styles)),
-    row(t('freeMusic'), sel('freeStyle', styles)),
+    row(t('musicMode'), sel('musicMode', [['random-pack', t('musicRandomPack')], ['random-all', t('musicRandomAll')], ['fixed', t('musicFixed')]])),
+    settings.musicMode === 'fixed' ? row(t('normalMusic'), sel('normalStyle', styles)) : null,
+    settings.musicMode === 'fixed' ? row(t('freeMusic'), sel('freeStyle', styles)) : null,
     row(t('packMusic'), chk('packMusic')),
     row(t('packColors'), chk('packColors')),
     row(t('toolsRight'), chk('toolsRight')),
