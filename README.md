@@ -31,7 +31,9 @@ The name combines *nonogram* with Momo, from Michael Ende's novel, because Picro
 | Mario's Picross | Game Boy | ✓ (Easy, Kinoko, Star, Time Trial) |
 | Picross 2 | Game Boy | ✓ as 15×15 sections (the 30×30 pictures are not reassembled yet) |
 | Pokémon Picross (prototype) | Game Boy Color | not yet |
-| Mario no Super Picross, Picross NP Vol. 1–8, Tamori no Picross | Super Famicom / Satellaview | not yet |
+| Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles (Mario 1–10, Special, EX; Wario 1–10, Special, Ultra, EX) |
+| Tamori no Picross | Satellaview (.bs) | ✓ standard puzzles plus the daily and weekly puzzles of each broadcast; importing several broadcasts adds their days to one pack |
+| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | not yet |
 | Picross S series and other Switch games | Switch | not yet |
 
 Regional versions of the same game are merged into one pack (all languages' names). `.zip`, `.7z` and `.rar` archives can be chosen directly.

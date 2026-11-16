@@ -109,6 +109,14 @@ export function mergePacks(a: Pack, b: Pack): Pack {
     const q = byId.get(p.id);
     if (q && q.rows.join() === p.rows.join()) q.name = { ...p.name, ...q.name };
   }
+  // puzzles only the second file has (e.g. another Satellaview broadcast): add them, by level id
+  for (const l of b.levels) {
+    const extra = l.puzzles.filter(p => !byId.has(p.id));
+    if (!extra.length) continue;
+    const mine = out.levels.find(x => x.id === l.id);
+    if (mine) mine.puzzles = [...mine.puzzles, ...JSON.parse(JSON.stringify(extra))].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+    else out.levels.push(JSON.parse(JSON.stringify({ ...l, puzzles: extra })));
+  }
   return out;
 }
 
