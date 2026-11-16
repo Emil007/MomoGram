@@ -1,5 +1,5 @@
 // Pack manager: list, import (.json / .zip), export, delete, and create packs from the user's own games.
-import { Pack, packFileName, pickText, pickAny, validatePack, mergePacks } from '../packs/format';
+import { Pack, PackAsset, packFileName, pickText, pickAny, validatePack, mergePacks, assetDir } from '../packs/format';
 import { importGameFile } from '../packs/importers/index';
 import '../packs/importers/all';
 import { storage } from '../store';
@@ -28,11 +28,12 @@ export function openPackManager(pm: PM) {
       list.append(h('div', { class: 'pack' },
         h('button', { class: 'btn packbtn', onClick: () => pm.openPack(p) },
           h('b', {}, pickAny(p.title, lang())),
-          h('small', {}, `${p.source.platform}${p.source.region ? ' · ' + p.source.region : ''} · ${n} ${t('puzzles')}`)),
-        h('button', { class: 'btn ghost', title: t('download'), onClick: () => download(packFileName(p), JSON.stringify(p), 'application/json') }, '⤓'),
+          h('small', {}, `${p.source.platform}${p.source.region ? ' · ' + p.source.region : ''} · ${n} ${t('puzzles')}` + (p.theme?.music ? ' · ♪' : ''))),
+        h('button', { class: 'btn ghost', title: t('download'), onClick: () => p.theme?.music ? exportZip([p], packFileName(p).replace(/\.json$/, '.zip')) : download(packFileName(p), JSON.stringify(p), 'application/json') }, '⤓'),
         h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
           if (!confirm(t('delete') + ': ' + pickAny(p.title, lang()) + '?')) return;
           await storage.deletePack(p.id);
+          await storage.deleteAssets(p.id).catch(() => {});
           pm.setPacks(pm.packs().filter(x => x.id !== p.id));
           render();
         } }, '🗑')));
@@ -50,7 +51,13 @@ export function openPackManager(pm: PM) {
     }
     const ps = [...merged.values()];
     const cur = pm.packs().filter(x => !merged.has(x.id));
-    for (const p of ps) await storage.savePack(p);
+    for (const p of ps) {
+      // music and other binaries go to their own store; the pack object stays small
+      const { assets, ...rest } = p;
+      for (const a of assets ?? []) await storage.saveAsset(p.id, a.name, a.data);
+      delete (p as any).assets;
+      await storage.savePack(rest as Pack);
+    }
     pm.setPacks([...cur, ...ps].sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en'))));
     render();
   }
@@ -65,7 +72,12 @@ export function openPackManager(pm: PM) {
         if (!/\.json$/i.test(e.name)) continue;
         try {
           const p = JSON.parse(new TextDecoder().decode(e.data));
-          if (validatePack(p)) found.push(p);
+          if (!validatePack(p)) continue;
+          // music saved next to the pack: <pack>.assets/<name>
+          const dir = e.name.replace(/[^/]*$/, '') + assetDir(p);
+          const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => ({ name: x.name.slice(dir.length), data: x.data }));
+          if (assets.length) p.assets = assets;
+          found.push(p);
         } catch { /* skip */ }
       }
     }
@@ -109,8 +121,17 @@ export function openPackManager(pm: PM) {
     }
   }
 
-  function exportZip(ps: Pack[], name = 'momogram-packs.zip') {
-    download(name, makeZip(ps.map(p => ({ name: packFileName(p), text: JSON.stringify(p) }))), 'application/zip');
+  async function exportZip(ps: Pack[], name = 'momogram-packs.zip') {
+    const entries: Array<{ name: string; text?: string; data?: Uint8Array }> = [];
+    for (const p of ps) {
+      const { assets, ...rest } = p;
+      entries.push({ name: packFileName(p), text: JSON.stringify(rest) });
+      for (const a of await storage.assetNames(p.id).catch(() => [] as string[])) {
+        const data = await storage.loadAsset(p.id, a);
+        if (data) entries.push({ name: assetDir(p) + a, data });
+      }
+    }
+    download(name, makeZip(entries), 'application/zip');
   }
 
   render();

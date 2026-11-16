@@ -1,7 +1,9 @@
-// Audio facade: music from the user's Picross DS sound archive, plus MomoGram's own small UI sounds.
+// Audio facade: music from the user's Picross DS sound archive or from a pack's own music (extracted from the
+// user's other games), plus MomoGram's own small UI sounds.
 import { Sdat } from './audio/sdat';
 import { SeqPlayer } from './audio/player';
-import { settings } from './store';
+import { decodeBcstm, isBcstm } from './audio/bcstm';
+import { settings, storage } from './store';
 
 let ac: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -10,7 +12,13 @@ let player: SeqPlayer | null = null;
 let getSdat: () => Uint8Array | null = () => null;
 let sdatFor: Uint8Array | null = null;
 let current = '';
-let pending: { name: string; loop: boolean } | null = null;
+let pending: (() => void) | null = null;
+
+// pack music: decoded streams are cached (a few per session); sound archives get their own sequencer
+const buffers = new Map<string, AudioBuffer>();
+const packSeq = new Map<string, SeqPlayer>();
+let stream: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+let packSeqPlaying: SeqPlayer | null = null;
 
 function ensure(): boolean {
   if (!ac) {
@@ -36,22 +44,92 @@ function ensure(): boolean {
 const unlock = () => {
   if (!ensure()) return;
   ac!.resume();
-  if (pending) { const p = pending; pending = null; Audio.play(p.name, p.loop); }
+  if (pending) { const p = pending; pending = null; p(); }
 };
 window.addEventListener('pointerdown', unlock);
+(window as any).__music = () => current;
 window.addEventListener('keydown', unlock);
+
+function stopPackMusic(fade = 0.15) {
+  if (stream && ac) {
+    const s = stream; stream = null;
+    try { s.gain.gain.setTargetAtTime(0, ac.currentTime, fade / 3); s.src.stop(ac.currentTime + fade * 2); } catch { /* stopped */ }
+  }
+  packSeqPlaying?.stop(fade); packSeqPlaying = null;
+}
+
+async function loadBuffer(packId: string, name: string): Promise<AudioBuffer | null> {
+  const key = packId + '/' + name;
+  if (buffers.has(key)) return buffers.get(key)!;
+  const data = await storage.loadAsset(packId, name);
+  if (!data || !isBcstm(data)) return null;
+  const s = decodeBcstm(data);
+  const buf = ac!.createBuffer(s.channels.length, s.channels[0].length, s.sampleRate);
+  s.channels.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+  (buf as any).loopInfo = s;
+  if (buffers.size > 6) buffers.delete(buffers.keys().next().value!);
+  buffers.set(key, buf);
+  return buf;
+}
 
 export const Audio = {
   init(fn: () => Uint8Array | null) { getSdat = fn; },
+  /** a sequence from the Picross DS sound archive */
   play(name: string, loop = true) {
     if (!settings.music) { this.stop(); return; }
     if (name === current && player?.playing) return;
-    if (!ac || ac.state !== 'running') { pending = { name, loop }; return; }
+    if (!ac || ac.state !== 'running') { pending = () => Audio.play(name, loop); return; }
     ensure();
+    stopPackMusic();
     current = name;
     player?.play(name, loop);
   },
-  stop() { current = ''; player?.stop(0.1); },
+  /**
+   * music from a pack ("Bgm_Home.bcstm", or "sound.sdat#SEQ_NAME" for DS sound archives).
+   * Returns false when the pack has no such music, so the caller can fall back to the Picross DS music.
+   */
+  async playPack(packId: string, ref: string | undefined, loop = true): Promise<boolean> {
+    if (!ref || !settings.packMusic) return false;
+    if (!settings.music) { this.stop(); return true; }
+    const id = packId + '/' + ref;
+    if (id === current && (stream || packSeqPlaying?.playing)) return true;
+    if (!ac || ac.state !== 'running') { pending = () => Audio.playPack(packId, ref, loop); return true; }
+    ensure();
+    current = id;
+    try {
+      const [file, seq] = ref.split('#');
+      if (seq) {
+        let sp = packSeq.get(packId + '/' + file);
+        if (!sp) {
+          const d = await storage.loadAsset(packId, file);
+          if (!d) return false;
+          sp = new SeqPlayer(ac!, master!, new Sdat(d));
+          packSeq.set(packId + '/' + file, sp);
+        }
+        if (current !== id) return true;
+        player?.stop(0.1); stopPackMusic();
+        packSeqPlaying = sp;
+        return sp.play(seq, loop);
+      }
+      const buf = await loadBuffer(packId, file);
+      if (!buf) return false;
+      if (current !== id) return true; // something else was requested meanwhile
+      player?.stop(0.1); stopPackMusic();
+      const src = ac!.createBufferSource(), gain = ac!.createGain();
+      src.buffer = buf;
+      const li = (buf as any).loopInfo;
+      if (loop && li?.loop) { src.loop = true; src.loopStart = li.loopStart / li.sampleRate; src.loopEnd = li.loopEnd / li.sampleRate; }
+      src.connect(gain).connect(master!);
+      src.start();
+      stream = { src, gain };
+      src.onended = () => { if (stream?.src === src) stream = null; };
+      return true;
+    } catch (e) {
+      console.warn('pack music', e);
+      return false;
+    }
+  },
+  stop() { current = ''; player?.stop(0.1); stopPackMusic(0.1); },
   setVolume(v: number) { if (master) master.gain.value = v; },
   sfx(kind: 'tap' | 'mistake' | 'clear') {
     if (!settings.sfx || !ac || ac.state !== 'running' || !sfxGain) return;

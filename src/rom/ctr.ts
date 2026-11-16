@@ -6,7 +6,7 @@ const u32 = (d: Uint8Array, o: number) => (d[o] | (d[o + 1] << 8) | (d[o + 2] <<
 const ascii = (d: Uint8Array, o: number, n: number) => String.fromCharCode(...d.subarray(o, o + n)).replace(/\0+$/, '');
 
 export interface CtrFile { path: string; data: Uint8Array }
-export interface CtrTitle { productCode: string; titleId: string; names: string[]; files: CtrFile[] }
+export interface CtrTitle { productCode: string; titleId: string; names: string[]; files: CtrFile[]; /** large icon pixels as RGB (order not preserved: used for colour statistics only) */ iconColors: Array<[number, number, number]> }
 
 function findNcch(d: Uint8Array): number {
   const magic = (o: number) => d[o] === 0x4e && d[o + 1] === 0x43 && d[o + 2] === 0x43;
@@ -34,6 +34,7 @@ export function readCtr(d: Uint8Array): CtrTitle {
   const mu = 0x200;
   // ExeFS icon (SMDH) for the game's own title in each language
   const names: string[] = [];
+  const iconColors: Array<[number, number, number]> = [];
   const exefs = b + u32(d, b + 0x1a0) * mu;
   for (let i = 0; i < 10; i++) {
     const e = exefs + i * 16;
@@ -44,6 +45,10 @@ export function readCtr(d: Uint8Array): CtrTitle {
         let s = '';
         for (let k = 0; k < 0x80; k += 2) { const c = u16(d, o + k); if (!c) break; s += String.fromCharCode(c); }
         names.push(s.replace(/\n/g, ' ').trim());
+      }
+      if (ascii(d, smdh, 4) === 'SMDH') for (let k = 0; k < 48 * 48; k++) {
+        const v = u16(d, smdh + 0x24c0 + k * 2);
+        iconColors.push([((v >> 11) & 31) * 255 / 31 | 0, ((v >> 5) & 63) * 255 / 63 | 0, (v & 31) * 255 / 31 | 0]);
       }
     }
   }
@@ -66,7 +71,7 @@ export function readCtr(d: Uint8Array): CtrTitle {
     for (let c = child; c !== 0xffffffff; c = u32(f, dmo + c + 4)) dir(c, p);
   };
   dir(0, '');
-  return { productCode, titleId, names, files };
+  return { productCode, titleId, names, files, iconColors };
 }
 
 export function lz11(d: Uint8Array): Uint8Array {

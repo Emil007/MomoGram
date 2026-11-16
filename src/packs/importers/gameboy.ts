@@ -48,7 +48,7 @@ function readMario(d: Uint8Array, region: string): Pack {
   });
   (levels as any[]).forEach(l => { const c = courses.find(c => c.key === l.group)!; l.groupTitle = c.title; });
   return {
-    format: 'momogram-pack', version: 1, id: 'gb-marios-picross',
+    format: 'momogram-pack', version: 1, id: 'gb-marios-picross', theme: { palette: { accent: '#4d533c', style: 'dmg' } },
     title: { en: "Mario's Picross", ja: 'マリオのピクロス' },
     source: { game: "Mario's Picross", platform: 'Game Boy', region, developer: 'Jupiter', year: 1995 },
     levels,
@@ -88,7 +88,7 @@ function readPicross2(d: Uint8Array): Pack {
   });
   (levels as any[]).forEach(l => { l.groupTitle = titles[l.group === 'wario' ? 1 : 0]; });
   return {
-    format: 'momogram-pack', version: 1, id: 'gb-picross-2', title: { en: 'Picross 2', ja: 'ピクロス2' },
+    format: 'momogram-pack', version: 1, id: 'gb-picross-2', theme: { palette: { accent: '#4d533c', style: 'dmg' } }, title: { en: 'Picross 2', ja: 'ピクロス2' },
     source: { game: 'Picross 2', platform: 'Game Boy', region: 'JPN', developer: 'Jupiter', year: 1996 }, levels,
   };
 }

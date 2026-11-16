@@ -10,6 +10,7 @@ import { Gamepads } from './input';
 import { openPackManager } from './ui/packs';
 import { Audio as Snd } from './audio';
 import { unzipFirst } from './util/files';
+import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 
 const TIME_LIMIT = 60 * 60_000;
 
@@ -126,6 +127,7 @@ function logo(): HTMLElement {
 }
 
 export function home() {
+  applyThemeCss(root(), null);
   Snd.play('title_SEQ');
   const items: HTMLElement[] = [];
   if (!ctx.ds) {
@@ -180,6 +182,7 @@ function levelList(pack: Pack, group: string, back: () => void = home) {
 }
 
 function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
+  usePack(pack, 'menu', 'title_SEQ');
   const grid = h('div', { class: 'puzzles' });
   const pck = pack.id === 'picross-ds' ? ctx.pck : null;
   // info strip like the DS top screen: shows the focused puzzle, otherwise the level summary
@@ -236,6 +239,26 @@ function resumeQuick() {
 
 function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), ...ctx.packs]; }
 
+// ---------------------------------------------------------------- pack look & sound
+
+/** colours of the pack's original game (or null for MomoGram's own) */
+function packColors(pack: Pack | null): ThemeColors | null {
+  return pack?.theme?.palette && settings.packColors ? themeColors(pack.theme.palette) : null;
+}
+
+/**
+ * Switch screens to a pack's own look and music. `role` picks the track; without pack music the Picross DS
+ * music plays (`fallback`), so every pack still sounds like Picross.
+ */
+function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear' | null, fallback?: string, loop = true) {
+  applyThemeCss(root(), packColors(pack));
+  if (!role) return;
+  const music = pack?.theme?.music;
+  const ref = music?.[role] ?? (role === 'menu' ? music?.title : role === 'play' ? music?.play2 : undefined);
+  if (!pack || !ref) { if (fallback) Snd.play(fallback, loop); return; }
+  Snd.playPack(pack.id, ref, loop).then(ok => { if (!ok && fallback) Snd.play(fallback, loop); });
+}
+
 // ---------------------------------------------------------------- daily
 
 function daily() {
@@ -256,7 +279,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const board = new Board(pz.rows, lv.rules);
   if (restore) board.restore(restore);
   const isDs = pack.id === 'picross-ds';
-  Snd.play(lv.rules === 'free' ? settings.freeStyle : settings.normalStyle);
+  usePack(pack, 'play', lv.rules === 'free' ? settings.freeStyle : settings.normalStyle);
 
   // DS-style layout: a "top screen" with the live picture, zoom frame and timer; the "touch screen" with the grid.
   const timeEl = h('span', { class: 'time' }, '00:00');
@@ -286,6 +309,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const fillBtn = penBtn, crossBtn = xBtn;
 
   screen(h('div', { class: 'play' }, top, boardWrap, tools));
+  const colors = packColors(pack);
 
   const view = new BoardView(canvas, board, {
     onChange: r => {
@@ -295,6 +319,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     },
   });
 
+  view.setTheme(colors ? colors.board : null);
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
     board, view,
     solve() { for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS; view.invalidate(); if (board.checkSolved()) solved(); },
@@ -334,12 +359,12 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     if (preview.width !== W || preview.height !== H) { preview.width = W; preview.height = H; }
     const pc = preview.getContext('2d')!;
     const sc = Math.min(W / board.w, H / board.h) * 0.9;
-    pc.fillStyle = '#f7fbff'; pc.fillRect(0, 0, W, H);
+    pc.fillStyle = colors?.board.bg ?? '#f7fbff'; pc.fillRect(0, 0, W, H);
     const ox = (W - board.w * sc) / 2, oy = (H - board.h * sc) / 2;
-    pc.fillStyle = '#e3edf8'; pc.fillRect(ox, oy, board.w * sc, board.h * sc);
+    pc.fillStyle = colors?.board.cell === '#ffffff' || !colors ? '#e3edf8' : colors.board.cell; if (colors && colors.board.cell === '#ffffff') pc.fillStyle = colors.board.clueBg; pc.fillRect(ox, oy, board.w * sc, board.h * sc);
     for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) {
       const v = board.at(x, y);
-      if (v === FILL) { pc.fillStyle = board.isTrialCell(x, y) ? '#e08a2c' : '#24375f'; pc.fillRect(ox + x * sc, oy + y * sc, Math.ceil(sc), Math.ceil(sc)); }
+      if (v === FILL) { pc.fillStyle = board.isTrialCell(x, y) ? '#e08a2c' : colors?.board.fill ?? '#24375f'; pc.fillRect(ox + x * sc, oy + y * sc, Math.ceil(sc), Math.ceil(sc)); }
     }
     if (view.zoomed) {
       const v = view.visibleCells();
@@ -446,7 +471,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
 
   function solved() {
     finished = true;
-    Snd.play('game_clear_jingle_SEQ', false);
+    if (pack.theme?.music?.clear && settings.packMusic) usePack(pack, 'clear', 'game_clear_jingle_SEQ', false);
+    else Snd.play('game_clear_jingle_SEQ', false);
     const under = board.totalMs < TIME_LIMIT;
     if (pack.id !== 'daily') recordClear(pack.id, pz.id, board.totalMs, under);
     setQuickSave(null);
@@ -470,7 +496,8 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
       board.mistakes ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(board.penaltyMs))) : null,
       best !== undefined ? h('div', {}, t('best'), h('b', {}, formatTime(best))) : null),
     h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => { stop(); back(); } }, t('toList')), next)));
-  setTimeout(() => Snd.play('game_clear_loop_SEQ'), 2500);
+  const themedMusic = !!pack.theme?.music && settings.packMusic;
+  setTimeout(() => themedMusic ? usePack(pack, 'menu', 'game_clear_loop_SEQ') : Snd.play('game_clear_loop_SEQ'), themedMusic && pack.theme?.music?.clear ? 4500 : 2500);
   let raf = 0, last = performance.now();
   const loop = () => {
     const r = cv.getBoundingClientRect();
@@ -505,6 +532,8 @@ export function choose(title: string, options: Array<[string, () => void]>): Pro
 // ---------------------------------------------------------------- packs
 
 function packsScreen() {
+  applyThemeCss(root(), null);
+  Snd.play('title_SEQ');
   openPackManager({
     root: root(),
     packs: () => ctx.packs,
@@ -516,6 +545,7 @@ function packsScreen() {
 }
 
 function packLevels(pack: Pack) {
+  usePack(pack, 'menu', 'title_SEQ');
   if (pack.levels.length === 1) return puzzleList(pack, pack.levels[0], packsScreen);
   const groups = [...new Set(pack.levels.map(l => l.group ?? ''))];
   if (groups.length > 1 || groups[0]) {
@@ -535,6 +565,7 @@ function groupTitle(pack: Pack, g: string) {
 }
 
 function groupLevels(pack: Pack, g: string) {
+  usePack(pack, 'menu', 'title_SEQ');
   const levels = pack.levels.filter(l => (l.group ?? '') === g);
   const list = h('div', { class: 'levels' });
   for (const lv of levels) {
@@ -571,6 +602,8 @@ function optionsScreen() {
     row(t('sfx'), chk('sfx')),
     row(t('normalMusic'), sel('normalStyle', styles)),
     row(t('freeMusic'), sel('freeStyle', styles)),
+    row(t('packMusic'), chk('packMusic')),
+    row(t('packColors'), chk('packColors')),
     row(t('hints'), sel('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
     row(t('unlockAll'), chk('unlockAll')),
     row('Lefty toolbar', chk('lefty')),

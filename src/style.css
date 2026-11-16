@@ -268,3 +268,26 @@ body { background: radial-gradient(circle at 20% 0%, #f4f8fd 0, var(--bg) 60%) f
   .info { gap: .4rem; }
 }
 .top .preview, .top .screen-frame .preview { width: 100%; height: 100%; max-width: none; aspect-ratio: auto; }
+
+/* ---------- pack themes: colours of the original game (variables set on #app) ---------- */
+#app.themed { background: var(--bg); }
+#app.themed .bar { background: var(--accent); box-shadow: 0 3px 0 var(--accent-dark); }
+#app.themed .btn.primary, #app.themed .tab.on { background: var(--accent); border-color: var(--accent); }
+#app.themed .btn.primary { box-shadow: 0 3px 0 var(--accent-dark) !important; }
+#app.themed .puzzle { background: linear-gradient(var(--panel), var(--panel)); }
+#app.themed .puzzle .num { background: var(--accent); }
+#app.themed .puzzle .qmark { color: var(--accent); opacity: .55; }
+#app.themed .play { background: var(--bg); }
+#app.themed .top { background:
+  repeating-linear-gradient(0deg, rgba(255,255,255,.35) 0 1px, transparent 1px 12px), repeating-linear-gradient(90deg, rgba(255,255,255,.35) 0 1px, transparent 1px 12px), var(--top);
+  border-color: var(--top-line); }
+#app.themed .screen-frame { box-shadow: inset 0 0 0 2px var(--top-line), 0 3px 0 var(--top-line); }
+#app.themed .lvl b { background: var(--accent); }
+#app.themed .lvl span, #app.themed .size { color: var(--accent-dark); }
+#app.themed .boardwrap { background: var(--board-bg); border-top-color: var(--top-line); }
+#app.themed .tools { background: var(--accent); }
+#app.themed .toolpad { background: var(--accent-dark); }
+#app.themed .toolpad .pad.on .ico.pen { background: var(--accent-dark); }
+#app.themed .pic-frame { background: var(--top); box-shadow: inset 0 0 0 3px var(--top-line), 0 4px 0 var(--top-line); }
+#app.themed .puzzle-info .ring { background: conic-gradient(var(--accent) var(--p), rgba(0,0,0,.08) 0); }
+#app.themed .puzzle-info .ring span { color: var(--accent); }

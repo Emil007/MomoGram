@@ -64,6 +64,9 @@ export class BoardView {
   }
 
   destroy() { cancelAnimationFrame(this.raf); }
+  private theme: Theme = { ...THEME };
+  /** colours of the pack's original game (null = MomoGram's own) */
+  setTheme(t: Partial<Theme> | null) { this.theme = { ...THEME, ...(t ?? {}) }; this.dirty = true; }
   get width() { return this.cssW; }
   get height() { return this.cssH; }
   invalidate() { this.dirty = true; }
@@ -328,7 +331,7 @@ export class BoardView {
 
   draw() {
     this.dirty = false;
-    const ctx = this.ctx, b = this.board, T = THEME, cs = this.cell;
+    const ctx = this.ctx, b = this.board, T = this.theme, cs = this.cell;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = T.bg;
     ctx.fillRect(0, 0, this.cssW, this.cssH);

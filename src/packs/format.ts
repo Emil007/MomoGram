@@ -29,6 +29,17 @@ export interface PackLevel {
   group?: string;
 }
 
+/** Look & sound of the original game. Music lives in separate asset files next to the pack (never in the JSON). */
+export interface PackTheme {
+  /** colours imitating the original: an accent colour (UI and grid tint), optional explicit fill / background */
+  palette?: { accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; style?: 'dmg' | 'default' };
+  /** asset names per role; an SDAT asset also names the sequence ("sound.sdat#SEQ_NAME") */
+  music?: Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', string>>;
+}
+
+/** Binary file belonging to a pack (music), kept in IndexedDB and written next to the pack in zip exports. */
+export interface PackAsset { name: string; data: Uint8Array }
+
 export interface Pack {
   format: 'momogram-pack';
   version: 1;
@@ -38,7 +49,12 @@ export interface Pack {
   source: { game: string; platform: string; region?: string; developer?: string; year?: number; file?: string; sha1?: string };
   levels: PackLevel[];
   createdBy?: string;
+  theme?: PackTheme;
+  /** only while importing: assets the importer extracted (stored separately, stripped before saving) */
+  assets?: PackAsset[];
 }
+
+export function assetDir(p: Pack): string { return packFileName(p).replace(/\.momopack\.json$/, '') + '.assets/'; }
 
 export function packFileName(p: Pack): string {
   return p.id.replace(/[^a-z0-9._-]+/gi, '_') + '.momopack.json';
@@ -79,7 +95,12 @@ export function pickText(t: Text | undefined, lang: Lang, fallback = ''): string
 
 /** Combine regional versions of the same game: same pack id → one pack with every language's names. */
 export function mergePacks(a: Pack, b: Pack): Pack {
-  const out: Pack = JSON.parse(JSON.stringify(a));
+  const { assets: aa, ...aj } = a;
+  const out: Pack = JSON.parse(JSON.stringify(aj));
+  // keep the theme (and its music) of whichever version has one
+  if (!out.theme && b.theme) out.theme = JSON.parse(JSON.stringify(b.theme));
+  const assets = aa?.length ? aa : b.assets;
+  if (assets?.length) out.assets = assets;
   out.title = { ...b.title, ...a.title };
   const regions = new Set([a.source.region, b.source.region].flatMap(r => (r ?? '').split('/')).filter(Boolean));
   out.source.region = [...regions].join('/');

@@ -2,7 +2,9 @@
 // Needs decrypted files; puzzles are .bprs (title utf16[16], w, h, cells) or .bprs2 (".PRS" header, title, w, h, cells).
 import { registerImporter } from './index';
 import { readCtr, lz11, ctrEncrypted, SMDH_LANGS, u16, CtrFile } from '../../rom/ctr';
-import { Lang, Pack, PackLevel, PackPuzzle, Text, rowsFromBits } from '../format';
+import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFromBits } from '../format';
+import { accentFromColors } from '../theme';
+import { isBcstm } from '../../audio/bcstm';
 
 interface Raw { file: string; w: number; h: number; cells: Uint8Array; title: string }
 
@@ -107,13 +109,42 @@ export function read3ds(data: Uint8Array): Pack[] {
   t.names.forEach((n, i) => { const l = SMDH_LANGS[i] as Lang; if (n && ['ja', 'en', 'fr', 'de', 'it', 'es', 'ko'].includes(l)) title[l] = n; });
   // identify the game across regions by its English (or Japanese) title, not the region-specific code
   const key = (title.en ?? title.ja ?? t.productCode).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
+  const { theme, assets } = music3ds(t.files);
+  const accent = accentFromColors(t.iconColors);
+  if (accent) theme.palette = { accent };
   return [{
+    theme: theme.palette || theme.music ? theme : undefined,
+    assets: assets.length ? assets : undefined,
     format: 'momogram-pack', version: 1,
     id: 'ctr-' + key,
     title: Object.keys(title).length ? title : { en: t.productCode },
     source: { game: title.en ?? title.ja ?? t.productCode, platform: 'Nintendo 3DS', region: t.productCode.slice(-1), developer: 'Jupiter' },
     levels,
   }];
+}
+
+// Stream music (.bcstm) by role. Picross e-style names: GA = in game, ME = menu, MG / MI = Mega / Micross;
+// Pokémon Picross style: Bgm_Home, Bgm_Picross, Jingle_Cliear, …
+const ROLES: Array<[keyof NonNullable<PackTheme['music']>, RegExp]> = [
+  ['play', /(^|_)(ga_b_00|bgm_picross|bgm_normal)\b/i],
+  ['play2', /(^|_)(mg_b_00|bgm_mega|mi_b_00|bgm_micross|ga_b_01)\b/i],
+  ['menu', /(^|_)(me_b_00|bgm_home)\b/i],
+  ['title', /(^|_)(bgm_title|me_b_01|tu_b_00)\b/i],
+  ['clear', /(^|_)(jingle_cliear|jingle_clear)\b/i],
+];
+
+function music3ds(files: CtrFile[]): { theme: PackTheme; assets: PackAsset[] } {
+  const theme: PackTheme = {};
+  const assets: PackAsset[] = [];
+  const streams = files.filter(f => /\.bcstm$/i.test(f.path) && isBcstm(f.data));
+  for (const [role, re] of ROLES) {
+    const f = streams.find(s => re.test(s.path.split('/').pop()!.replace(/\.dspadpcm/i, '').replace(/\.bcstm$/i, '')));
+    if (!f) continue;
+    const name = f.path.split('/').pop()!.replace(/\.dspadpcm/i, '');
+    if (!assets.some(a => a.name === name)) assets.push({ name, data: f.data.slice() });
+    (theme.music ??= {})[role] = name;
+  }
+  return { theme, assets };
 }
 
 registerImporter({

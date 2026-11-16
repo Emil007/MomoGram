@@ -7,11 +7,10 @@ let dbp: Promise<IDBDatabase> | null = null;
 
 function db(): Promise<IDBDatabase> {
   if (!dbp) dbp = new Promise((res, rej) => {
-    const r = indexedDB.open(DB, 1);
+    const r = indexedDB.open(DB, 2);
     r.onupgradeneeded = () => {
       const d = r.result;
-      d.createObjectStore('roms');
-      d.createObjectStore('packs');
+      for (const s of ['roms', 'packs', 'assets']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s);
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -36,6 +35,12 @@ export const storage = {
   savePack: (p: Pack) => tx('packs', 'readwrite', s => s.put(p, p.id)),
   deletePack: (id: string) => tx('packs', 'readwrite', s => s.delete(id)),
   allPacks: () => tx<Pack[]>('packs', 'readonly', s => s.getAll()),
+  // music and other binary files of a pack, keyed "packId/name"
+  saveAsset: (packId: string, name: string, data: Uint8Array) => tx('assets', 'readwrite', s => s.put(data, packId + '/' + name)),
+  loadAsset: (packId: string, name: string) => tx<Uint8Array | undefined>('assets', 'readonly', s => s.get(packId + '/' + name)),
+  assetNames: (packId: string) => tx<IDBValidKey[]>('assets', 'readonly', s => s.getAllKeys(IDBKeyRange.bound(packId + '/', packId + '/\uffff')))
+    .then(k => k.map(x => String(x).slice(packId.length + 1))),
+  deleteAssets: (packId: string) => tx('assets', 'readwrite', s => s.delete(IDBKeyRange.bound(packId + '/', packId + '/\uffff'))),
   async persist() { try { await navigator.storage?.persist?.(); } catch { /* ignore */ } },
 };
 
@@ -53,11 +58,14 @@ export interface Settings {
   freeStyle: string;
   lefty: boolean;
   showTimer: boolean;
+  packMusic: boolean; // play a pack's own music (from the user's game) instead of the Picross DS music
+  packColors: boolean; // colour the screens like the pack's original game
 }
 
 const DEFAULTS: Settings = {
   lang: '', music: true, musicVolume: 0.7, sfx: true, hints: 'ask', unlockAll: false,
   normalStyle: 'stage_jazz_SEQ', freeStyle: 'stage_musicbox_SEQ', lefty: false, showTimer: true,
+  packMusic: true, packColors: true,
 };
 
 function readJson<T>(k: string, def: T): T {
