@@ -291,3 +291,14 @@ body { background: radial-gradient(circle at 20% 0%, #f4f8fd 0, var(--bg) 60%) f
 #app.themed .pic-frame { background: var(--top); box-shadow: inset 0 0 0 3px var(--top-line), 0 4px 0 var(--top-line); }
 #app.themed .puzzle-info .ring { background: conic-gradient(var(--accent) var(--p), rgba(0,0,0,.08) 0); }
 #app.themed .puzzle-info .ring span { color: var(--accent); }
+
+/* difficulty picker under the puzzle grid */
+.seg { display: flex; max-width: 560px; width: calc(100% - 1.6rem); margin: .2rem auto 0; padding: 3px; gap: 3px; background: #c9dbef; border-radius: 14px; }
+.segbtn { flex: 1; font: inherit; font-weight: 700; padding: .55em .4em; border: 0; border-radius: 11px; background: transparent; color: var(--ink); cursor: pointer; }
+.segbtn.on { background: #fff; box-shadow: 0 2px 0 rgba(0,0,0,.12); }
+.segbtn.on.easy { color: var(--easy); } .segbtn.on.normal { color: var(--normal); } .segbtn.on.hard { color: #b4423c; }
+.rulechip.easy { background: var(--easy); } .rulechip.free { background: #b4423c; }
+#app.themed .seg { background: rgba(0,0,0,.08); }
+.tools .tool.icon.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tools .tool.icon.on, #app.themed .tools .tool.icon.on { background: #ffd75e; border-color: #e0b030; color: var(--ink); }
+.tools .tool.icon.on small { color: #5a4a10; }

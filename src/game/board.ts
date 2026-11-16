@@ -22,7 +22,8 @@ export class Board {
   readonly solution: Uint8Array;
   readonly rowClues: number[][];
   readonly colClues: number[][];
-  readonly rules: 'normal' | 'free';
+  /** easy: mistakes caught, no penalty · normal: caught, 2/4/8 min penalty · free (Hard): no checks */
+  readonly rules: 'easy' | 'normal' | 'free';
   cells: Uint8Array;
   /** "Try it out" layer (Free mode): marks placed on top of the real board */
   trial: Uint8Array | null = null;
@@ -34,7 +35,7 @@ export class Board {
   solved = false;
   private undoStack: Array<{ cells: Uint8Array; trial: Uint8Array | null }> = [];
 
-  constructor(rows: string[], rules: 'normal' | 'free') {
+  constructor(rows: string[], rules: 'easy' | 'normal' | 'free') {
     this.h = rows.length;
     this.w = rows[0].length;
     this.rules = rules;
@@ -68,6 +69,7 @@ export class Board {
   undo(): boolean {
     const s = this.undoStack.pop();
     if (!s) return false;
+    this.touch();
     this.cells = s.cells;
     this.trial = s.trial;
     return true;
@@ -78,6 +80,11 @@ export class Board {
    * value: FILL, CROSS or EMPTY (erase).
    */
   set(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
+    const r = this.set0(x, y, value);
+    if (r !== 'nochange') this.touch();
+    return r;
+  }
+  private set0(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
     if (this.solved || x < 0 || y < 0 || x >= this.w || y >= this.h) return 'nochange';
     const i = y * this.w + x;
     if (this.trial) {
@@ -87,60 +94,52 @@ export class Board {
       return 'ok';
     }
     if (this.cells[i] === value) return 'nochange';
-    if (this.rules === 'normal' && value === FILL && !this.solution[i]) {
+    if (this.rules !== 'free' && value === FILL && !this.solution[i]) {
       this.cells[i] = CROSS;
       this.mistakes++;
-      this.penaltyMs += Board.penaltyFor(this.mistakes);
+      if (this.rules === 'normal') this.penaltyMs += Board.penaltyFor(this.mistakes);
       return 'mistake';
     }
     // Normal rules: a correctly filled cell stays filled (the game knows it is right)
-    if (this.rules === 'normal' && this.cells[i] === FILL && this.solution[i] && value !== FILL) return 'nochange';
+    if (this.rules !== 'free' && this.cells[i] === FILL && this.solution[i] && value !== FILL) return 'nochange';
     this.cells[i] = value;
     return 'ok';
   }
 
-  startTrial() { if (!this.trial) this.trial = new Uint8Array(this.w * this.h); }
+  startTrial() { this.touch(); if (!this.trial) this.trial = new Uint8Array(this.w * this.h); }
   /** keep the trial marks */
-  commitTrial() {
+  commitTrial() { this.touch();
     if (!this.trial) return;
     for (let i = 0; i < this.trial.length; i++) if (this.trial[i]) this.cells[i] = this.trial[i];
     this.trial = null;
   }
-  discardTrial() { this.trial = null; }
+  discardTrial() { this.touch(); this.trial = null; }
 
   filledAt(i: number): boolean {
     const t = this.trial?.[i];
     return (t || this.cells[i]) === FILL;
   }
 
-  rowDone(y: number): boolean[] { return this.lineDone(this.rowClues[y], [...Array(this.w)].map((_, x) => this.filledAt(y * this.w + x))); }
-  colDone(x: number): boolean[] { return this.lineDone(this.colClues[x], [...Array(this.h)].map((_, y) => this.filledAt(y * this.w + x))); }
-
-  /** Which clue numbers of a line are satisfied (greyed out), using DS-like matching from both ends. */
-  private lineDone(clues: number[], line: boolean[]): boolean[] {
-    const runs = lineClues(line);
-    const done = clues.map(() => false);
-    if (runs.length === clues.length && runs.every((r, i) => r === clues[i])) return clues.map(() => true);
-    if (clues.length === 1 && clues[0] === 0) return [runs.length === 0];
-    // match runs that are anchored at the line start
-    const blocks: Array<{ start: number; len: number }> = [];
-    let s = -1;
-    for (let i = 0; i <= line.length; i++) {
-      if (i < line.length && line[i]) { if (s < 0) s = i; }
-      else if (s >= 0) { blocks.push({ start: s, len: i - s }); s = -1; }
+  // line analysis is cached until the next change
+  private version = 0;
+  private cache = new Map<string, LineInfo>();
+  touch() { this.version++; this.cache.clear(); }
+  private line(kind: 'r' | 'c', k: number): LineInfo {
+    const key = kind + k;
+    let li = this.cache.get(key);
+    if (!li) {
+      const cells = kind === 'r' ? [...Array(this.w)].map((_, x) => this.at(x, k)) : [...Array(this.h)].map((_, y) => this.at(k, y));
+      li = analyzeLine(kind === 'r' ? this.rowClues[k] : this.colClues[k], cells);
+      this.cache.set(key, li);
     }
-    // left to right: blocks are certain while each block is preceded only by crosses/edge-certain cells
-    for (let k = 0; k < blocks.length && k < clues.length; k++) {
-      if (blocks[k].len !== clues[k]) break;
-      done[k] = true;
-    }
-    for (let k = 0; k < blocks.length && k < clues.length; k++) {
-      const b = blocks[blocks.length - 1 - k], c = clues.length - 1 - k;
-      if (b.len !== clues[c]) break;
-      done[c] = true;
-    }
-    return done;
+    return li;
   }
+  /** which clue numbers are certainly done (greyed out) */
+  rowDone(y: number): boolean[] { return this.line('r', y).done; }
+  colDone(x: number): boolean[] { return this.line('c', x).done; }
+  /** logic hint: the line allows a new cell to be deduced from its clue alone */
+  rowCanProgress(y: number): boolean { return this.line('r', y).progress; }
+  colCanProgress(x: number): boolean { return this.line('c', x).progress; }
 
   /** Solved when filled cells reproduce every clue (so puzzles with several solutions are fair). */
   checkSolved(): boolean {
@@ -158,9 +157,9 @@ export class Board {
   }
 
   /** Hint roulette: reveal one row and one column (Normal mode, at the start). */
-  revealHint(rnd = Math.random) {
-    this.hintRow = Math.floor(rnd() * this.h);
-    this.hintCol = Math.floor(rnd() * this.w);
+  revealHint(rnd = Math.random, row = Math.floor(rnd() * this.h), col = Math.floor(rnd() * this.w)) { this.touch();
+    this.hintRow = row;
+    this.hintCol = col;
     for (let x = 0; x < this.w; x++) { const i = this.hintRow * this.w + x; this.cells[i] = this.solution[i] ? FILL : CROSS; }
     for (let y = 0; y < this.h; y++) { const i = y * this.w + this.hintCol; this.cells[i] = this.solution[i] ? FILL : CROSS; }
   }
@@ -169,7 +168,7 @@ export class Board {
     return { cells: [...this.cells], trial: this.trial ? [...this.trial] : null, mistakes: this.mistakes, elapsedMs: this.elapsedMs, penaltyMs: this.penaltyMs, hintRow: this.hintRow, hintCol: this.hintCol };
   }
 
-  restore(s: BoardSnapshot) {
+  restore(s: BoardSnapshot) { this.touch();
     if (s.cells.length !== this.cells.length) return;
     this.cells = Uint8Array.from(s.cells);
     this.trial = s.trial ? Uint8Array.from(s.trial) : null;
@@ -181,4 +180,85 @@ export class Board {
 export function formatTime(ms: number): string {
   const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export interface LineInfo {
+  /** the marks fit the clue at all */
+  feasible: boolean;
+  /** per clue number: its block is certainly in place and completely filled */
+  done: boolean[];
+  /** some empty cell is forced (filled or crossed) by this line's clue and marks alone */
+  progress: boolean;
+}
+
+/**
+ * Exact line analysis over every placement of the clue that agrees with the player's marks
+ * (cells: 0 = empty, 1 = filled, 2 = crossed).
+ */
+export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo {
+  const n = cells.length;
+  const cl = clues.length === 1 && clues[0] === 0 ? [] : clues;
+  const K = cl.length;
+  const fill = (i: number) => cells[i] === FILL, cross = (i: number) => cells[i] === CROSS;
+  // prefix counts for quick "no cross / no fill in range" tests
+  const pc = new Int32Array(n + 1), pf = new Int32Array(n + 1);
+  for (let i = 0; i < n; i++) { pc[i + 1] = pc[i] + (cross(i) ? 1 : 0); pf[i + 1] = pf[i] + (fill(i) ? 1 : 0); }
+  const noCross = (a: number, b: number) => pc[b] - pc[a] === 0;
+  const noFill = (a: number, b: number) => pf[b] - pf[a] === 0;
+  // F[k][i]: clues 0..k-1 fit into cells [0, i)
+  const F: Uint8Array[] = [...Array(K + 1)].map(() => new Uint8Array(n + 1));
+  for (let i = 0; i <= n; i++) F[0][i] = noFill(0, i) ? 1 : 0;
+  for (let k = 1; k <= K; k++) {
+    const c = cl[k - 1];
+    for (let i = 1; i <= n; i++) {
+      let ok = F[k][i - 1] && !fill(i - 1);
+      const st = i - c;
+      if (!ok && st >= 0 && noCross(st, i)) ok = k === 1 ? !!F[0][st] : st >= 1 && !fill(st - 1) && !!F[k - 1][st - 1];
+      F[k][i] = ok ? 1 : 0;
+    }
+  }
+  // B[k][i]: clues k..K-1 fit into cells [i, n)
+  const B: Uint8Array[] = [...Array(K + 1)].map(() => new Uint8Array(n + 2));
+  for (let i = 0; i <= n; i++) B[K][i] = noFill(i, n) ? 1 : 0;
+  for (let k = K - 1; k >= 0; k--) {
+    const c = cl[k];
+    for (let i = n - 1; i >= 0; i--) {
+      let ok = B[k][i + 1] && !fill(i);
+      const e = i + c;
+      if (!ok && e <= n && noCross(i, e)) ok = k === K - 1 ? !!B[K][e] : e < n && !fill(e) && !!B[k + 1][e + 1];
+      B[k][i] = ok ? 1 : 0;
+    }
+  }
+  const feasible = K === 0 ? noFill(0, n) : !!B[0][0];
+  const done = clues.map(() => false);
+  if (!feasible) return { feasible, done, progress: false };
+  if (K === 0) {
+    // "0": done when nothing is filled; progress while cells are still open
+    let open = false;
+    for (let i = 0; i < n; i++) if (cells[i] === EMPTY) open = true;
+    return { feasible, done: [true], progress: open };
+  }
+  const canFill = new Uint8Array(n), canEmpty = new Uint8Array(n);
+  for (let k = 0; k < K; k++) {
+    const c = cl[k];
+    let starts = 0, only = -1;
+    for (let s = 0; s + c <= n; s++) {
+      if (!noCross(s, s + c)) continue;
+      if (s > 0 && fill(s - 1)) continue;
+      if (s + c < n && fill(s + c)) continue;
+      const left = k === 0 ? !!F[0][s] : s >= 1 && !!F[k][s - 1];
+      const right = k === K - 1 ? !!B[K][s + c] : s + c + 1 <= n && !!B[k + 1][s + c + 1];
+      if (!left || !right) continue;
+      starts++; only = s;
+      for (let i = s; i < s + c; i++) canFill[i] = 1;
+    }
+    done[k] = starts === 1 && pf[only + c] - pf[only] === c;
+  }
+  for (let i = 0; i < n; i++) {
+    if (fill(i)) continue;
+    for (let k = 0; k <= K && !canEmpty[i]; k++) if (F[k][i] && B[k][i + 1]) canEmpty[i] = 1;
+  }
+  let progress = false;
+  for (let i = 0; i < n && !progress; i++) if (cells[i] === EMPTY && (!canFill[i] || !canEmpty[i])) progress = true;
+  return { feasible, done, progress };
 }

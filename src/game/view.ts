@@ -10,12 +10,12 @@ export interface ViewEvents {
 
 interface Theme {
   bg: string; grid: string; grid5: string; cell: string; fill: string; trialFill: string; cross: string; mistake: string;
-  clueBg: string; clueBgAlt: string; clue: string; clueDone: string; hl: string; cursor: string;
+  clueBg: string; clueBgAlt: string; clue: string; clueDone: string; hl: string; cursor: string; hint: string; roulette: string;
 }
 
 const THEME: Theme = {
   bg: '#e9f2fb', grid: '#9db7d3', grid5: '#3d6593', cell: '#ffffff', fill: '#2a3f6e', trialFill: '#e08a2c', cross: '#7a8ca6', mistake: '#d64545',
-  clueBg: '#d4e4f6', clueBgAlt: '#c3d8ef', clue: '#13284a', clueDone: '#9fb0c6', hl: 'rgba(255, 214, 92, 0.35)', cursor: '#f0a020',
+  clueBg: '#d4e4f6', clueBgAlt: '#c3d8ef', clue: '#13284a', clueDone: '#9fb0c6', hl: 'rgba(255, 214, 92, 0.35)', cursor: '#f0a020', hint: '#1b6fe8', roulette: 'rgba(240, 140, 30, 0.45)',
 };
 
 export class BoardView {
@@ -67,6 +67,39 @@ export class BoardView {
   private theme: Theme = { ...THEME };
   /** colours of the pack's original game (null = MomoGram's own) */
   setTheme(t: Partial<Theme> | null) { this.theme = { ...THEME, ...(t ?? {}) }; this.dirty = true; }
+  /** logic hints: clue numbers turn blue when their line allows a new deduction (like the 3DS / Switch games) */
+  logicHints = false;
+  private spin: { row: number; col: number; flash: boolean } | null = null;
+  get spinning() { return !!this.spin; }
+
+  /** Hint roulette, like Picross DS: a row and a column spin, slow down and stop on the target. */
+  roulette(targetRow: number, targetCol: number, onTick?: () => void): Promise<void> {
+    const b = this.board;
+    return new Promise(res => {
+      const steps = 22 + Math.floor(Math.random() * 6);
+      let k = 0;
+      // start so that the last step lands on the target
+      const r0 = ((targetRow - steps) % b.h + b.h * 100) % b.h, c0 = ((targetCol - steps * 3) % b.w + b.w * 100) % b.w;
+      const step = () => {
+        k++;
+        this.spin = { row: (r0 + k) % b.h, col: (c0 + k * 3) % b.w, flash: false };
+        this.dirty = true;
+        onTick?.();
+        if (k < steps) setTimeout(step, 35 + Math.pow(k / steps, 3) * 260);
+        else {
+          let f = 0;
+          const blink = () => {
+            f++;
+            this.spin = f % 2 ? { row: targetRow, col: targetCol, flash: true } : { row: targetRow, col: targetCol, flash: false };
+            this.dirty = true;
+            if (f < 5) setTimeout(blink, 140); else { this.spin = null; this.dirty = true; res(); }
+          };
+          setTimeout(blink, 200);
+        }
+      };
+      step();
+    });
+  }
   get width() { return this.cssW; }
   get height() { return this.cssH; }
   invalidate() { this.dirty = true; }
@@ -198,6 +231,7 @@ export class BoardView {
   }
 
   private down(e: PointerEvent) {
+    if (this.spin) return; // no marks while the hint roulette spins
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.local(e);
     this.pointers.set(e.pointerId, p);
@@ -311,6 +345,7 @@ export class BoardView {
 
   /** Press A/B: like a tap with that tool. Holding and moving continues with the same value. */
   pressAtCursor(tool: Tool): Cell {
+    if (this.spin) return EMPTY;
     this.showCursor = true;
     const cur = this.board.at(this.cursorX, this.cursorY);
     const want: Cell = tool === 'fill' ? FILL : CROSS;
@@ -353,6 +388,11 @@ export class BoardView {
     ctx.fillStyle = T.hl;
     ctx.fillRect(ox, oy + this.cursorY * cs, b.w * cs, cs);
     ctx.fillRect(ox + this.cursorX * cs, oy, cs, b.h * cs);
+    if (this.spin) {
+      ctx.fillStyle = this.spin.flash ? 'rgba(255, 200, 60, 0.75)' : T.roulette;
+      ctx.fillRect(ox, oy + this.spin.row * cs, b.w * cs, cs);
+      ctx.fillRect(ox + this.spin.col * cs, oy, cs, b.h * cs);
+    }
     const now = performance.now();
     for (let y = vy0; y < vy1; y++) for (let x = vx0; x < vx1; x++) {
       const v = b.at(x, y), px = ox + x * cs, py = oy + y * cs, i = y * b.w + x;
@@ -408,12 +448,13 @@ export class BoardView {
     for (let x = vx0; x < vx1; x++) {
       ctx.fillStyle = x === this.cursorX ? '#ffe7a6' : x % 2 ? T.clueBgAlt : T.clueBg;
       ctx.fillRect(ox + x * cs, 0, cs, this.clueH);
-      const clues = b.colClues[x], done = b.colDone(x);
+      const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
+      if (this.spin?.col === x) { ctx.fillStyle = T.roulette; ctx.fillRect(ox + x * cs, 0, cs, this.clueH); }
       const fs = Math.max(8, Math.min(cs * 0.62, 22));
       ctx.font = font(fs);
       const step = Math.min(cc * 0.66, 28, fs * 1.18);
       for (let k = 0; k < clues.length; k++) {
-        ctx.fillStyle = done[k] ? T.clueDone : T.clue;
+        ctx.fillStyle = done[k] ? T.clueDone : blue ? T.hint : T.clue;
         const yy = this.clueH - (clues.length - k - 0.5) * step - 2;
         ctx.fillText(String(clues[k] || 0), ox + x * cs + cs / 2, yy);
       }
@@ -428,18 +469,19 @@ export class BoardView {
     for (let y = vy0; y < vy1; y++) {
       ctx.fillStyle = y === this.cursorY ? '#ffe7a6' : y % 2 ? T.clueBgAlt : T.clueBg;
       ctx.fillRect(0, oy + y * cs, this.clueW, cs);
-      const clues = b.rowClues[y], done = b.rowDone(y);
+      const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);
+      if (this.spin?.row === y) { ctx.fillStyle = T.roulette; ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
       const fs = Math.max(8, Math.min(cs * 0.62, 22));
       ctx.font = font(fs);
       const step = Math.min(cc * 0.62, 26, fs * 1.05);
       for (let k = 0; k < clues.length; k++) {
-        ctx.fillStyle = done[k] ? T.clueDone : T.clue;
+        ctx.fillStyle = done[k] ? T.clueDone : blue ? T.hint : T.clue;
         ctx.fillText(String(clues[k] || 0), this.clueW - (clues.length - k - 0.5) * step - 3, oy + y * cs + cs / 2 + 1);
       }
     }
     ctx.restore();
     // corner (the tool pad is drawn over it by the UI)
-    ctx.fillStyle = '#c9dbef';
+    ctx.fillStyle = T.clueBgAlt;
     ctx.fillRect(0, 0, this.clueW, this.clueH);
     if (this.dragAt && this.dragLen > 1) {
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);

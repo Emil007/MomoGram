@@ -224,7 +224,8 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     return h('button', { class: 'tab' + (l === lv ? ' on' : ''), disabled: open ? undefined : true, onClick: () => puzzleList(pack, l, back) }, open ? label : '🔒');
   })) : null;
   screen(header(pickAny(lv.title, packLang()), back), tabs, info, grid,
-    h('p', { class: 'rules' }, lv.rules === 'free' ? t('rulesFree') : t('rulesNormal')));
+    difficultyPicker(lv, () => puzzleList(pack, lv, back)),
+    h('p', { class: 'rules' }, rulesText(rulesFor(lv))));
 }
 
 function resumeQuick() {
@@ -235,6 +236,24 @@ function resumeQuick() {
   const i = lv?.puzzles.findIndex(p => p.id === q.puzzleId) ?? -1;
   if (!pack || !lv || i < 0) { setQuickSave(null); return home(); }
   play(pack, lv, i, home, q.state);
+}
+
+/** the rules a level is played with: its own, or the difficulty the player picked */
+type PlayRules = 'easy' | 'normal' | 'free';
+function rulesFor(lv: PackLevel): PlayRules {
+  const d = settings.difficulty;
+  return d === 'easy' ? 'easy' : d === 'normal' ? 'normal' : d === 'hard' ? 'free' : lv.rules;
+}
+function rulesText(r: PlayRules) { return r === 'easy' ? t('rulesEasy') : r === 'normal' ? t('rulesNormal') : t('rulesHard'); }
+function rulesName(r: PlayRules) { return r === 'easy' ? t('easy') : r === 'normal' ? t('normal') : t('hard'); }
+
+function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
+  const cur = rulesFor(lv);
+  const opts: Array<[PlayRules, 'easy' | 'normal' | 'hard']> = [['easy', 'easy'], ['normal', 'normal'], ['free', 'hard']];
+  return h('div', { class: 'seg', role: 'radiogroup', 'aria-label': t('difficulty') }, ...opts.map(([r, key]) =>
+    h('button', { class: 'segbtn ' + key + (cur === r ? ' on' : ''), role: 'radio', 'aria-checked': cur === r ? 'true' : 'false',
+      onClick: () => { settings.difficulty = r === lv.rules ? 'auto' : key; saveSettings(); rerender(); } },
+      rulesName(r) + (r === lv.rules ? ' ·' : ''))));
 }
 
 function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), ...ctx.packs]; }
@@ -276,10 +295,11 @@ function daily() {
 
 function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restore?: any) {
   const pz = lv.puzzles[index];
-  const board = new Board(pz.rows, lv.rules);
+  const rules = rulesFor(lv);
+  const board = new Board(pz.rows, rules);
   if (restore) board.restore(restore);
   const isDs = pack.id === 'picross-ds';
-  usePack(pack, 'play', lv.rules === 'free' ? settings.freeStyle : settings.normalStyle);
+  usePack(pack, 'play', rules === 'free' ? settings.freeStyle : settings.normalStyle);
 
   // DS-style layout: a "top screen" with the live picture, zoom frame and timer; the "touch screen" with the grid.
   const timeEl = h('span', { class: 'time' }, '00:00');
@@ -290,7 +310,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const top = h('section', { class: 'top' },
     h('div', { class: 'screen-frame' }, preview),
     h('div', { class: 'info' }, levelLabel, sizeLabel, h('div', { class: 'stats' }, h('span', { class: 'clock' }, '⏱'), timeEl, mistakesEl),
-      h('div', { class: 'rulechip ' + lv.rules }, lv.rules === 'free' ? t('free') : t('normal'))));
+      h('div', { class: 'rulechip ' + rules }, rulesName(rules))));
   const canvas = h('canvas', { class: 'board' });
   // tool pad in the clue corner, like the stylus icons on the DS
   const penBtn = h('button', { class: 'pad on', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool('fill') }, h('i', { class: 'ico pen' }));
@@ -302,10 +322,13 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
 
   const undoBtn = h('button', { class: 'btn tool icon', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) { view.invalidate(); updateInfo(); } } }, h('span', { class: 'big-ico' }, '↶'), h('small', {}, t('undo')));
   const trialLabel = h('small', {}, t('tryIt'));
-  const trialBtn = lv.rules === 'free' ? h('button', { class: 'btn tool icon', title: t('tryIt'), onClick: () => trialToggle() }, h('span', { class: 'big-ico' }, '✎'), trialLabel) : null;
+  const trialBtn = rules === 'free' ? h('button', { class: 'btn tool icon', title: t('tryIt'), onClick: () => trialToggle() }, h('span', { class: 'big-ico' }, '✎'), trialLabel) : null;
+  const logicBtn = h('button', { class: 'btn tool icon' + (settings.logicHints ? ' on' : ''), title: t('logicHints'), 'aria-label': t('logicHints'), 'aria-pressed': String(settings.logicHints),
+    onClick: () => { settings.logicHints = !settings.logicHints; saveSettings(); view.logicHints = settings.logicHints; view.invalidate(); logicBtn.classList.toggle('on', settings.logicHints); logicBtn.setAttribute('aria-pressed', String(settings.logicHints)); } },
+    h('span', { class: 'big-ico' }, '💡'), h('small', {}, t('logic')));
   const menuBtn = h('button', { class: 'btn tool icon', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, h('span', { class: 'big-ico' }, '☰'), h('small', {}, t('menu')));
   // tools within thumb reach at the bottom: pen / cross / zoom as a segmented pad, then undo, try-it and menu
-  const tools = h('nav', { class: 'tools' + (settings.lefty ? ' lefty' : '') }, toolPad, h('span', { class: 'gap' }), undoBtn, trialBtn, menuBtn);
+  const tools = h('nav', { class: 'tools' + (settings.lefty ? ' lefty' : '') }, toolPad, h('span', { class: 'gap' }), logicBtn, undoBtn, trialBtn, menuBtn);
   const fillBtn = penBtn, crossBtn = xBtn;
 
   screen(h('div', { class: 'play' }, top, boardWrap, tools));
@@ -320,9 +343,10 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   });
 
   view.setTheme(colors ? colors.board : null);
+  view.logicHints = settings.logicHints;
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
     board, view,
-    solve() { for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS; view.invalidate(); if (board.checkSolved()) solved(); },
+    solve() { for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS; board.touch(); view.invalidate(); if (board.checkSolved()) solved(); },
   };
 
   view.onLayout = () => {
@@ -461,12 +485,20 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     running = true;
   }
 
-  // hint roulette (Normal rules, fresh start)
-  if (!restore && lv.rules === 'normal' && pz.width * pz.height > 25) {
-    const ask = settings.hints;
-    const go = () => { board.pushUndo(); board.revealHint(); view.invalidate(); updateInfo(); };
-    if (ask === 'always') go();
-    else if (ask === 'ask') { running = false; choose(t('useHints'), [[t('yes'), go], [t('no'), () => {}]]).then(() => { last = performance.now(); running = true; }); }
+  // hint roulette at a fresh start: always on Easy, as set in the options on Normal, never on Hard
+  if (!restore && rules !== 'free' && pz.width * pz.height > 25) {
+    const ask = rules === 'easy' ? 'always' : settings.hints;
+    const go = async () => {
+      running = false;
+      const row = Math.floor(Math.random() * board.h), col = Math.floor(Math.random() * board.w);
+      await view.roulette(row, col, () => Snd.sfx('tap'));
+      board.pushUndo(); board.revealHint(Math.random, row, col);
+      Snd.sfx('clear');
+      view.invalidate(); updateInfo();
+      last = performance.now(); running = true;
+    };
+    if (ask === 'always') setTimeout(go, 350);
+    else if (ask === 'ask') { running = false; choose(t('useHints'), [[t('yes'), () => { go(); }], [t('no'), () => {}]]).then(() => { last = performance.now(); if (!view.spinning) running = true; }); }
   }
 
   function solved() {
