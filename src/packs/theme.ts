@@ -60,7 +60,7 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     board: {
       bg: '#ffffff', grid: hsl(h, 0.6, 0.78), grid5: '#f39a2c', cell: p.cell ?? hsl(h, 0.8, 0.93), cellDither: hsl(h, 0.75, 0.89),
       fill: p.fill ?? hsl(h, 0.65, 0.42), fillDither: hsl(h, 0.65, 0.37), cross: hsl(h, 0.55, 0.68),
-      clueBg: hsl(h, 0.75, 0.84), clueBgAlt: hsl(h, 0.75, 0.84), clue: '#151515', clueDone: hsl(h, 0.15, 0.75), outline: '#1a1a1a',
+      clueBg: hsl(h, 0.75, 0.84), clueBgAlt: hsl(h, 0.75, 0.84), clue: '#1d2a36', clueDone: hsl(h, 0.15, 0.75), outline: '#1a1a1a',
     },
   };
 }

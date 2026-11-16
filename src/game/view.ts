@@ -17,7 +17,7 @@ export interface Theme {
 const THEME: Theme = {
   bg: '#ffffff', grid: '#9fd6f2', grid5: '#f39a2c', cell: '#dff3fd', cellDither: '#cfecfb', fill: '#2b9fe0', fillDither: '#2291d2',
   trialFill: '#f0a040', cross: '#7cc4ea', mistake: '#e04040',
-  clueBg: '#b5e3fa', clueBgAlt: '#b5e3fa', clue: '#151515', clueOutline: '#ffffff', clueDone: '#b4c2cc',
+  clueBg: '#b5e3fa', clueBgAlt: '#b5e3fa', clue: '#1d2a36', clueOutline: '#ffffff', clueDone: '#a9b7c2',
   hl: 'rgba(255, 196, 70, 0.42)', cursor: '#f08a10', hint: '#1565e0', roulette: 'rgba(240, 140, 30, 0.5)', outline: '#1a1a1a',
 };
 
@@ -154,8 +154,9 @@ export class BoardView {
   private updateClueArea() {
     const { r, c } = this.maxClues();
     const cc = Math.max(this.cell, 14);
-    this.clueW = Math.ceil(r * Math.min(cc * 0.62, 26) + Math.min(cc * 0.3, 10));
-    this.clueH = Math.ceil(c * Math.min(cc * 0.66, 28) + Math.min(cc * 0.3, 10));
+    const gap = Math.max(2, cc / 10) + Math.max(4, Math.min(cc * 0.22, 9)) + 4;
+    this.clueW = Math.ceil(r * Math.min(cc * 0.62, 26) + gap);
+    this.clueH = Math.ceil(c * Math.min(cc * 0.66, 28) + gap);
   }
 
   get zoomed() { return this.cell > this.fitCell + 0.5; }
@@ -476,42 +477,36 @@ export class BoardView {
     // the frame may run under the clues when scrolled: repaint the clue areas' backgrounds where needed
     // (clues are drawn on top below)
 
-    // ---- clue numbers: chunky digits with a white outline
-    const fs = Math.max(9, Math.min(cs * 0.66, 24));
-    const font = `800 ${fs}px "Nunito", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif`;
-    ctx.font = font;
+    // ---- clue numbers: plain, tabular digits with a clear gap to the grid frame
+    const fs = Math.max(9, Math.min(cs * 0.6, 25));
+    ctx.font = `600 ${fs}px "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    const text = (s: string, x: number, y: number, col: string) => {
-      ctx.lineWidth = Math.max(2, fs * 0.28);
-      ctx.strokeStyle = T.clueOutline;
-      ctx.strokeText(s, x, y);
-      ctx.fillStyle = col;
-      ctx.fillText(s, x, y);
-    };
+    const frameW = Math.max(2, cs / 10);
+    const gap = frameW + Math.max(4, Math.min(cs * 0.22, 9));
+    const text = (str: string, x: number, y: number, col: string) => { ctx.fillStyle = col; ctx.fillText(str, x, y); };
     const cc = Math.max(cs, 14);
     ctx.save();
-    ctx.beginPath(); ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH); ctx.clip();
+    ctx.beginPath(); ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH - frameW); ctx.clip();
     if (cueX >= 0) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
-    const stepV = Math.min(cc * 0.66, 28, fs * 1.12);
+    const stepV = Math.min(cc * 0.66, 28, fs * 1.15);
     for (let x = vx0; x < vx1; x++) {
       const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
       for (let k = 0; k < clues.length; k++) {
         const col = done[k] ? T.clueDone : x === cueX ? T.cursor : blue ? T.hint : T.clue;
-        text(String(clues[k] || 0), ox + x * cs + cs / 2, this.clueH - (clues.length - k - 0.5) * stepV - 3, col);
+        text(String(clues[k] || 0), ox + x * cs + cs / 2, this.clueH - gap - (clues.length - k - 0.5) * stepV + 1, col);
       }
     }
     ctx.restore();
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, viewH - this.clueH); ctx.clip();
+    ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW - frameW, viewH - this.clueH); ctx.clip();
     if (cueY >= 0) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
-    const stepH = Math.min(cc * 0.62, 26, fs * 0.95);
+    const stepH = Math.min(cc * 0.62, 26, fs * 1.05);
     for (let y = vy0; y < vy1; y++) {
       const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);
       for (let k = 0; k < clues.length; k++) {
         const col = done[k] ? T.clueDone : y === cueY ? T.cursor : blue ? T.hint : T.clue;
-        text(String(clues[k] || 0), this.clueW - (clues.length - k - 0.5) * stepH - 4, oy + y * cs + cs / 2 + 1, col);
+        text(String(clues[k] || 0), this.clueW - gap - (clues.length - k - 0.5) * stepH, oy + y * cs + cs / 2 + 1, col);
       }
     }
     ctx.restore();
