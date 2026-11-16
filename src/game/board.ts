@@ -81,7 +81,8 @@ export class Board {
    */
   set(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
     const r = this.set0(x, y, value);
-    if (r !== 'nochange') this.touch();
+    // only this cell's row and column can change their clue state
+    if (r !== 'nochange') { this.version++; this.cache.delete('r' + y); this.cache.delete('c' + x); }
     return r;
   }
   private set0(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
