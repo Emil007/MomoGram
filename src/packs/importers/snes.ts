@@ -10,6 +10,16 @@
 // Size codes: 0 = 5x5, 1 = 10x10, 2 = 15x15, 3 = 20x20, 6 = 25x20.
 import { registerImporter } from './index';
 import { Pack, PackLevel, PackPuzzle, Text, rowsFromBits } from '../format';
+import { snesPackMusic } from '../../audio/snes/games';
+
+/** the game's own music, played by MomoGram's SPC700 / S-DSP emulation (src/audio/snes) */
+async function withMusic(p: Pack, rom: Uint8Array): Promise<Pack> {
+  try {
+    const m = await snesPackMusic(rom, () => new Promise(r => setTimeout(r, 0)));
+    if (m) { p.theme = { ...p.theme, music: m.music }; p.assets = [...(p.assets ?? []), m.asset]; }
+  } catch (e) { console.warn('SNES music', e); }
+  return p;
+}
 
 const SIZES: Record<number, [number, number]> = { 0: [5, 5], 1: [10, 10], 2: [15, 15], 3: [20, 20], 6: [25, 20] };
 
@@ -162,11 +172,11 @@ const isTamori = (d: Uint8Array) => d.length >= 0x10000 && d[0xffc1] === 0xc0 &&
 registerImporter({
   name: 'Mario no Super Picross (Super Famicom)',
   detect: d => d.length >= 0x10000 && headerTitle(d).startsWith('SUPER PICROSS'),
-  read: (d, f) => [readMarioSuper(d, f)],
+  read: async (d, f) => [await withMusic(readMarioSuper(d, f), d)],
 });
 
 registerImporter({
   name: 'Tamori no Picross (Satellaview)',
   detect: d => isTamori(d),
-  read: d => [readTamori(d)],
+  read: async d => [await withMusic(readTamori(d), d)],
 });

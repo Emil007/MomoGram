@@ -2,6 +2,7 @@
 // Shared by the AudioWorklet (src/audio/worklet.ts) and the ScriptProcessor fallback (src/audio/chipplayer.ts).
 import { GbMusic } from './gb/music';
 import { findDseq, unpackSoundRom } from './gb/games';
+import { SpcMusic, loadSong } from './snes/games';
 
 export type ChipKind = 'gb' | 'spc';
 
@@ -19,6 +20,11 @@ export function createEngine(kind: ChipKind, data: Uint8Array, song: number, sam
     const m = new GbMusic(rom, drv, sampleRate);
     m.start(song);
     return m;
+  }
+  if (kind === 'spc') {
+    const spc = loadSong(data, song);
+    if (!spc) throw new Error('song not in the sound snapshot');
+    return new SpcMusic(spc, sampleRate);
   }
   throw new Error('unknown sound chip ' + kind);
 }
