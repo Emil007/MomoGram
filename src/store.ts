@@ -1,5 +1,6 @@
 // Persistent storage: the user's ROM and packs in IndexedDB, progress/settings in localStorage.
 import type { Pack } from './packs/format';
+import { compressAsset, decompressAsset } from './util/files';
 import type { BoardSnapshot } from './game/board';
 
 const DB = 'momogram';
@@ -36,8 +37,9 @@ export const storage = {
   deletePack: (id: string) => tx('packs', 'readwrite', s => s.delete(id)),
   allPacks: () => tx<Pack[]>('packs', 'readonly', s => s.getAll()),
   // music and other binary files of a pack, keyed "packId/name"
-  saveAsset: (packId: string, name: string, data: Uint8Array) => tx('assets', 'readwrite', s => s.put(data, packId + '/' + name)),
-  loadAsset: (packId: string, name: string) => tx<Uint8Array | undefined>('assets', 'readonly', s => s.get(packId + '/' + name)),
+  // assets are stored compressed where that saves space and unpacked transparently when loaded
+  saveAsset: async (packId: string, name: string, data: Uint8Array) => { const z = await compressAsset(data); return tx('assets', 'readwrite', s => s.put(z, packId + '/' + name)); },
+  loadAsset: (packId: string, name: string) => tx<Uint8Array | undefined>('assets', 'readonly', s => s.get(packId + '/' + name)).then(d => d && decompressAsset(d)),
   assetNames: (packId: string) => tx<IDBValidKey[]>('assets', 'readonly', s => s.getAllKeys(IDBKeyRange.bound(packId + '/', packId + '/\uffff')))
     .then(k => k.map(x => String(x).slice(packId.length + 1))),
   deleteAssets: (packId: string) => tx('assets', 'readwrite', s => s.delete(IDBKeyRange.bound(packId + '/', packId + '/\uffff'))),

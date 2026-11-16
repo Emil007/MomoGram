@@ -2,8 +2,8 @@
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter } from './game/picture';
-import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
-import { PicrossDsData, pckFile, readPicrossDs } from './rom/picrossds';
+import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny, mergePacks } from './packs/format';
+import { PicrossDsData, pckFile, readPicrossDs, dsToPack, dsFromPack } from './rom/picrossds';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
@@ -75,9 +75,10 @@ export async function boot() {
   const want = (settings.lang || navigator.language.slice(0, 2)) as Lang;
   setLang(['en', 'de', 'fr', 'it', 'es', 'ja', 'ko'].includes(want) ? want : 'en');
   storage.persist();
+  // Picross DS is a pack like every other game; an older stored ROM is converted once and removed
   try {
     const rom = await storage.loadRom('picross-ds');
-    if (rom) loadDs(rom);
+    if (rom) { await addPicrossDs(rom); await storage.deleteRom('picross-ds'); }
   } catch (e) { console.warn(e); }
   // desktop app started with --rom <file> (shortcuts, RecompLauncher)
   if (new URLSearchParams(location.search).has('rom')) {
@@ -87,14 +88,33 @@ export async function boot() {
     } catch (e) { console.warn('rom from command line', e); }
   }
   ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
+  await openPicrossDs();
   Snd.init(() => ctx.ds?.sdat ?? null);
   home();
 }
 
-function loadDs(data: Uint8Array) {
-  ctx.ds = readPicrossDs(data);
+/** read a full Picross DS ROM into a pack (puzzles, names, animations, music) and store that instead of the ROM */
+async function addPicrossDs(rom: Uint8Array): Promise<void> {
+  let p: Pack = dsToPack(readPicrossDs(rom));
+  const assets = p.assets ?? [];
+  // another region of Picross DS: one pack with every release's names
+  const old = ctx.packs.find(x => x.id === p.id);
+  if (old) p = mergePacks(p, old);
+  for (const a of assets) await storage.saveAsset(p.id, a.name, a.data);
+  delete p.assets;
+  await storage.savePack(p);
+  ctx.packs = [...ctx.packs.filter(x => x.id !== p.id), p];
+  await openPicrossDs();
+}
+
+/** make the stored Picross DS pack the main game (its modes on the home screen) */
+async function openPicrossDs() {
+  const p = ctx.packs.find(x => x.id === 'picross-ds') as any;
+  if (!p?.ds) { ctx.ds = null; ctx.pck = null; return; }
+  const [sdat, pck] = await Promise.all([storage.loadAsset(p.id, 'sound.sdat'), storage.loadAsset(p.id, 'anim.pck')]);
+  ctx.ds = dsFromPack(p, sdat ?? null, pck ?? null);
   ctx.pck = i => (ctx.ds ? pckFile(ctx.ds, i) : null);
-  if (!settings.lang) setLang(ctx.ds.languages.includes(lang()) ? lang() : ctx.ds.languages[0]);
+  if (ctx.ds && !settings.lang) setLang(ctx.ds.languages.includes(lang()) ? lang() : ctx.ds.languages[0]);
 }
 
 async function pickRom() {
@@ -111,8 +131,7 @@ async function useRomBytes(data: Uint8Array, name: string) {
     data = inner as Uint8Array<ArrayBuffer>;
   }
   try {
-    loadDs(data);
-    await storage.saveRom('picross-ds', data);
+    await addPicrossDs(data);
   } catch (e: any) {
     alert(e.message || String(e));
   }
@@ -275,7 +294,7 @@ function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
       rulesName(r) + (r === lv.rules ? ' ·' : ''))));
 }
 
-function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), STARTER, ...ctx.packs]; }
+function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), STARTER, ...ctx.packs.filter(p => p.id !== 'picross-ds')]; }
 
 // ---------------------------------------------------------------- pack look & sound
 
@@ -613,16 +632,15 @@ function packsScreen(autoCreate = false) {
   openPackManager({
     root: root(),
     packs: () => ctx.packs,
-    setPacks: p => { ctx.packs = p; },
+    setPacks: p => { ctx.packs = p; if (!p.some(x => x.id === 'picross-ds')) { ctx.ds = null; ctx.pck = null; } },
     header: (title: string) => header(title, home),
     screen,
-    openPack: (p: Pack) => packLevels(p),
+    openPack: (p: Pack) => p.id === 'picross-ds' ? home() : packLevels(p),
     autoCreate,
     addMainRom: async (data: Uint8Array) => {
       // only the full game (not the demos) becomes the main game
       try { readPicrossDs(data); } catch { return false; }
-      loadDs(data);
-      await storage.saveRom('picross-ds', data);
+      await addPicrossDs(data);
       return true;
     },
   });
@@ -692,7 +710,7 @@ function optionsScreen() {
     h('p', { class: 'fine' }, t('controls')),
     ctx.ds ? h('div', { class: 'row' },
       h('button', { class: 'btn', onClick: () => { if (confirm(t('confirmReset'))) resetProgress('picross-ds'); } }, t('resetProgress')),
-      h('button', { class: 'btn', onClick: async () => { await storage.deleteRom('picross-ds'); ctx.ds = null; ctx.pck = null; home(); } }, t('removeRom'))) : null,
+      h('button', { class: 'btn', onClick: async () => { await storage.deletePack('picross-ds'); await storage.deleteAssets('picross-ds'); ctx.packs = ctx.packs.filter(p => p.id !== 'picross-ds'); ctx.ds = null; ctx.pck = null; home(); } }, t('removeRom'))) : null,
     h('p', { class: 'fine' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · No game data included.')));
 }
 

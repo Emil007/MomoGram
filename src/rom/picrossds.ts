@@ -380,3 +380,28 @@ export function pckFile(d: PicrossDsData, i: number): Uint8Array | null {
   if (!d.pck || i + 1 >= d.pckOffsets.length) return null;
   return d.pck.subarray(d.pckOffsets[i], d.pckOffsets[i + 1]);
 }
+
+// ---- Picross DS as a pack: everything MomoGram needs from the ROM, so the ROM itself is not kept ----
+
+export interface DsPackMeta { region: PicrossDsData['region']; gameCode: string; languages: Lang[]; daily7: PackPuzzle[]; daily10: PackPuzzle[]; pckOffsets: number[] }
+
+/** pack (with the DS extras in `ds`) + its assets: the sound archive and the solved-picture animation data */
+export function dsToPack(d: PicrossDsData): Pack & { ds: DsPackMeta } {
+  const assets = [
+    ...(d.sdat ? [{ name: 'sound.sdat', data: d.sdat }] : []),
+    ...(d.pck ? [{ name: 'anim.pck', data: d.pck }] : []),
+  ];
+  return {
+    ...d.pack,
+    theme: { music: { menu: 'sound.sdat#title_SEQ', title: 'sound.sdat#title_SEQ', play: 'sound.sdat#stage_jazz_SEQ', clear: 'sound.sdat#game_clear_jingle_SEQ' } },
+    assets,
+    ds: { region: d.region, gameCode: d.gameCode, languages: d.languages, daily7: d.daily7, daily10: d.daily10, pckOffsets: d.pckOffsets },
+  };
+}
+
+/** rebuild the runtime data from a stored Picross DS pack */
+export function dsFromPack(p: Pack & { ds?: DsPackMeta }, sdat: Uint8Array | null, pck: Uint8Array | null): PicrossDsData | null {
+  if (!p.ds) return null;
+  const { assets, ds, theme, ...pack } = p as any;
+  return { region: ds.region, gameCode: ds.gameCode, languages: ds.languages, daily7: ds.daily7, daily10: ds.daily10, pckOffsets: ds.pckOffsets, pack, sdat, pck };
+}

@@ -108,6 +108,7 @@ export function openPackManager(pm: PM) {
       for (const e of entries) {
         if (pm.addMainRom && /\.(nds|srl)$/i.test(e.name) && await pm.addMainRom(e.data, e.name).catch(() => false)) {
           msgs.push('✓ Picross DS → ' + t('mainGame'));
+          render();
           continue;
         }
         const r = await importGameFile(e.name, e.data);
