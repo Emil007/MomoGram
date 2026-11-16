@@ -32,7 +32,7 @@ export interface PackLevel {
 /** Look & sound of the original game. Music lives in separate asset files next to the pack (never in the JSON). */
 export interface PackTheme {
   /** colours imitating the original: an accent colour (UI and grid tint), optional explicit fill / background */
-  palette?: { accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; style?: 'dmg' | 'default' };
+  palette?: { accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string; style?: 'dmg' | 'gbc' | 'default' };
   /** asset names per role; an SDAT asset also names the sequence ("sound.sdat#SEQ_NAME") */
   music?: Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', string>>;
 }

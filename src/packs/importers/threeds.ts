@@ -4,6 +4,7 @@ import { registerImporter } from './index';
 import { readCtr, lz11, ctrEncrypted, SMDH_LANGS, u16, CtrFile } from '../../rom/ctr';
 import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFromBits } from '../format';
 import { accentFromColors } from '../theme';
+import { jtexPixels, dominantColors } from '../../rom/jtex';
 import { isBcstm } from '../../audio/bcstm';
 
 interface Raw { file: string; w: number; h: number; cells: Uint8Array; title: string }
@@ -111,7 +112,8 @@ export function read3ds(data: Uint8Array): Pack[] {
   const key = (title.en ?? title.ja ?? t.productCode).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
   const { theme, assets } = music3ds(t.files);
   const accent = accentFromColors(t.iconColors);
-  if (accent) theme.palette = { accent };
+  const board = boardColors(t.files);
+  if (accent || board) theme.palette = { accent: accent ?? board?.cursor ?? '#1f9be0', ...board };
   return [{
     theme: theme.palette || theme.music ? theme : undefined,
     assets: assets.length ? assets : undefined,
@@ -121,6 +123,35 @@ export function read3ds(data: Uint8Array): Pack[] {
     source: { game: title.en ?? title.ja ?? t.productCode, platform: 'Nintendo 3DS', region: t.productCode.slice(-1), developer: 'Jupiter' },
     levels,
   }];
+}
+
+/**
+ * The game's own board colours, from its in-game textures (GameL_<size>_Bg / _Paint / _Check / _Cursor / _Number).
+ * Only formats that decode unambiguously are used; anything else keeps MomoGram's colours for that part.
+ */
+function boardColors(files: CtrFile[]): Partial<NonNullable<PackTheme['palette']>> | null {
+  const tex = (part: string) => {
+    const f = files.find(x => new RegExp(`/GameL_1010_${part}\\.jtex$`).test(x.path)) ?? files.find(x => new RegExp(`/GameL_\\d{4}_${part}\\.jtex$`).test(x.path));
+    const px = f ? jtexPixels(f.data) : null;
+    return px ? dominantColors(px) : null;
+  };
+  const lum = (c: [number, number, number]) => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+  const sat = (c: [number, number, number]) => Math.max(...c) - Math.min(...c);
+  const out: Record<string, string> = {};
+  const bg = tex('Bg');
+  if (bg?.length) { const light = bg.filter(c => lum(c.rgb) > 170); if (light[0]) out.cell = light[0].hex; }
+  const paint = tex('Paint');
+  if (paint?.length) { const dark = paint.filter(c => lum(c.rgb) < 140); if (dark[0]) out.fill = dark[0].hex; }
+  const check = tex('Check');
+  if (check?.length && sat(check[0].rgb) > 60) out.cross = check[0].hex;
+  const cur = tex('Cursor');
+  if (cur?.length && sat(cur[0].rgb) > 60) out.cursor = cur[0].hex;
+  const num = tex('Number');
+  if (num?.length) {
+    const dark = num.find(c => lum(c.rgb) < 60); if (dark) out.clue = dark.hex;
+    const blue = num.find(c => c.rgb[2] > 150 && c.rgb[0] < 80); if (blue) out.hint = blue.hex;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 // Stream music (.bcstm) by role. Picross e-style names: GA = in game, ME = menu, MG / MI = Mega / Micross;

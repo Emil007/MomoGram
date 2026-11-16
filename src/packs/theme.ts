@@ -15,6 +15,11 @@ export function hsl(h: number, s: number, l: number): string {
   const f = (n: number) => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
   return '#' + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, '0')).join('');
 }
+/** lighten (+) or darken (−) a hex colour */
+export function shade(hex: string, amount: number): string {
+  const [h, s, l] = hexToHsl(hex);
+  return hsl(h, s, Math.max(0, Math.min(1, l + amount)));
+}
 export function hexToHsl(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return rgb2hsl([(n >> 16) & 255, (n >> 8) & 255, n & 255]);
@@ -38,7 +43,7 @@ export function accentFromColors(px: RGB[]): string | null {
 
 export interface ThemeColors {
   accent: string; accentDark: string; bg: string; panel: string; top: string; topLine: string;
-  board: { bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; cross: string; clueBg: string; clueBgAlt: string; clue: string; clueDone: string; outline: string };
+  board: { bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; cross: string; clueBg: string; clueBgAlt: string; clue: string; clueDone: string; outline: string; cursor?: string; hl?: string; hint?: string };
 }
 
 /** full set of colours for the screens and the board, from a pack palette */
@@ -60,7 +65,13 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     board: {
       bg: '#ffffff', grid: hsl(h, 0.6, 0.78), grid5: '#f39a2c', cell: p.cell ?? hsl(h, 0.8, 0.93), cellDither: hsl(h, 0.75, 0.89),
       fill: p.fill ?? hsl(h, 0.65, 0.42), fillDither: hsl(h, 0.65, 0.37), cross: hsl(h, 0.55, 0.68),
-      clueBg: hsl(h, 0.75, 0.84), clueBgAlt: hsl(h, 0.75, 0.84), clue: '#1d2a36', clueDone: hsl(h, 0.15, 0.75), outline: '#1a1a1a',
+      clueBg: hsl(h, 0.75, 0.84), clueBgAlt: hsl(h, 0.75, 0.84), clue: p.clue ?? '#1d2a36', clueDone: hsl(h, 0.15, 0.75), outline: '#1a1a1a',
+      // colours read from the game's own board textures, where it has them
+      ...(p.cross ? { cross: p.cross } : {}),
+      ...(p.cursor ? { cursor: shade(p.cursor, -0.15), hl: p.cursor + '66' } : {}),
+      ...(p.hint ? { hint: p.hint } : {}),
+      ...(p.cell ? { cellDither: shade(p.cell, -0.04) } : {}),
+      ...(p.fill ? { fillDither: shade(p.fill, -0.08) } : {}),
     },
   };
 }
