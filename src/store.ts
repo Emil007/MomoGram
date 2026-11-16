@@ -118,3 +118,53 @@ export function setQuickSave(q: QuickSave | null) {
 export function getQuickSave(): QuickSave | null {
   try { return JSON.parse(localStorage.getItem('momogram.quick') || 'null'); } catch { return null; }
 }
+
+// ---- the save file: one named save with the progress of every pack ----
+// Progress is keyed "packId/puzzleId", so a save works with any set of installed packs: entries of packs that
+// aren't installed simply wait until that pack is imported, and nothing of them is touched in between.
+
+export interface SaveFile {
+  format: 'momogram-save'; version: 1;
+  name: string;
+  saved: string; // ISO date
+  progress: ProgressMap;
+  quick: QuickSave | null;
+  settings?: Partial<Settings>;
+}
+
+export function saveName(): string { return localStorage.getItem('momogram.saveName') || 'MomoGram'; }
+export function setSaveName(n: string) { localStorage.setItem('momogram.saveName', n.trim().slice(0, 40) || 'MomoGram'); }
+
+export function makeSave(withSettings = true): SaveFile {
+  return { format: 'momogram-save', version: 1, name: saveName(), saved: new Date().toISOString(), progress, quick: getQuickSave(), settings: withSettings ? settings : undefined };
+}
+
+/** summary for the UI: puzzles solved per pack id */
+export function progressSummary(p: ProgressMap = progress): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const [k, v] of Object.entries(p)) if (v.cleared) { const id = k.slice(0, k.lastIndexOf('/')); m.set(id, (m.get(id) ?? 0) + 1); }
+  return m;
+}
+
+/**
+ * Load a save. "replace" takes it as it is (switching devices); "merge" keeps the better result per puzzle
+ * (best time, medal, cleared) from both.
+ */
+export function applySave(s: SaveFile, mode: 'replace' | 'merge', withSettings = true) {
+  if (mode === 'replace') for (const k of Object.keys(progress)) delete progress[k];
+  for (const [k, v] of Object.entries(s.progress ?? {})) {
+    const cur = progress[k];
+    if (!cur || mode === 'replace') { progress[k] = { ...v }; continue; }
+    progress[k] = {
+      cleared: cur.cleared || v.cleared,
+      underLimit: cur.underLimit || v.underLimit,
+      best: cur.best === undefined ? v.best : v.best === undefined ? cur.best : Math.min(cur.best, v.best),
+      medal: [cur.medal, v.medal].filter((m): m is Medal => !!m).sort((a, b) => MEDALS.indexOf(b) - MEDALS.indexOf(a))[0],
+    };
+  }
+  localStorage.setItem('momogram.progress', JSON.stringify(progress));
+  if (mode === 'replace') { setQuickSave(s.quick ?? null); setSaveName(s.name || 'MomoGram'); }
+  if (withSettings && s.settings) { Object.assign(settings, s.settings); saveSettings(); }
+}
+
+export function isSaveFile(x: any): x is SaveFile { return x && x.format === 'momogram-save' && x.version === 1 && typeof x.progress === 'object'; }

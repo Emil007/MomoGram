@@ -54,3 +54,11 @@ export function compressAsset(d: Uint8Array): Promise<Uint8Array> {
 export function decompressAsset(d: Uint8Array): Uint8Array {
   return isCompressedAsset(d) ? inflateSync(d.subarray(4)) : d;
 }
+
+// ---- save files (.momosave): gzip-compressed JSON ----
+import { gzipSync, gunzipSync, strFromU8 } from 'fflate';
+export function packSave(obj: unknown): Uint8Array { return gzipSync(strToU8(JSON.stringify(obj)), { level: 9 }); }
+export function unpackSave(d: Uint8Array): any {
+  const raw = d[0] === 0x1f && d[1] === 0x8b ? gunzipSync(d) : d; // also accepts plain JSON
+  return JSON.parse(strFromU8(raw));
+}

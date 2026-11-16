@@ -4,12 +4,12 @@ import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter } from './game/picture';
 import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny, mergePacks } from './packs/format';
 import { PicrossDsData, pckFile, readPicrossDs, dsToPack, dsFromPack } from './rom/picrossds';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, saveName, setSaveName, makeSave, applySave, isSaveFile, progressSummary } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager } from './ui/packs';
 import { Audio as Snd } from './audio';
-import { unzipFirst } from './util/files';
+import { unzipFirst, packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 import { STARTER } from './packs/starter';
 
@@ -187,7 +187,7 @@ export function home() {
   if (ctx.ds) for (const l of ctx.ds.pack.levels) for (const p of l.puzzles) { total++; if (getProgress(ctx.ds.pack.id, p.id).cleared) cleared++; }
   const topScreen = h('section', { class: 'home-top' }, logo(),
     ctx.ds ? h('div', { class: 'home-progress' }, h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (cleared / total) * 100 : 0}%` })), h('small', {}, t('solvedCount', { a: cleared, b: total }))) : null);
-  screen(h('div', { class: 'home' }, topScreen, h('section', { class: 'home-bottom' }, ...items), h('footer', { class: 'fine' }, ctx.ds ? t('romLoaded', { region: ctx.ds.region }) : '')));
+  screen(h('div', { class: 'home' }, topScreen, h('section', { class: 'home-bottom' }, ...items), h('footer', { class: 'fine' }, '💾 ' + saveName() + (ctx.ds ? ' · ' + t('romLoaded', { region: ctx.ds.region }) : ''))));
 }
 
 function progressText(pack: Pack, levels: PackLevel[]) {
@@ -679,6 +679,42 @@ function groupLevels(pack: Pack, g: string) {
   screen(header(groupTitle(pack, g), () => packLevels(pack)), list);
 }
 
+// ---------------------------------------------------------------- save file
+
+/** one named save for every pack: export it (compressed) and import it on another device */
+function saveSection(): HTMLElement {
+  const name = h('input', { type: 'text', value: saveName(), maxlength: 40, 'aria-label': t('saveName'),
+    onChange: (e: Event) => { setSaveName((e.target as HTMLInputElement).value); } }) as HTMLInputElement;
+  const sum = progressSummary();
+  const total = [...sum.values()].reduce((a, b) => a + b, 0);
+  const known = new Set(allPacks().map(p => p.id));
+  const waiting = [...sum.keys()].filter(id => !known.has(id) && id !== 'daily').length;
+  const exportSave = () => {
+    const file = saveName().replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'MomoGram';
+    download(file + '.momosave', packSave(makeSave()), 'application/octet-stream');
+  };
+  const importSave = async () => {
+    const f = await pickFile('.momosave,.json,application/octet-stream');
+    if (!f) return;
+    let s: any;
+    try { s = unpackSave(new Uint8Array(await f.arrayBuffer())); } catch { s = null; }
+    if (!isSaveFile(s)) { alert(t('notASave')); return; }
+    const n = Object.values(s.progress).filter((v: any) => v.cleared).length;
+    await choose(`${s.name} · ${n} ${t('puzzlesSolved')}`, [
+      [t('saveReplace'), () => { applySave(s, 'replace'); }],
+      [t('saveMerge'), () => { applySave(s, 'merge', false); }],
+      [t('back'), () => {}],
+    ]);
+    optionsScreen();
+  };
+  return h('div', { class: 'save-box' },
+    h('label', { class: 'opt' }, h('span', {}, t('saveName')), name),
+    h('p', { class: 'fine' }, `${total} ${t('puzzlesSolved')}` + (waiting ? ' · ' + t('saveWaiting', { n: waiting }) : '')),
+    h('div', { class: 'row wrap' },
+      h('button', { class: 'btn primary', onClick: exportSave }, '⤓ ' + t('saveExport')),
+      h('button', { class: 'btn', onClick: importSave }, '⤒ ' + t('saveImport'))));
+}
+
 // ---------------------------------------------------------------- options
 
 function optionsScreen() {
@@ -707,6 +743,8 @@ function optionsScreen() {
     row(t('toolsRight'), chk('toolsRight')),
     row(t('hints'), sel('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
     row(t('unlockAll'), chk('unlockAll')),
+    h('h2', { class: 'opt-head' }, t('saveData')),
+    saveSection(),
     h('p', { class: 'fine' }, t('controls')),
     ctx.ds ? h('div', { class: 'row' },
       h('button', { class: 'btn', onClick: () => { if (confirm(t('confirmReset'))) resetProgress('picross-ds'); } }, t('resetProgress')),
