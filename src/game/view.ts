@@ -64,6 +64,8 @@ export class BoardView {
   }
 
   destroy() { cancelAnimationFrame(this.raf); }
+  get width() { return this.cssW; }
+  get height() { return this.cssH; }
   invalidate() { this.dirty = true; }
 
   resize(w: number, h: number) {
@@ -94,6 +96,18 @@ export class BoardView {
     this.clampScroll();
     this.dirty = true;
     this.onLayout?.();
+  }
+
+  /** Height the whole puzzle needs when it is fitted to `width` (portrait layout gives the rest to the top screen). */
+  naturalHeight(width: number): number {
+    const { r, c } = this.maxClues();
+    const b = this.board;
+    let fit = width / (b.w + r * 0.62 + 0.3);
+    if (fit * 0.62 > 26) fit = (width - r * 26 - 8) / b.w;
+    const cell = Math.max(6, Math.floor(fit));
+    const cc = Math.max(cell, 14);
+    const clueH = Math.ceil(c * Math.min(cc * 0.66, 28) + Math.min(cc * 0.3, 10));
+    return clueH + b.h * cell + 6;
   }
 
   private updateClueArea() {

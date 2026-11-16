@@ -182,9 +182,29 @@ function levelList(pack: Pack, group: string, back: () => void = home) {
 function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
   const grid = h('div', { class: 'puzzles' });
   const pck = pack.id === 'picross-ds' ? ctx.pck : null;
+  // info strip like the DS top screen: shows the focused puzzle, otherwise the level summary
+  const info = h('div', { class: 'puzzle-info' });
+  const showLevel = () => {
+    const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
+    const sizes = [...new Set(lv.puzzles.map(p => `${p.width}×${p.height}`))];
+    const stars = lv.puzzles.filter(p => getProgress(pack.id, p.id).underLimit).length;
+    info.replaceChildren(h('div', { class: 'ring', style: `--p:${(done / lv.puzzles.length) * 100}%` }, h('span', {}, String(done))),
+      h('b', {}, `${done} / ${lv.puzzles.length} ${t('puzzles')}` + (stars ? `  ★ ${stars}` : '')),
+      h('small', {}, sizes.length === 1 ? sizes[0] : `${sizes[0]} – ${sizes[sizes.length - 1]}`));
+  };
+  const showPuzzle = (p: PackPuzzle, i: number) => {
+    const pr = getProgress(pack.id, p.id);
+    const name = pr.cleared ? pickText(p.name, packLang()) : '';
+    info.replaceChildren(pr.cleared ? thumbnail(p, pck, 48) : h('span', { class: 'qmark' }, '?'),
+      h('b', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
+      h('small', {}, `${p.width}×${p.height}` + (pr.best !== undefined ? ` · ${t('best')} ${formatTime(pr.best)}` : '') + (pr.underLimit ? ' ★' : '')));
+  };
+  showLevel();
   lv.puzzles.forEach((p, i) => {
     const pr = getProgress(pack.id, p.id);
-    const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => play(pack, lv, i, back) });
+    const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => play(pack, lv, i, back),
+      onMouseenter: () => showPuzzle(p, i), onFocus: () => showPuzzle(p, i), onMouseleave: () => showLevel(),
+      'aria-label': `${t('puzzleNo')} ${i + 1}` });
     if (pr.cleared) tile.append(thumbnail(p, pck, 64));
     else tile.append(h('span', { class: 'qmark' }, '?'));
     tile.append(h('small', {}, pr.cleared ? (pickText(p.name, packLang()) || `${p.width}×${p.height}`) : `${p.width}×${p.height}`));
@@ -200,9 +220,8 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     const label = pickAny(l.title, packLang()).replace(/^\D+\s(?=\d)/, '').replace(/^.*Extra$/, 'EX');
     return h('button', { class: 'tab' + (l === lv ? ' on' : ''), disabled: open ? undefined : true, onClick: () => puzzleList(pack, l, back) }, open ? label : '🔒');
   })) : null;
-  const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
-  screen(header(pickAny(lv.title, packLang()), back), tabs,
-    h('p', { class: 'rules' }, (lv.rules === 'free' ? t('rulesFree') : t('rulesNormal')) + ` · ${done}/${lv.puzzles.length}`), grid);
+  screen(header(pickAny(lv.title, packLang()), back), tabs, info, grid,
+    h('p', { class: 'rules' }, lv.rules === 'free' ? t('rulesFree') : t('rulesNormal')));
 }
 
 function resumeQuick() {
@@ -255,12 +274,15 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const xBtn = h('button', { class: 'pad', title: t('cross'), 'aria-label': t('cross'), onClick: () => setTool('cross') }, h('i', { class: 'ico cross' }));
   const lensBtn = h('button', { class: 'pad', title: t('zoom'), 'aria-label': t('zoom'), onClick: () => { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } }, h('i', { class: 'ico lens' }));
   const toolPad = h('div', { class: 'toolpad' }, penBtn, xBtn, lensBtn);
-  const boardWrap = h('section', { class: 'boardwrap' }, canvas, toolPad);
+  toolPad.setAttribute('role', 'toolbar');
+  const boardWrap = h('section', { class: 'boardwrap' }, canvas);
 
-  const undoBtn = h('button', { class: 'btn tool', onClick: () => { if (board.undo()) { view.invalidate(); updateInfo(); } } }, '↶ ' + t('undo'));
-  const trialBtn = lv.rules === 'free' ? h('button', { class: 'btn tool', onClick: () => trialToggle() }, t('tryIt')) : null;
-  const menuBtn = h('button', { class: 'btn tool', onClick: () => pauseMenu() }, '☰ ' + t('menu'));
-  const tools = h('nav', { class: 'tools' + (settings.lefty ? ' lefty' : '') }, undoBtn, trialBtn, menuBtn);
+  const undoBtn = h('button', { class: 'btn tool icon', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) { view.invalidate(); updateInfo(); } } }, h('span', { class: 'big-ico' }, '↶'), h('small', {}, t('undo')));
+  const trialLabel = h('small', {}, t('tryIt'));
+  const trialBtn = lv.rules === 'free' ? h('button', { class: 'btn tool icon', title: t('tryIt'), onClick: () => trialToggle() }, h('span', { class: 'big-ico' }, '✎'), trialLabel) : null;
+  const menuBtn = h('button', { class: 'btn tool icon', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, h('span', { class: 'big-ico' }, '☰'), h('small', {}, t('menu')));
+  // tools within thumb reach at the bottom: pen / cross / zoom as a segmented pad, then undo, try-it and menu
+  const tools = h('nav', { class: 'tools' + (settings.lefty ? ' lefty' : '') }, toolPad, h('span', { class: 'gap' }), undoBtn, trialBtn, menuBtn);
   const fillBtn = penBtn, crossBtn = xBtn;
 
   screen(h('div', { class: 'play' }, top, boardWrap, tools));
@@ -279,9 +301,6 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   };
 
   view.onLayout = () => {
-    const c = view.cornerRect();
-    const sz = Math.max(22, Math.min(56, Math.floor((Math.min(c.w, c.h) - 10) / 2)));
-    Object.assign(toolPad.style, { left: c.x + 'px', top: c.y + 'px', width: c.w + 'px', height: c.h + 'px', '--pad': sz + 'px' });
     lensBtn.classList.toggle('on', view.zoomed);
     updateInfo();
   };
@@ -293,10 +312,10 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   }
 
   function trialToggle() {
-    if (!board.trial) { board.startTrial(); trialBtn!.textContent = t('keep') + ' / ' + t('discard'); trialBtn!.classList.add('on'); }
+    if (!board.trial) { board.startTrial(); trialLabel.textContent = t('keep') + '?'; trialBtn!.classList.add('on'); }
     else {
       choose(t('tryIt'), [[t('keep'), () => board.commitTrial()], [t('discard'), () => board.discardTrial()], [t('back'), () => { /* stay */ }]]).then(() => {
-        if (!board.trial) { trialBtn!.textContent = t('tryIt'); trialBtn!.classList.remove('on'); }
+        if (!board.trial) { trialLabel.textContent = t('tryIt'); trialBtn!.classList.remove('on'); }
         view.invalidate();
         if (board.checkSolved()) solved();
       });
@@ -330,11 +349,30 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   }
 
   // layout
+  // Portrait: the grid takes the height it needs and the top screen grows into the rest (bigger picture),
+  // like the DS where the top screen never steals room from the touch screen.
+  const playEl = boardWrap.parentElement!;
+  const portrait = () => !matchMedia('(orientation: landscape) and (min-width: 640px)').matches;
+  const fitPortrait = () => {
+    if (!portrait()) {
+      boardWrap.style.height = '';
+      top.style.setProperty('--pv', Math.max(96, Math.min(top.clientWidth - 40, playEl.clientHeight * 0.42, 300)) + 'px');
+      return;
+    }
+    const W = boardWrap.clientWidth;
+    const avail = playEl.clientHeight - tools.offsetHeight - 112;
+    const bh = Math.max(160, Math.min(avail, view.naturalHeight(W)));
+    boardWrap.style.height = bh + 'px';
+    const topH = playEl.clientHeight - tools.offsetHeight - bh;
+    top.style.setProperty('--pv', Math.max(64, Math.min(topH - 24, W * 0.48, 280)) + 'px');
+  };
   const ro = new ResizeObserver(() => {
     const r = boardWrap.getBoundingClientRect();
-    view.resize(Math.floor(r.width), Math.floor(r.height));
+    if (Math.floor(r.width) !== view.width || Math.floor(r.height) !== view.height) view.resize(Math.floor(r.width), Math.floor(r.height));
   });
   ro.observe(boardWrap);
+  const ro2 = new ResizeObserver(() => fitPortrait());
+  ro2.observe(playEl);
 
   // timer
   let last = performance.now(), running = true, finished = false;
@@ -379,6 +417,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     finished = true;
     clearTimeout(timerId);
     ro.disconnect();
+    ro2.disconnect();
     view.destroy();
     window.removeEventListener('keydown', key);
     window.removeEventListener('keyup', keyUp);
