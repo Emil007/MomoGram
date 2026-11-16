@@ -84,7 +84,66 @@ export const settings: Settings = readJson('momogram.settings', DEFAULTS);
 export function saveSettings() { localStorage.setItem('momogram.settings', JSON.stringify(settings)); }
 
 type ProgressMap = Record<string, PuzzleProgress>;
-const progress: ProgressMap = (() => { try { return JSON.parse(localStorage.getItem('momogram.progress') || '{}'); } catch { return {}; } })();
+
+// ---- profiles: each one has its own progress and quick save on this device ----
+export interface Profile { id: string; name: string; created: string }
+const PKEY = 'momogram.profiles';
+function loadProfiles(): Profile[] { try { return JSON.parse(localStorage.getItem(PKEY) || '[]'); } catch { return []; } }
+function storeProfiles(p: Profile[]) { localStorage.setItem(PKEY, JSON.stringify(p)); }
+const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+(function migrate() {
+  // the first version had one unnamed save: it becomes the first profile
+  if (loadProfiles().length) return;
+  const id = newId();
+  storeProfiles([{ id, name: localStorage.getItem('momogram.saveName') || 'Player', created: new Date().toISOString() }]);
+  localStorage.setItem('momogram.profile', id);
+  for (const k of ['progress', 'quick']) {
+    const v = localStorage.getItem('momogram.' + k);
+    if (v !== null) { localStorage.setItem(`momogram.${k}.${id}`, v); localStorage.removeItem('momogram.' + k); }
+  }
+})();
+
+export function profiles(): Profile[] { return loadProfiles(); }
+export function activeProfile(): Profile {
+  const all = loadProfiles();
+  return all.find(p => p.id === localStorage.getItem('momogram.profile')) ?? all[0];
+}
+const pk = (k: string) => `momogram.${k}.${activeProfile().id}`;
+
+let progress: ProgressMap = {};
+/** per pack: when its progress last changed (ISO date) — decides what an import may overwrite */
+let packTimes: Record<string, string> = {};
+function loadActive() {
+  try { progress = JSON.parse(localStorage.getItem(pk('progress')) || '{}'); } catch { progress = {}; }
+  try { packTimes = JSON.parse(localStorage.getItem(pk('packtimes')) || '{}'); } catch { packTimes = {}; }
+}
+loadActive();
+function persist(touched?: string[]) {
+  const now = new Date().toISOString();
+  for (const id of touched ?? []) packTimes[id] = now;
+  localStorage.setItem(pk('progress'), JSON.stringify(progress));
+  localStorage.setItem(pk('packtimes'), JSON.stringify(packTimes));
+}
+
+export function switchProfile(id: string) { if (loadProfiles().some(p => p.id === id)) { localStorage.setItem('momogram.profile', id); loadActive(); } }
+export function createProfile(name: string, id = newId()): Profile {
+  const p: Profile = { id, name: name.trim().slice(0, 40) || 'Player', created: new Date().toISOString() };
+  storeProfiles([...loadProfiles(), p]);
+  switchProfile(p.id);
+  return p;
+}
+export function renameProfile(name: string) {
+  const all = loadProfiles(), me = activeProfile();
+  storeProfiles(all.map(p => p.id === me.id ? { ...p, name: name.trim().slice(0, 40) || p.name } : p));
+}
+export function deleteProfile(id: string) {
+  const all = loadProfiles().filter(p => p.id !== id);
+  if (!all.length) return;
+  storeProfiles(all);
+  for (const k of ['progress', 'quick', 'packtimes']) localStorage.removeItem(`momogram.${k}.${id}`);
+  if (localStorage.getItem('momogram.profile') === id) switchProfile(all[0].id);
+}
 
 export function getProgress(packId: string, puzzleId: string): PuzzleProgress {
   return progress[packId + '/' + puzzleId] ?? {};
@@ -100,71 +159,80 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
   if (underLimit) p.underLimit = true;
   if (p.best === undefined || totalMs < p.best) p.best = totalMs;
   progress[k] = p;
-  localStorage.setItem('momogram.progress', JSON.stringify(progress));
+  persist([packId]);
   return better;
 }
 
 export function resetProgress(packId: string) {
   for (const k of Object.keys(progress)) if (k.startsWith(packId + '/')) delete progress[k];
-  localStorage.setItem('momogram.progress', JSON.stringify(progress));
-  localStorage.removeItem('momogram.quick.' + packId);
+  persist([packId]);
 }
 
 export interface QuickSave { packId: string; levelId: string; puzzleId: string; state: BoardSnapshot }
 export function setQuickSave(q: QuickSave | null) {
-  if (q) localStorage.setItem('momogram.quick', JSON.stringify(q));
-  else localStorage.removeItem('momogram.quick');
+  if (q) localStorage.setItem(pk('quick'), JSON.stringify(q));
+  else localStorage.removeItem(pk('quick'));
 }
 export function getQuickSave(): QuickSave | null {
-  try { return JSON.parse(localStorage.getItem('momogram.quick') || 'null'); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(pk('quick')) || 'null'); } catch { return null; }
 }
 
-// ---- the save file: one named save with the progress of every pack ----
+// ---- save files: the active profile, every pack with its own timestamp ----
 // Progress is keyed "packId/puzzleId", so a save works with any set of installed packs: entries of packs that
 // aren't installed simply wait until that pack is imported, and nothing of them is touched in between.
 
 export interface SaveFile {
-  format: 'momogram-save'; version: 1;
-  name: string;
-  saved: string; // ISO date
-  progress: ProgressMap;
+  format: 'momogram-save'; version: 2;
+  profile: { id: string; name: string };
+  saved: string;
+  packs: Record<string, { updated: string; progress: Record<string, PuzzleProgress> }>;
   quick: QuickSave | null;
   settings?: Partial<Settings>;
 }
 
-export function saveName(): string { return localStorage.getItem('momogram.saveName') || 'MomoGram'; }
-export function setSaveName(n: string) { localStorage.setItem('momogram.saveName', n.trim().slice(0, 40) || 'MomoGram'); }
-
-export function makeSave(withSettings = true): SaveFile {
-  return { format: 'momogram-save', version: 1, name: saveName(), saved: new Date().toISOString(), progress, quick: getQuickSave(), settings: withSettings ? settings : undefined };
+function packsOf(p: ProgressMap): SaveFile['packs'] {
+  const out: SaveFile['packs'] = {};
+  for (const [k, v] of Object.entries(p)) {
+    const i = k.lastIndexOf('/'), id = k.slice(0, i);
+    (out[id] ??= { updated: packTimes[id] ?? '1970-01-01T00:00:00.000Z', progress: {} }).progress[k.slice(i + 1)] = v;
+  }
+  for (const id of Object.keys(packTimes)) out[id] ??= { updated: packTimes[id], progress: {} }; // reset packs too
+  return out;
 }
 
-/** summary for the UI: puzzles solved per pack id */
-export function progressSummary(p: ProgressMap = progress): Map<string, number> {
+export function makeSave(): SaveFile {
+  const me = activeProfile();
+  return { format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: new Date().toISOString(), packs: packsOf(progress), quick: getQuickSave(), settings };
+}
+
+/** solved puzzles per pack id (of the active profile, or of a save) */
+export function progressSummary(s?: SaveFile): Map<string, number> {
   const m = new Map<string, number>();
-  for (const [k, v] of Object.entries(p)) if (v.cleared) { const id = k.slice(0, k.lastIndexOf('/')); m.set(id, (m.get(id) ?? 0) + 1); }
+  for (const [id, pk] of Object.entries(s ? s.packs : packsOf(progress))) m.set(id, Object.values(pk.progress).filter(v => v.cleared).length);
   return m;
 }
 
 /**
- * Load a save. "replace" takes it as it is (switching devices); "merge" keeps the better result per puzzle
- * (best time, medal, cleared) from both.
+ * Import a save. Same profile already on this device: only packs whose data in the save is newer replace the
+ * local ones, so playing different packs on different devices merges cleanly. Unknown profile: it is added.
+ * Returns what happened, for the message.
  */
-export function applySave(s: SaveFile, mode: 'replace' | 'merge', withSettings = true) {
-  if (mode === 'replace') for (const k of Object.keys(progress)) delete progress[k];
-  for (const [k, v] of Object.entries(s.progress ?? {})) {
-    const cur = progress[k];
-    if (!cur || mode === 'replace') { progress[k] = { ...v }; continue; }
-    progress[k] = {
-      cleared: cur.cleared || v.cleared,
-      underLimit: cur.underLimit || v.underLimit,
-      best: cur.best === undefined ? v.best : v.best === undefined ? cur.best : Math.min(cur.best, v.best),
-      medal: [cur.medal, v.medal].filter((m): m is Medal => !!m).sort((a, b) => MEDALS.indexOf(b) - MEDALS.indexOf(a))[0],
-    };
+export function importSave(s: SaveFile): { profile: string; created: boolean; packsTaken: number; packsKept: number } {
+  const exists = loadProfiles().some(p => p.id === s.profile.id);
+  if (!exists) createProfile(s.profile.name, s.profile.id); else switchProfile(s.profile.id);
+  let taken = 0, kept = 0;
+  for (const [id, pk] of Object.entries(s.packs)) {
+    const local = packTimes[id];
+    if (exists && local && local >= pk.updated) { kept++; continue; }
+    for (const k of Object.keys(progress)) if (k.startsWith(id + '/')) delete progress[k];
+    for (const [pz, v] of Object.entries(pk.progress)) progress[id + '/' + pz] = { ...v };
+    packTimes[id] = pk.updated;
+    taken++;
   }
-  localStorage.setItem('momogram.progress', JSON.stringify(progress));
-  if (mode === 'replace') { setQuickSave(s.quick ?? null); setSaveName(s.name || 'MomoGram'); }
-  if (withSettings && s.settings) { Object.assign(settings, s.settings); saveSettings(); }
+  persist();
+  if (!exists || !getQuickSave()) setQuickSave(s.quick ?? null);
+  if (!exists && s.settings) { Object.assign(settings, s.settings); saveSettings(); }
+  return { profile: s.profile.name, created: !exists, packsTaken: taken, packsKept: kept };
 }
 
-export function isSaveFile(x: any): x is SaveFile { return x && x.format === 'momogram-save' && x.version === 1 && typeof x.progress === 'object'; }
+export function isSaveFile(x: any): x is SaveFile { return x && x.format === 'momogram-save' && x.version === 2 && x.profile && typeof x.packs === 'object'; }

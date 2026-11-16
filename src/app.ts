@@ -4,7 +4,7 @@ import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter } from './game/picture';
 import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny, mergePacks } from './packs/format';
 import { PicrossDsData, pckFile, readPicrossDs, dsToPack, dsFromPack } from './rom/picrossds';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, saveName, setSaveName, makeSave, applySave, isSaveFile, progressSummary } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager } from './ui/packs';
@@ -185,9 +185,11 @@ export function home() {
     h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))));
   let total = 0, cleared = 0;
   if (ctx.ds) for (const l of ctx.ds.pack.levels) for (const p of l.puzzles) { total++; if (getProgress(ctx.ds.pack.id, p.id).cleared) cleared++; }
-  const topScreen = h('section', { class: 'home-top' }, logo(),
+  const topScreen = h('section', { class: 'home-top' },
+    h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
+    logo(),
     ctx.ds ? h('div', { class: 'home-progress' }, h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (cleared / total) * 100 : 0}%` })), h('small', {}, t('solvedCount', { a: cleared, b: total }))) : null);
-  screen(h('div', { class: 'home' }, topScreen, h('section', { class: 'home-bottom' }, ...items), h('footer', { class: 'fine' }, '💾 ' + saveName() + (ctx.ds ? ' · ' + t('romLoaded', { region: ctx.ds.region }) : ''))));
+  screen(h('div', { class: 'home' }, topScreen, h('section', { class: 'home-bottom' }, ...items), h('footer', { class: 'fine' }, ctx.ds ? t('romLoaded', { region: ctx.ds.region }) : '')));
 }
 
 function progressText(pack: Pack, levels: PackLevel[]) {
@@ -681,38 +683,57 @@ function groupLevels(pack: Pack, g: string) {
 
 // ---------------------------------------------------------------- save file
 
-/** one named save for every pack: export it (compressed) and import it on another device */
+/** older save files (one unnamed save, no per-pack times) → current format */
+function upgradeSave(x: any): SaveFile | null {
+  if (isSaveFile(x)) return x;
+  if (x?.format !== 'momogram-save' || x.version !== 1) return null;
+  const packs: SaveFile['packs'] = {};
+  for (const [k, v] of Object.entries<any>(x.progress ?? {})) {
+    const i = k.lastIndexOf('/'), id = k.slice(0, i);
+    (packs[id] ??= { updated: x.saved ?? '1970-01-01T00:00:00.000Z', progress: {} }).progress[k.slice(i + 1)] = v;
+  }
+  return { format: 'momogram-save', version: 2, profile: { id: 'v1-' + (x.name || 'player').toLowerCase().replace(/\W+/g, '-'), name: x.name || 'Player' }, saved: x.saved, packs, quick: x.quick ?? null, settings: x.settings };
+}
+
+/** the active profile's save: export it (compressed) and import saves from other devices */
 function saveSection(): HTMLElement {
-  const name = h('input', { type: 'text', value: saveName(), maxlength: 40, 'aria-label': t('saveName'),
-    onChange: (e: Event) => { setSaveName((e.target as HTMLInputElement).value); } }) as HTMLInputElement;
+  const me = activeProfile();
   const sum = progressSummary();
   const total = [...sum.values()].reduce((a, b) => a + b, 0);
   const known = new Set(allPacks().map(p => p.id));
-  const waiting = [...sum.keys()].filter(id => !known.has(id) && id !== 'daily').length;
+  const waiting = [...sum.entries()].filter(([id, n]) => n && !known.has(id) && id !== 'daily').length;
   const exportSave = () => {
-    const file = saveName().replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'MomoGram';
-    download(file + '.momosave', packSave(makeSave()), 'application/octet-stream');
+    const file = me.name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'MomoGram';
+    download(`${file}.momosave`, packSave(makeSave()), 'application/octet-stream');
   };
-  const importSave = async () => {
+  const importFile = async () => {
     const f = await pickFile('.momosave,.json,application/octet-stream');
     if (!f) return;
-    let s: any;
-    try { s = unpackSave(new Uint8Array(await f.arrayBuffer())); } catch { s = null; }
-    if (!isSaveFile(s)) { alert(t('notASave')); return; }
-    const n = Object.values(s.progress).filter((v: any) => v.cleared).length;
-    await choose(`${s.name} · ${n} ${t('puzzlesSolved')}`, [
-      [t('saveReplace'), () => { applySave(s, 'replace'); }],
-      [t('saveMerge'), () => { applySave(s, 'merge', false); }],
-      [t('back'), () => {}],
-    ]);
+    let s: SaveFile | null = null;
+    try { s = upgradeSave(unpackSave(new Uint8Array(await f.arrayBuffer()))); } catch { s = null; }
+    if (!s) { alert(t('notASave')); return; }
+    const r = importSave(s);
+    alert(r.created ? t('saveNewProfile', { name: r.profile }) : t('saveMerged', { name: r.profile, a: r.packsTaken, b: r.packsKept }));
     optionsScreen();
   };
   return h('div', { class: 'save-box' },
-    h('label', { class: 'opt' }, h('span', {}, t('saveName')), name),
+    h('div', { class: 'opt' }, h('span', {}, t('profile')), h('button', { class: 'btn', onClick: () => profileDialog(optionsScreen) }, '👤 ' + me.name)),
     h('p', { class: 'fine' }, `${total} ${t('puzzlesSolved')}` + (waiting ? ' · ' + t('saveWaiting', { n: waiting }) : '')),
     h('div', { class: 'row wrap' },
       h('button', { class: 'btn primary', onClick: exportSave }, '⤓ ' + t('saveExport')),
-      h('button', { class: 'btn', onClick: importSave }, '⤒ ' + t('saveImport'))));
+      h('button', { class: 'btn', onClick: importFile }, '⤒ ' + t('saveImport'))),
+    h('p', { class: 'fine' }, t('saveHelp')));
+}
+
+/** switch, create, rename or delete profiles */
+function profileDialog(after: () => void) {
+  const me = activeProfile();
+  const opts: Array<[string, () => void]> = profiles().map(p => [(p.id === me.id ? '✓ ' : '') + p.name, () => { switchProfile(p.id); }]);
+  opts.push(['✚ ' + t('newProfile'), () => { const n = prompt(t('profileName'), ''); if (n !== null && n.trim()) createProfile(n); }]);
+  opts.push(['✎ ' + t('renameProfile'), () => { const n = prompt(t('profileName'), me.name); if (n !== null && n.trim()) renameProfile(n); }]);
+  if (profiles().length > 1) opts.push(['🗑 ' + t('deleteProfile', { name: me.name }), () => { if (confirm(t('deleteProfile', { name: me.name }) + '?')) deleteProfile(me.id); }]);
+  opts.push([t('back'), () => {}]);
+  choose(t('profile'), opts).then(after);
 }
 
 // ---------------------------------------------------------------- options
