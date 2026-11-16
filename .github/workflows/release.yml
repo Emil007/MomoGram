@@ -1,0 +1,61 @@
+name: Build & release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run typecheck && npm run build
+      - run: cd dist/web && zip -qr ../MomoGram-web.zip . -x '*.map'
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: dist/MomoGram-web.zip }
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist/web }
+  pages:
+    needs: web
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment: { name: github-pages }
+    steps:
+      - uses: actions/deploy-pages@v4
+        continue-on-error: true
+  desktop:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - shell: bash
+        run: |
+          rm -rf electron/web && cp -r dist/web electron/web && rm -f electron/web/*.map
+          cd electron && npm install && npx electron-builder --publish never
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: false }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            dist/desktop/*.zip
+            dist/desktop/*.exe
+            dist/desktop/*.AppImage
+            dist/desktop/*.tar.gz
+            dist/desktop/*.dmg
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [web, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with: { files: out/* }

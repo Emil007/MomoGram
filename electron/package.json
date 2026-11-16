@@ -1,0 +1,83 @@
+{
+  "name": "momogram",
+  "productName": "MomoGram",
+  "version": "0.2.1",
+  "description": "Nonogram player for your own Picross DS ROM",
+  "main": "main.cjs",
+  "license": "MIT",
+  "author": "MomoGram contributors",
+  "build": {
+    "appId": "io.github.momogram",
+    "productName": "MomoGram",
+    "files": [
+      "main.cjs",
+      "icon.png",
+      "web/**"
+    ],
+    "directories": {
+      "output": "../dist/desktop"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "Game"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.puzzle-games",
+      "identity": null
+    },
+    "artifactName": "MomoGram-${version}-${os}-${arch}.${ext}",
+    "publish": null
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "repository": "https://github.com/Emil007/MomoGram"
+}

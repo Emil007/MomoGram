@@ -1,0 +1,18 @@
+node_modules/
+dist/
+electron/web/
+electron/node_modules/
+# never commit game data
+*.nds
+*.srl
+*.gb
+*.gbc
+*.sfc
+*.smc
+*.bs
+*.cia
+*.3ds
+*.cci
+*.7z
+*.rar
+*.momopack.json
