@@ -1,53 +1,96 @@
-# MomoGram
+<p align="center"><img src="web/icon.svg" alt="" width="96"></p>
 
-A nonogram player built around **your own Picross DS ROM**: the original 345 puzzles with their level structure, names, animated solved pictures and music. It runs in the browser and as a desktop app (Windows, Linux, Steam Deck, macOS), and works in **portrait on phones**.
+<h1 align="center">MomoGram</h1>
 
-The name combines *nonogram* with Momo, from Michael Ende's novel, because Picross steals time too.
+<p align="center"><b>Picross DS, rebuilt for every screen</b>: your phone (in portrait!), the browser, Windows, macOS, Linux, Steam Deck and Android.<br>
+Plus every other Picross game you own, turned into puzzle packs.</p>
 
-> **No game data is included.** MomoGram reads everything (puzzles, names, pictures, music) at runtime from a Picross DS ROM you provide. The ROM stays on your device. Puzzle packs are made by you, from games you own.
+<p align="center">
+<a href="https://emil007.github.io/MomoGram/"><b>▶ Play in the browser</b></a> ·
+<a href="https://github.com/Emil007/MomoGram/releases/latest"><b>⬇ Downloads</b></a> ·
+<a href="#puzzle-packs">Puzzle packs</a> ·
+<a href="#platforms">Platforms</a>
+</p>
 
-> This project (code, tools and documentation) was written by an AI (Claude, by Anthropic), directed and tested by a human. Expect AI-typical mistakes, and please report what you find.
+<p align="center">
+<a href="https://github.com/Emil007/MomoGram/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Emil007/MomoGram?label=release&color=1f9be0"></a>
+<a href="https://github.com/Emil007/MomoGram/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/Emil007/MomoGram/ci.yml?label=build"></a>
+<img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2fae5a">
+<img alt="No game data included" src="https://img.shields.io/badge/game%20data-not%20included-f39a2c">
+</p>
 
-## Playing
+| Your phone, upright | Pick a puzzle, earn medals | Solved |
+|---|---|---|
+| <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, dithered cells, orange guide lines, round tool buttons at the bottom" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="Puzzle grid with bronze, silver, gold and platinum medals and the Easy / Normal / Hard picker" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name and the time" width="100%"> |
 
-1. Open MomoGram and choose your Picross DS ROM (`.nds`, or a `.zip` with the `.nds` inside). The European, US, Japanese and Korean releases all work. The names come in the languages of your release (Europe: EN/DE/FR/IT/ES).
-2. Play **Easy**, **Normal** (levels 1–10 + Extra) or **Free** (levels 1–10 + Extra), or the **Daily Picross** set of five 7×7 puzzles.
-   - Normal rules: wrong fills are caught and cost 2, 4, then 8 minutes. Finish in under 60 minutes to see the picture.
-   - Free rules: no checks. Use **Try it out** to test an idea, then keep or discard it.
-   - Levels unlock as in the original (levels 5–10 after 40/50/…/90 cleared puzzles; Extra after clearing every level in under an hour). Options → *Unlock all levels* skips this.
-3. Controls
-   - Touch / mouse: tap or drag to fill (a drag stays on its row or column), **Mark** or right-click to cross out, two fingers / mouse wheel to zoom, two fingers / middle mouse to pan.
-   - Keyboard: arrows, `Z`/Space = fill, `X` = mark (hold and move to paint), `C` = zoom, `U` = undo, `Esc` = menu.
-   - Gamepad / Steam Deck: D-pad, A = fill, B = mark, Y = zoom, L = undo, R = try it out, Start = menu.
+<p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in landscape: the tool column beside the board" width="80%"><br>
+<em>Desktop / Steam Deck: keyboard, mouse and gamepad. Screenshots show MomoGram's own starter puzzles.</em></p>
+
+> **No game data is included.** Start with MomoGram's own starter puzzles, then add the Picross games you own
+> (**Add your Picross games**): MomoGram reads puzzles, names, pictures and music from your files at runtime.
+> Everything stays on your device.
+
+> **Disclaimer: 100% AI.** MomoGram (the game, the ROM readers, the importers, the sound code, the builds and
+> this documentation) was written entirely by an AI (Claude, by Anthropic), directed and tested by a human.
+> No line of code was written by hand. Expect AI-typical mistakes, and please report what you find.
+
+The name: *nonogram* + **Momo**, from Michael Ende's novel about the grey men who steal people's time.
+Picross does that too.
+
+## What you get
+
+- **Picross DS as the main game:** add your ROM and get all 345 puzzles in their original levels (Easy, Normal 1–10 + Extra, Free 1–10 + Extra, Daily Picross), with the puzzle names, the animated solved pictures and the original music. European, US, Japanese and Korean releases.
+- **A board that feels like the handheld:** striped clue bands, dithered cells, orange guides every five cells, a cursor that lights up its row and column into the clues, a drag counter, and clue numbers that grey out only when their block is certainly in place.
+- **Made for one hand on a phone:** portrait layout, the tools at the bottom within thumb reach, pinch to zoom, drags that stay on their row or column.
+- **Every level on every difficulty**, with medals:
+
+  | | Mistakes | Hint roulette | Medal |
+  |---|---|---|---|
+  | **Easy** | caught, no time penalty | offered | 🥉 Bronze |
+  | **Normal** | caught, +2 / 4 / 8 minutes | offered | 🥈 Silver |
+  | **Hard** | not checked, *Try it out* to test ideas | none | 🥇 Gold, 💠 **Platinum** without logic hints |
+
+- **Logic hints** (💡): clue numbers turn blue when their line lets you deduce a new cell, like the newer 3DS and Switch games.
+- **The hint roulette**, spinning over rows and columns like the original.
+- **Puzzle packs** from your other Picross games, with **their own music and colours** where the game has them.
+- **Eight starter puzzles** by MomoGram itself, so you can try it before you add a ROM.
+- Quick save, best times, offline play after the first start, English and German UI.
 
 ## Puzzle packs
 
-**Puzzle packs → Create packs from your games** reads the puzzles from other Picross games you own and turns each one into a pack: one `.momopack.json` file per game, keeping the original level structure and the puzzle names where the game has them. Do it once, keep the files, and import them anywhere with **Import packs** (single files or a `.zip` of several). **Export all as .zip** bundles your packs.
+**Puzzle packs → Create packs from your games**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
+MomoGram finds the puzzles and makes one pack per game, with the original level structure and the puzzle
+names where the game has them. Regional versions of the same game become **one** pack with every
+language's names. Do it once, keep the files, import them anywhere.
 
-| Game | Platform | Status |
-|---|---|---|
-| Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ |
-| Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted files) | ✓ |
-| Mario's Picross | Game Boy | ✓ (Easy, Kinoko, Star, Time Trial) |
-| Picross 2 | Game Boy | ✓ as 15×15 sections (the 30×30 pictures are not reassembled yet) |
-| Pokémon Picross (prototype) | Game Boy Color | not yet |
-| Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles (Mario 1–10, Special, EX; Wario 1–10, Special, Ultra, EX) |
-| Tamori no Picross | Satellaview (.bs) | ✓ standard puzzles plus the daily and weekly puzzles of each broadcast; importing several broadcasts adds their days to one pack |
-| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | not yet |
-| Picross S series and other Switch games | Switch | not yet |
-
-Regional versions of the same game are merged into one pack (all languages' names). `.zip`, `.7z` and `.rar` archives can be chosen directly.
+| Game | Platform | Puzzles | Music & colours |
+|---|---|---|---|
+| Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ | ✓ the game's own |
+| Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted) | ✓ | ✓ the game's music, colours from its icon |
+| Mario's Picross | Game Boy | ✓ Easy, Kinoko, Star, Time Trial | Game Boy green; music in progress |
+| Picross 2 | Game Boy | ✓ as 15×15 sections | Game Boy green; music in progress |
+| Pokémon Picross (prototype) | Game Boy Color | in progress | in progress |
+| Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | music in progress |
+| Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | music in progress |
+| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | in progress | in progress |
+| Picross S series | Switch | later | later |
 
 Only puzzles from Jupiter / Nintendo releases are supported.
 
-### Pack format
+**Exports:** a pack is one small `.momopack.json`. Packs with music are exported as a `.zip` with the
+music in a folder next to the pack. That music comes from your game: keep those packs for your own
+devices and don't share them. Options → *Original music / colours of packs* switch both off.
+
+<details>
+<summary><b>Pack format</b></summary>
 
 ```jsonc
 {
   "format": "momogram-pack", "version": 1,
-  "id": "marios-picross-gb",
+  "id": "gb-marios-picross",
   "title": { "en": "Mario's Picross" },
-  "source": { "game": "Mario's Picross", "platform": "Game Boy", "region": "USA/EUR" },
+  "source": { "game": "Mario's Picross", "platform": "Game Boy" },
+  "theme": { "palette": { "accent": "#4d533c", "style": "dmg" }, "music": { "menu": "…", "play": "…" } },
   "levels": [{
     "id": "easy-a", "title": { "en": "Easy A" }, "rules": "normal", "group": "easy",
     "puzzles": [{ "id": "easy-a-01", "width": 5, "height": 5,
@@ -57,29 +100,67 @@ Only puzzles from Jupiter / Nintendo releases are supported.
 }
 ```
 
-`rows` uses `#` for filled and `.` for empty. Optional per-puzzle `color` (palette + rows) gives a coloured solved picture. Levels can have `unlockAfter` (cleared puzzles in the same `group`) and `extra`.
+`rows` uses `#` for filled and `.` for empty. Levels can have `unlockAfter` (cleared puzzles in the same
+`group`) and `extra`. `theme.music` names files in `<pack>.assets/` next to the pack.
+</details>
+
+## Platforms
+
+Every push that changes the version builds a release on GitHub, for all of these:
+
+| Platform | Download | Notes |
+|---|---|---|
+| **Browser** | [emil007.github.io/MomoGram](https://emil007.github.io/MomoGram/) | Chrome, Edge, Firefox, Safari. Install it as an app (*Add to Home Screen*), works offline. |
+| **Android** | `MomoGram-<version>-Android.apk` | Allow installing from your browser / file manager, then open the APK. |
+| **iPhone / iPad** | the browser version | Share → *Add to Home Screen* gives a full-screen app. |
+| **Windows** | `MomoGram-<version>-Windows-x64-Setup.exe` or the `.zip` (x64 / arm64) | Unsigned: on the SmartScreen warning choose *More info → Run anyway*. |
+| **macOS** | `MomoGram-<version>-macOS-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) | Not notarized: the first time, right-click the app → **Open**, or run `xattr -cr /Applications/MomoGram.app`. |
+| **Linux** | `MomoGram-<version>-Linux-x86_64.AppImage` or `.tar.gz` (x64 / arm64) | `chmod +x` the AppImage. ARM64 runs on Raspberry Pi and ARM handhelds. |
+| **Steam Deck** | the Linux AppImage | Add it to Steam as a non-Steam game; it starts fullscreen in Gaming Mode. |
+| **RecompLauncher** | every release carries a `recomplauncher.json` | [RecompLauncher](https://github.com/elripalda/RecompLauncher) installs, updates and starts MomoGram. |
+
+The desktop app takes `--rom <file.nds>` (or a ROM dropped on the program) to load a ROM at start, and
+`--fullscreen`.
+
+## Controls
+
+| | Touch / mouse | Keyboard | Gamepad / Steam Deck |
+|---|---|---|---|
+| Fill | tap / drag (stays on its row or column) | `Z` / Space, hold and move to paint | A |
+| Cross out | ✕ tool, or right click | `X` | B |
+| Move | | arrows / WASD | D-pad |
+| Zoom | pinch, wheel, 🔍 | `C` | Y |
+| Undo | ↶ | `U`, Ctrl+Z | L |
+| Try it out (Hard) | ✎ | | R |
+| Menu | ☰ | Esc | Start |
 
 ## Building
 
 ```sh
 npm ci
-npm run build                 # web app in dist/web (static files, any web host / GitHub Pages)
+npm run build                 # web app in dist/web: static files for any web host
 cp -r dist/web electron/web
-cd electron && npm install && npx electron-builder   # desktop builds in dist/desktop
+cd electron && npm install && npx electron-builder --publish never   # desktop builds in dist/desktop
 ```
 
-GitHub Actions (`.github/workflows/release.yml`) builds the web app, Windows (x64/ARM64), Linux (x64/ARM64 AppImage + tarball; the x64 AppImage runs on Steam Deck) and macOS (universal) on every `v*` tag, and publishes the web app to GitHub Pages.
+The GitHub Actions in `.github/workflows` do the rest: `ci.yml` (typecheck and build), `pages.yml`
+(web version on GitHub Pages) and `release.yml` (web, Windows, macOS, Linux x64/arm64 and the Android
+APK via Capacitor, released when `version` in `package.json` changes).
 
-On Steam Deck: add the AppImage to Steam as a non-Steam game; it starts fullscreen in Gaming Mode.
+<details>
+<summary><b>How it works</b></summary>
 
-## How it works
-
-- `src/rom/nds.ts`: DS ROM file system, ARM9/overlays, BLZ decompression.
-- `src/rom/picrossds.ts`: finds the puzzle-set tables, records, display order, localized names (overlay tables in the European ROM, message lists in the US/Korean ROMs, record titles in the Japanese ROM) and solved-picture animation scripts.
-- `src/rom/dsgfx.ts`: renders DS OBJ cells (4bpp, 2D mapping) for the solved pictures.
-- `src/audio/`: SDAT reader and an SSEQ sequencer on Web Audio for the original music.
-- `src/game/`: rules and board view; `src/ui/` and `src/app.ts`: screens.
+- `src/rom/nds.ts`: DS ROM file system, ARM9 / overlays, BLZ decompression.
+- `src/rom/picrossds.ts`: puzzle-set tables, records, display order, localized names and solved-picture animation scripts.
+- `src/rom/dsgfx.ts`: DS OBJ cells (4bpp, 2D mapping) for the solved pictures.
+- `src/rom/ctr.ts`: decrypted 3DS containers (NCSD / NCCH / CIA), RomFS, icon, LZ11.
+- `src/audio/`: SDAT reader and SSEQ sequencer (DS music), BCSTM DSP-ADPCM decoder (3DS music).
+- `src/packs/`: pack format, importers per platform, pack colours.
+- `src/game/`: rules, exact line analysis (clue greying and logic hints), the board renderer.
+- `src/app.ts`, `src/ui/`: screens.
+</details>
 
 ## License
 
-MIT for MomoGram's own code. Picross and Picross DS are trademarks of Nintendo and Jupiter; MomoGram is an unofficial fan project, not affiliated with or endorsed by them.
+MIT for MomoGram's own code and its starter puzzles. Picross and Picross DS are trademarks of Nintendo and
+Jupiter. MomoGram is an unofficial fan project, not affiliated with or endorsed by them.

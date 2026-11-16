@@ -11,6 +11,7 @@ import { openPackManager } from './ui/packs';
 import { Audio as Snd } from './audio';
 import { unzipFirst } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
+import { STARTER } from './packs/starter';
 
 const TIME_LIMIT = 60 * 60_000;
 
@@ -78,6 +79,13 @@ export async function boot() {
     const rom = await storage.loadRom('picross-ds');
     if (rom) loadDs(rom);
   } catch (e) { console.warn(e); }
+  // desktop app started with --rom <file> (shortcuts, RecompLauncher)
+  if (new URLSearchParams(location.search).has('rom')) {
+    try {
+      const r = await fetch('/__rom');
+      if (r.ok) await useRomBytes(new Uint8Array(await r.arrayBuffer()), r.headers.get('content-type')?.includes('zip') ? 'rom.zip' : 'rom.nds');
+    } catch (e) { console.warn('rom from command line', e); }
+  }
   ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
   Snd.init(() => ctx.ds?.sdat ?? null);
   home();
@@ -92,8 +100,12 @@ function loadDs(data: Uint8Array) {
 async function pickRom() {
   const f = await pickFile('.nds,.zip,.srl');
   if (!f) return;
-  let data = new Uint8Array(await f.arrayBuffer());
-  if (/\.zip$/i.test(f.name)) {
+  await useRomBytes(new Uint8Array(await f.arrayBuffer()), f.name);
+  home();
+}
+
+async function useRomBytes(data: Uint8Array, name: string) {
+  if (/\.zip$/i.test(name) || (data[0] === 0x50 && data[1] === 0x4b)) {
     const inner = await unzipFirst(data, /\.nds$/i);
     if (!inner) { alert('No .nds file in this zip.'); return; }
     data = inner as Uint8Array<ArrayBuffer>;
@@ -101,7 +113,6 @@ async function pickRom() {
   try {
     loadDs(data);
     await storage.saveRom('picross-ds', data);
-    home();
   } catch (e: any) {
     alert(e.message || String(e));
   }
@@ -133,7 +144,9 @@ export function home() {
   if (!ctx.ds) {
     items.push(h('section', { class: 'card setup' },
       h('p', {}, t('romHelp')),
-      h('button', { class: 'btn primary big', onClick: pickRom }, t('addRom'))));
+      h('button', { class: 'btn primary big', onClick: () => packsScreen(true) }, '✚ ' + t('addGames'))));
+    items.push(h('button', { class: 'btn big mode starter', onClick: () => puzzleList(STARTER, STARTER.levels[0], home) },
+      h('b', {}, t('starter')), h('small', {}, progressText(STARTER, STARTER.levels))));
   } else {
     const q = getQuickSave();
     if (q) items.push(h('button', { class: 'btn primary big', onClick: () => resumeQuick() }, '▶ ' + t('continue')));
@@ -145,6 +158,8 @@ export function home() {
       h('button', { class: 'btn big mode free', onClick: () => levelList(ds, 'free') }, h('b', {}, t('free')), h('small', {}, progressText(ds, ds.levels.filter(l => l.group === 'free')))),
       h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily')), h('small', {}, '7×7')),
     ));
+    items.push(h('button', { class: 'btn mode starter slim', onClick: () => puzzleList(STARTER, STARTER.levels[0], home) },
+      h('b', {}, t('starter')), h('small', {}, progressText(STARTER, STARTER.levels))));
   }
   items.push(h('div', { class: 'menu small' },
     h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs') + (ctx.packs.length ? ` (${ctx.packs.length})` : '')),
@@ -260,7 +275,7 @@ function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
       rulesName(r) + (r === lv.rules ? ' ·' : ''))));
 }
 
-function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), ...ctx.packs]; }
+function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), STARTER, ...ctx.packs]; }
 
 // ---------------------------------------------------------------- pack look & sound
 
@@ -336,7 +351,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const fillBtn = penBtn, crossBtn = xBtn;
 
   top.append(menuBtn);
-  screen(h('div', { class: 'play side-' + settings.toolsSide }, top, boardWrap, tools));
+  screen(h('div', { class: 'play side-bottom' + (settings.toolsRight ? ' tools-right' : '') }, top, boardWrap, tools));
   const colors = packColors(pack);
 
   const view = new BoardView(canvas, board, {
@@ -555,7 +570,7 @@ export function choose(title: string, options: Array<[string, () => void]>): Pro
 
 // ---------------------------------------------------------------- packs
 
-function packsScreen() {
+function packsScreen(autoCreate = false) {
   applyThemeCss(root(), null);
   Snd.play('title_SEQ');
   openPackManager({
@@ -565,6 +580,14 @@ function packsScreen() {
     header: (title: string) => header(title, home),
     screen,
     openPack: (p: Pack) => packLevels(p),
+    autoCreate,
+    addMainRom: async (data: Uint8Array) => {
+      // only the full game (not the demos) becomes the main game
+      try { readPicrossDs(data); } catch { return false; }
+      loadDs(data);
+      await storage.saveRom('picross-ds', data);
+      return true;
+    },
   });
 }
 
@@ -628,9 +651,9 @@ function optionsScreen() {
     row(t('freeMusic'), sel('freeStyle', styles)),
     row(t('packMusic'), chk('packMusic')),
     row(t('packColors'), chk('packColors')),
+    row(t('toolsRight'), chk('toolsRight')),
     row(t('hints'), sel('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
     row(t('unlockAll'), chk('unlockAll')),
-    row(t('toolsSide'), sel('toolsSide', [['bottom', t('sideBottom')], ['right', t('sideRight')], ['left', t('sideLeft')]])),
     h('p', { class: 'fine' }, t('controls')),
     ctx.ds ? h('div', { class: 'row' },
       h('button', { class: 'btn', onClick: () => { if (confirm(t('confirmReset'))) resetProgress('picross-ds'); } }, t('resetProgress')),

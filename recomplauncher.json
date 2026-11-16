@@ -1,0 +1,14 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "repo": "Emil007/MomoGram",
+  "name": "MomoGram (Picross DS)",
+  "start": {
+    "program": [
+      "MomoGram.exe",
+      "MomoGram.AppImage",
+      "momogram"
+    ],
+    "args": []
+  }
+}

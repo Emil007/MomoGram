@@ -5,8 +5,9 @@ type Dict = Record<string, string>;
 
 const en: Dict = {
   tagline: 'A nonogram player for your Picross DS',
-  addRom: 'Add your Picross DS ROM',
-  romHelp: 'MomoGram contains no game data. Choose your own Picross DS ROM (.nds, or a .zip with the .nds inside). It is stored on this device only.',
+  addRom: 'Add your Picross DS ROM', starter: 'Starter puzzles',
+  romHelp: 'MomoGram contains no game data. Try the starter puzzles, or add Picross games you own: Picross DS (all its modes and music), the 3DS games, Game Boy, Super Famicom … Your files stay on this device.',
+  addGames: 'Add your Picross games', mainGame: 'main game (modes on the home screen)',
   romLoaded: 'Picross DS ({region}) loaded',
   puzzleNo: 'Puzzle', play: 'Play', continue: 'Continue', packs: 'Puzzle packs', options: 'Options', back: 'Back',
   easy: 'Easy', normal: 'Normal', free: 'Free', daily: 'Daily Picross', extra: 'Extra',
@@ -28,7 +29,7 @@ const en: Dict = {
   done: 'Done', analyzing: 'Reading…', solvedCount: '{a} / {b} cleared',
   controls: 'Controls: tap or drag to fill, right-click / Mark to cross out, two fingers or mouse wheel to zoom and pan. Keyboard / gamepad: arrows, A/Z = fill, B/X = mark, Y/C = zoom, Start = menu.',
   bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum',
-  toolsSide: 'Tool bar', sideBottom: 'Bottom', sideRight: 'Right (left hand)', sideLeft: 'Left',
+  toolsRight: 'Landscape: tools on the right',
   hard: 'Hard', logic: 'Hints', logicHints: 'Logic hints (blue numbers)', difficulty: 'Difficulty',
   rulesEasy: 'Easy: mistakes are caught without costing time. Bronze medal.',
   rulesHard: 'Hard: no hint roulette and no mistake checks. Gold medal, platinum without logic hints.',
@@ -38,8 +39,9 @@ const en: Dict = {
 
 const de: Dict = {
   tagline: 'Ein Nonogramm-Spieler für dein Picross DS',
-  addRom: 'Picross-DS-ROM hinzufügen',
-  romHelp: 'MomoGram enthält keine Spieldaten. Wähle dein eigenes Picross-DS-ROM (.nds oder eine .zip mit der .nds darin). Es wird nur auf diesem Gerät gespeichert.',
+  addRom: 'Picross-DS-ROM hinzufügen', starter: 'Einstiegsrätsel',
+  romHelp: 'MomoGram enthält keine Spieldaten. Probier die Einstiegsrätsel, oder füge Picross-Spiele hinzu, die du besitzt: Picross DS (alle Modi und die Musik), die 3DS-Spiele, Game Boy, Super Famicom … Deine Dateien bleiben auf diesem Gerät.',
+  addGames: 'Deine Picross-Spiele hinzufügen', mainGame: 'Hauptspiel (Modi auf dem Startbildschirm)',
   romLoaded: 'Picross DS ({region}) geladen',
   puzzleNo: 'Rätsel', play: 'Spielen', continue: 'Fortsetzen', packs: 'Rätselpakete', options: 'Optionen', back: 'Zurück',
   easy: 'Leicht', normal: 'Normal', free: 'Frei', daily: 'Picross des Tages', extra: 'Extra',
@@ -61,7 +63,7 @@ const de: Dict = {
   done: 'Fertig', analyzing: 'Lese…', solvedCount: '{a} / {b} gelöst',
   controls: 'Steuerung: tippen oder ziehen zum Füllen, Rechtsklick / Kreuz zum Markieren, zwei Finger oder Mausrad zum Zoomen und Verschieben. Tastatur / Gamepad: Pfeile, A/Z = füllen, B/X = Kreuz, Y/C = Zoom, Start = Menü.',
   bronze: 'Bronze', silver: 'Silber', gold: 'Gold', platinum: 'Platin',
-  toolsSide: 'Werkzeugleiste', sideBottom: 'Unten', sideRight: 'Rechts (linke Hand)', sideLeft: 'Links',
+  toolsRight: 'Querformat: Werkzeuge rechts',
   hard: 'Schwer', logic: 'Tipps', logicHints: 'Logik-Tipps (blaue Zahlen)', difficulty: 'Schwierigkeit',
   rulesEasy: 'Leicht: Fehler werden erkannt, kosten aber keine Zeit. Bronzemedaille.',
   rulesHard: 'Schwer: kein Tipp-Roulette und keine Fehlerprüfung. Goldmedaille, Platin ohne Logik-Tipps.',

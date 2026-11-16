@@ -209,3 +209,9 @@ body { background: #fff; }
 .medal.big { width: auto; height: auto; border-radius: 999px; padding: .2em .9em .25em; font-weight: 900; font-size: 1.05rem; color: #1a1a1a; text-shadow: 0 1px 0 rgba(255,255,255,.6); box-shadow: 0 3px 0 var(--line); }
 .medal-row.new .medal { animation: medal .7s ease-out; }
 @keyframes medal { 0% { transform: scale(0) rotate(-30deg); } 70% { transform: scale(1.25) rotate(6deg); } 100% { transform: scale(1); } }
+.mode.starter { background: linear-gradient(#ffd56a, #f2b51c 50%, #c98a00); }
+.mode.starter.slim { min-height: 3.6rem; }
+@media (orientation: landscape) and (min-width: 700px) {
+  .play.side-bottom.tools-right { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "hud hud" "board tools"; }
+  .play.side-bottom.tools-right .tools { border-right: 0; border-left: 3px solid var(--line); }
+}

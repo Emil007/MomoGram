@@ -127,8 +127,10 @@ export class BoardView {
     const { r, c } = this.maxClues();
     const b = this.board;
     // clue numbers are ~0.62 (wide) / 0.66 (tall) of a cell, but never larger than 26 px each
-    let fit = Math.min(this.cssW / (b.w + r * 0.62 + 0.3), this.cssH / (b.h + c * 0.66 + 0.3));
-    if (fit * 0.62 > 26) fit = Math.min((this.cssW - r * 26 - 8) / b.w, (this.cssH - c * 28 - 8) / b.h);
+    // leave room for the outer frame
+    const W = this.cssW - 10, H = this.cssH - 10;
+    let fit = Math.min(W / (b.w + r * 0.62 + 0.3), H / (b.h + c * 0.66 + 0.3));
+    if (fit * 0.62 > 26) fit = Math.min((W - r * 26 - 10) / b.w, (H - c * 28 - 10) / b.h);
     this.fitCell = Math.max(6, Math.floor(fit));
     if (reset) this.cell = this.fitCell;
     this.updateClueArea();

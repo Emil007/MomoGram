@@ -15,6 +15,10 @@ interface PM {
   header(title: string): HTMLElement;
   screen(...kids: Array<Node | null>): HTMLElement;
   openPack(p: Pack): void;
+  /** a full Picross DS ROM: becomes the main game (modes on the home screen) instead of a pack */
+  addMainRom?(data: Uint8Array, name: string): Promise<boolean>;
+  /** start the "create packs" file picker right away */
+  autoCreate?: boolean;
 }
 
 export function openPackManager(pm: PM) {
@@ -102,6 +106,10 @@ export function openPackManager(pm: PM) {
       entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png)$/i.test(e.name));
       const msgs: string[] = [];
       for (const e of entries) {
+        if (pm.addMainRom && /\.(nds|srl)$/i.test(e.name) && await pm.addMainRom(e.data, e.name).catch(() => false)) {
+          msgs.push('✓ Picross DS → ' + t('mainGame'));
+          continue;
+        }
         const r = await importGameFile(e.name, e.data);
         if (r.ok) {
           for (const p of r.packs) { p.source.file = e.name; made.push(p); }
@@ -135,6 +143,7 @@ export function openPackManager(pm: PM) {
   }
 
   render();
+  if (pm.autoCreate) setTimeout(createPacks, 0);
   pm.screen(pm.header(t('packs')), h('div', { class: 'packs' },
     h('div', { class: 'row wrap' },
       h('button', { class: 'btn primary', onClick: createPacks }, '✚ ' + t('createPacks')),

@@ -1,7 +1,7 @@
 {
   "name": "momogram",
   "productName": "MomoGram",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Nonogram player for your own Picross DS ROM",
   "main": "main.cjs",
   "license": "MIT",
@@ -33,7 +33,8 @@
           ]
         }
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "artifactName": "MomoGram-${version}-Windows-${arch}.${ext}"
     },
     "linux": {
       "target": [
@@ -52,28 +53,45 @@
           ]
         }
       ],
-      "category": "Game"
+      "category": "Game",
+      "artifactName": "MomoGram-${version}-Linux-${arch}.${ext}",
+      "executableName": "momogram"
     },
     "mac": {
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "universal"
+            "x64",
+            "arm64"
           ]
         }
       ],
       "category": "public.app-category.puzzle-games",
-      "identity": null
+      "identity": null,
+      "artifactName": "MomoGram-${version}-macOS-${arch}.${ext}"
     },
     "artifactName": "MomoGram-${version}-${os}-${arch}.${ext}",
-    "publish": null
+    "publish": null,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "MomoGram-${version}-Windows-${arch}-Setup.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": "nds",
+        "name": "Nintendo DS ROM",
+        "role": "Viewer"
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^33.2.0",
