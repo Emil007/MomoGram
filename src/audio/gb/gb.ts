@@ -24,6 +24,10 @@ export class Gb {
   ie = 0; if_ = 0xe1;
   /** held buttons: A B Select Start Right Left Up Down (bit 0..7) */
   buttons = 0;
+  /** Super Game Boy multiplayer joypad IDs (set by analysis tools that answer MLT_REQ) */
+  sgbPlayers = 1; sgbPlayer = 0;
+  /** CGB background palette RAM */
+  bgPal = new Uint8Array(64);
   readonly cgb: boolean;
   doubleSpeed = false;
   // timing
@@ -79,6 +83,7 @@ export class Gb {
     switch (r) {
       case 0x00: { // joypad (analysis tools can hold buttons; playback never does)
         const sel = this.io[0] & 0x30;
+        if (sel === 0x30 && this.sgbPlayers > 1) return 0xf0 | (15 - this.sgbPlayer);
         let k = 0x0f;
         if (!(sel & 0x20)) k &= ~(this.buttons & 15);
         if (!(sel & 0x10)) k &= ~(this.buttons >> 4);
@@ -133,7 +138,9 @@ export class Gb {
   writeIo(r: number, v: number) {
     if (r >= 0x10 && r < 0x40) { this.apu.write(r, v, this.apuNow()); return; }
     switch (r) {
+      case 0x00: if (this.sgbPlayers > 1 && !(this.io[0] & 0x20) && (v & 0x20)) this.sgbPlayer = (this.sgbPlayer + 1) % this.sgbPlayers; break;
       case 0x04: this.divCounter = 0; return;
+      case 0x69: if (this.cgb) { const i = this.io[0x68] & 0x3f; this.bgPal[i] = v; if (this.io[0x68] & 0x80) this.io[0x68] = 0x80 | ((i + 1) & 0x3f); } return;
       case 0x0f: this.if_ = v & 0x1f; return;
       case 0x40: if (!(v & 0x80)) { this.ly = 0; this.lineCycles = 0; } break;
       case 0x44: return;

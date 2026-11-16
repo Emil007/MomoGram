@@ -81,8 +81,8 @@ export function unpackSoundRom(d: Uint8Array): Uint8Array {
 // (the game's own music table) and after a solved puzzle, then checked numerically (looping vs. one-shot).
 type Roles = Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', number>>;
 const ROLES: Array<[RegExp, Roles]> = [
-  [/^MARIO'?S PICROSS/, { title: 0x0a, menu: 0x0d, play: 0x05, play2: 0x01, clear: 0x08 }],
-  [/^PICROSS 2/, { title: 0x14, menu: 0x05, play: 0x18, play2: 0x09, clear: 0x15 }],
+  [/^MARIO'?S PICROSS/, { title: 0x0a, menu: 0x0d, play: 0x02, play2: 0x05, clear: 0x08 }],
+  [/^PICROSS 2/, { title: 0x14, menu: 0x05, play: 0x0c, play2: 0x0d, clear: 0x15 }],
   [/^POKEPICROSS/, { title: 0x01, menu: 0x03, play: 0x04, clear: 0x0b }],
 ];
 

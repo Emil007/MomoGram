@@ -56,6 +56,16 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
       board: { bg: '#e3e9c8', grid: c1, grid5: c2, cell: c0, cellDither: '#b9c595', fill: c3, fillDither: '#33372a', cross: c2, clueBg: '#b5c08e', clueBgAlt: '#b5c08e', clue: c3, clueDone: c1, outline: c3 },
     };
   }
+  if (p.style === 'gbc' && p.cell && p.fill && p.grid) {
+    // four colours of a Super Game Boy / Game Boy Color palette: lightest, two mid tones (grid and the most
+    // saturated one, the accent), darkest; used like the four shades of the dmg look
+    const [c1, c2] = hexToHsl(p.grid)[2] >= hexToHsl(p.accent)[2] ? [p.grid, p.accent] : [p.accent, p.grid];
+    const c0 = p.cell, c3 = p.fill;
+    return {
+      accent: shade(p.accent, -0.05), accentDark: shade(p.accent, -0.18), bg: shade(c0, -0.06), panel: shade(c0, 0.03), top: shade(c1, 0.12), topLine: c2,
+      board: { bg: shade(c0, -0.03), grid: c1, grid5: c2, cell: c0, cellDither: shade(c0, -0.06), fill: c3, fillDither: shade(c3, 0.06), cross: c2, clueBg: shade(c1, 0.12), clueBgAlt: shade(c1, 0.12), clue: c3, clueDone: c1, outline: c3 },
+    };
+  }
   const [h, s] = hexToHsl(p.accent);
   const sat = Math.min(0.65, Math.max(0.35, s));
   return {

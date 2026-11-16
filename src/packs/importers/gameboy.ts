@@ -5,6 +5,13 @@ import { registerImporter } from './index';
 import { Pack, PackLevel, PackPuzzle, Text, rowsFromBits } from '../format';
 import { gbPackMusic } from '../../audio/gb/games';
 
+/**
+ * Super Game Boy colours of the puzzle screen (lightest, grid, accent = most saturated, darkest), recorded from
+ * the SGB palette commands the game sends while a puzzle is shown (colour values only)
+ */
+const SGB_MARIO = { style: 'gbc' as const, cell: '#ffffff', grid: '#9c4a31', accent: '#d6bd6b', fill: '#313131' };
+const SGB_PICROSS2 = { style: 'gbc' as const, cell: '#ffffc5', grid: '#c5b563', accent: '#736b21', fill: '#292919' };
+
 /** the game's own music, played by MomoGram's Game Boy sound emulation (src/audio/gb) */
 function withMusic(p: Pack, rom: Uint8Array): Pack {
   let m = null;
@@ -57,7 +64,7 @@ function readMario(d: Uint8Array, region: string): Pack {
   });
   (levels as any[]).forEach(l => { const c = courses.find(c => c.key === l.group)!; l.groupTitle = c.title; });
   return {
-    format: 'momogram-pack', version: 1, id: 'gb-marios-picross', theme: { palette: { accent: '#4d533c', style: 'dmg' } },
+    format: 'momogram-pack', version: 1, id: 'gb-marios-picross', theme: { palette: SGB_MARIO },
     title: { en: "Mario's Picross", ja: 'マリオのピクロス' },
     source: { game: "Mario's Picross", platform: 'Game Boy', region, developer: 'Jupiter', year: 1995 },
     levels,
@@ -97,7 +104,7 @@ function readPicross2(d: Uint8Array): Pack {
   });
   (levels as any[]).forEach(l => { l.groupTitle = titles[l.group === 'wario' ? 1 : 0]; });
   return {
-    format: 'momogram-pack', version: 1, id: 'gb-picross-2', theme: { palette: { accent: '#4d533c', style: 'dmg' } }, title: { en: 'Picross 2', ja: 'ピクロス2' },
+    format: 'momogram-pack', version: 1, id: 'gb-picross-2', theme: { palette: SGB_PICROSS2 }, title: { en: 'Picross 2', ja: 'ピクロス2' },
     source: { game: 'Picross 2', platform: 'Game Boy', region: 'JPN', developer: 'Jupiter', year: 1996 }, levels,
   };
 }
