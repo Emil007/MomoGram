@@ -352,6 +352,30 @@ export function readPicrossDs(data: Uint8Array): PicrossDsData {
   };
 }
 
+/** Demo builds (DS Download Station / Nintendo Channel) lack the full tables: collect every puzzle set. */
+export function readPicrossDsDemo(data: Uint8Array): Pack {
+  const rom = new NdsRom(data);
+  const levels: PackLevel[] = [];
+  const seen = new Set<string>();
+  const blobs = [rom.arm9().data, ...rom.overlays().map(o => o.data)];
+  for (const b of blobs) {
+    const recs = scanRecords(b).filter(r => r.title !== 'タイトル');
+    if (!recs.length) continue;
+    const puzzles: PackPuzzle[] = [];
+    for (const r of recs) {
+      const rows = rowsFromBits(r.w, r.h, (x, y) => ((r.rows[y] >>> (24 - x)) & 1) === 1);
+      const key = rows.join();
+      if (seen.has(key) || !rows.some(x => x.includes('#'))) continue;
+      seen.add(key);
+      puzzles.push({ id: `demo-${puzzles.length + levels.length * 100 + 1}`, width: r.w, height: r.h, rows, name: { ja: r.title } });
+    }
+    if (puzzles.length) levels.push({ id: `demo${levels.length + 1}`, title: { en: `Demo ${levels.length + 1}`, de: `Demo ${levels.length + 1}` }, rules: 'normal', puzzles });
+  }
+  if (!levels.length) throw new Error('No puzzles found.');
+  return { format: 'momogram-pack', version: 1, id: 'picross-ds-demo', title: { en: 'Picross DS (Demo)', ja: 'ピクロスDS 体験版' },
+    source: { game: 'Picross DS (demo)', platform: 'Nintendo DS', region: rom.gameCode.slice(-1), developer: 'Jupiter', year: 2007 }, levels };
+}
+
 export function pckFile(d: PicrossDsData, i: number): Uint8Array | null {
   if (!d.pck || i + 1 >= d.pckOffsets.length) return null;
   return d.pck.subarray(d.pckOffsets[i], d.pckOffsets[i + 1]);

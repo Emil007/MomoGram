@@ -26,10 +26,15 @@ The name combines *nonogram* with Momo, from Michael Ende's novel, because Picro
 
 | Game | Platform | Status |
 |---|---|---|
-| Picross DS (also the DS Download Station / Nintendo Channel demos) | DS | ✓ |
-| Mario's Picross, Picross 2, Pokémon Picross (prototype) | Game Boy / GBC | in progress |
-| Mario no Super Picross, Picross NP Vol. 1–8, Tamori no Picross | Super Famicom / Satellaview | in progress |
-| Picross e–e9, Pokémon Picross, Sanrio Characters Picross, My Nintendo Picross (decrypted files only) | 3DS | ✓ (regional versions merge into one pack) |
+| Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ |
+| Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted files) | ✓ |
+| Mario's Picross | Game Boy | ✓ (Easy, Kinoko, Star, Time Trial) |
+| Picross 2 | Game Boy | ✓ as 15×15 sections (the 30×30 pictures are not reassembled yet) |
+| Pokémon Picross (prototype) | Game Boy Color | not yet |
+| Mario no Super Picross, Picross NP Vol. 1–8, Tamori no Picross | Super Famicom / Satellaview | not yet |
+| Picross S series and other Switch games | Switch | not yet |
+
+Regional versions of the same game are merged into one pack (all languages' names). `.zip`, `.7z` and `.rar` archives can be chosen directly.
 
 Only puzzles from Jupiter / Nintendo releases are supported.
 
