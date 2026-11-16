@@ -69,7 +69,7 @@ language's names. Do it once, keep the files, import them anywhere.
 | Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted) | ✓ | ✓ the game's music, colours from its icon |
 | Mario's Picross | Game Boy | ✓ Easy, Kinoko, Star, Time Trial | Game Boy green; music in progress |
 | Picross 2 | Game Boy | ✓ as 15×15 sections | Game Boy green; music in progress |
-| Pokémon Picross (prototype) | Game Boy Color | in progress | in progress |
+| Pokémon Picross (prototype) | Game Boy Color | ✓ all 217 stages (main game incl. Mew, Safari Zone); 20×20 and 30×30 pictures as their four sections | in progress |
 | Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | music in progress |
 | Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | music in progress |
 | Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | in progress | in progress |
