@@ -67,15 +67,52 @@ language's names. Do it once, keep the files, import them anywhere.
 |---|---|---|---|
 | Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ | ✓ the game's own |
 | Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted) | ✓ | ✓ the game's music, colours from its icon |
-| Mario's Picross | Game Boy | ✓ Easy, Kinoko, Star, Time Trial | Game Boy green; music in progress |
-| Picross 2 | Game Boy | ✓ as 15×15 sections | Game Boy green; music in progress |
-| Pokémon Picross (prototype) | Game Boy Color | ✓ all 217 stages (main game incl. Mew, Safari Zone); 20×20 and 30×30 pictures as their four sections | in progress |
-| Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | music in progress |
-| Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | music in progress |
-| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | in progress | in progress |
+| Mario's Picross | Game Boy | ✓ Easy, Kinoko, Star, Time Trial | ✓ the game's music (emulated), Super Game Boy colours |
+| Picross 2 | Game Boy | ✓ as 15×15 sections | ✓ the game's music (emulated), Super Game Boy colours |
+| Pokémon Picross (prototype) | Game Boy Color | ✓ all 217 stages (main game incl. Mew, Safari Zone); 20×20 and 30×30 pictures as their four sections | ✓ the game's music (emulated); colours in progress |
+| Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | ✓ the game's music (emulated) |
+| Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | ✓ the game's music (emulated) |
+| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | in progress | music ready (emulated), used once the puzzle importer lands |
 | Picross S series | Switch | later | later |
 
 Only puzzles from Jupiter / Nintendo releases are supported.
+
+### Sound emulation (Game Boy, Super Famicom, Satellaview)
+
+The Game Boy and Super Famicom games have no recorded music, only a sound program, so MomoGram runs that
+program on emulated hardware, in an AudioWorklet (`worklet.js`, off the main thread; a ScriptProcessor fallback
+for old browsers). Everything is MomoGram's own code, written from the public hardware documentation (Pan Docs /
+gbdev.io for the Game Boy, fullsnes and anomie's documents for the SPC700, S-DSP and 65C816). No boot ROMs and
+no game data are included.
+
+- **Game Boy / Game Boy Color** (`src/audio/gb/`): Sharp LR35902 CPU with MBC1/3/5 banking, timer, interrupts
+  and LCD timing; the APU with both pulse channels (sweep), wave, noise, frame sequencer and the output
+  high-pass filter. Jupiter's games use Toshiyuki Ueno's "DSEQ" sound driver; MomoGram finds its two wrapper
+  routines by byte pattern and calls them like a GBS player (start song, then the update routine at 59.7 Hz).
+  A pack keeps only bank 0 and the driver banks of your ROM (32–48 KB).
+- **Super Famicom / Satellaview** (`src/audio/snes/`): SPC700 with timers and I/O, the S-DSP (BRR decoding,
+  4-point interpolation, ADSR / GAIN, noise, pitch modulation, 8-tap FIR echo, 32 kHz) and, for pack creation
+  only, a 65C816 with the parts of the console a game touches while starting. The boot-ROM upload protocol is
+  emulated instead of included. When you create a pack, your ROM boots until the game has loaded its sound
+  driver, then the game's own play-song routine is called for each song MomoGram uses, and a compressed snapshot
+  of the sound system (about 150–230 KB) is stored with the pack. Playback runs the SPC700 / S-DSP from there.
+
+| Game | Songs found | Used for |
+|---|---|---|
+| Mario's Picross | 19 (1–$13) | title, menu, two puzzle tracks, clear jingle |
+| Picross 2 | 28 (1–$1C) | title, menu, two puzzle tracks, clear jingle |
+| Pokémon Picross (prototype) | 36 ($01–$19, $81–$8B) | title, menu, puzzle, clear jingle |
+| Mario no Super Picross | 24 ($00–$19, bit 6 = looping) | title, menu, puzzle, clear jingle |
+| Picross NP Vol. 1–8 | same engine | title, menu, two puzzle tracks, clear jingle |
+| Tamori no Picross | same engine | title, menu, two puzzle tracks, clear jingle |
+
+Which song plays where was found by tracing the songs each game requests on its own screens (and its puzzle
+music table); clear jingles were picked by their length where the game could not be traced to that screen.
+Audio was checked numerically only (level, silence, loop and end detection). Packs made before version 0.5.0
+have no Game Boy / Super Famicom music: create them again. Known gaps: the combined Satellaview dump
+"Tamori no Picross (8-13) + Bakushow …" has its sound library in an unexpected place and gets no music; the
+S-DSP is sample-accurate rather than cycle-accurate and its interpolation kernel is computed, not the console's
+table, so it sounds very close but not bit-identical.
 
 **Exports:** a pack is one small `.momopack.json`. Packs with music are exported as a `.zip` with the
 music in a folder next to the pack. That music comes from your game: keep those packs for your own
@@ -154,7 +191,7 @@ APK via Capacitor, released when `version` in `package.json` changes).
 - `src/rom/picrossds.ts`: puzzle-set tables, records, display order, localized names and solved-picture animation scripts.
 - `src/rom/dsgfx.ts`: DS OBJ cells (4bpp, 2D mapping) for the solved pictures.
 - `src/rom/ctr.ts`: decrypted 3DS containers (NCSD / NCCH / CIA), RomFS, icon, LZ11.
-- `src/audio/`: SDAT reader and SSEQ sequencer (DS music), BCSTM DSP-ADPCM decoder (3DS music).
+- `src/audio/`: SDAT reader and SSEQ sequencer (DS music), BCSTM DSP-ADPCM decoder (3DS music); `gb/` and `snes/`: sound hardware emulation (see *Sound emulation*), `worklet.ts` / `chipplayer.ts`: playback on the audio thread.
 - `src/packs/`: pack format, importers per platform, pack colours.
 - `src/game/`: rules, exact line analysis (clue greying and logic hints), the board renderer.
 - `src/app.ts`, `src/ui/`: screens.
