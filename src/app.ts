@@ -147,7 +147,11 @@ export function home() {
   items.push(h('div', { class: 'menu small' },
     h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs') + (ctx.packs.length ? ` (${ctx.packs.length})` : '')),
     h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))));
-  screen(h('div', { class: 'home' }, logo(), ...items, h('footer', { class: 'fine' }, ctx.ds ? t('romLoaded', { region: ctx.ds.region }) : '')));
+  let total = 0, cleared = 0;
+  if (ctx.ds) for (const l of ctx.ds.pack.levels) for (const p of l.puzzles) { total++; if (getProgress(ctx.ds.pack.id, p.id).cleared) cleared++; }
+  const topScreen = h('section', { class: 'home-top' }, logo(),
+    ctx.ds ? h('div', { class: 'home-progress' }, h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (cleared / total) * 100 : 0}%` })), h('small', {}, t('solvedCount', { a: cleared, b: total }))) : null);
+  screen(h('div', { class: 'home' }, topScreen, h('section', { class: 'home-bottom' }, ...items), h('footer', { class: 'fine' }, ctx.ds ? t('romLoaded', { region: ctx.ds.region }) : '')));
 }
 
 function progressText(pack: Pack, levels: PackLevel[]) {
@@ -182,9 +186,11 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     const pr = getProgress(pack.id, p.id);
     const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => play(pack, lv, i, back) });
     if (pr.cleared) tile.append(thumbnail(p, pck, 64));
-    else tile.append(h('span', { class: 'qmark' }, String(i + 1)));
+    else tile.append(h('span', { class: 'qmark' }, '?'));
     tile.append(h('small', {}, pr.cleared ? (pickText(p.name, packLang()) || `${p.width}×${p.height}`) : `${p.width}×${p.height}`));
     if (pr.best !== undefined) tile.append(h('em', {}, formatTime(pr.best)));
+    tile.append(h('span', { class: 'num' }, String(i + 1)));
+    if (pr.underLimit) tile.append(h('span', { class: 'star', title: '< 60:00' }, '★'));
     grid.append(tile);
   });
   // level tabs for quick switching within the same mode, like the level selector on the DS
@@ -418,7 +424,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
   const next = index + 1 < lv.puzzles.length ? h('button', { class: 'btn primary', onClick: () => { stop(); play(pack, lv, index + 1, back); } }, t('next') + ' ›') : null;
   screen(h('div', { class: 'solved' },
     h('div', { class: 'stamp' }, t('cleared')),
-    under ? cv : h('p', { class: 'over' }, t('overLimit')),
+    under ? h('div', { class: 'pic-frame' }, cv) : h('p', { class: 'over' }, t('overLimit')),
     h('h2', {}, pickText(pz.name, packLang()) || `${pz.width}×${pz.height}`),
     h('div', { class: 'result' },
       h('div', {}, t('time'), h('b', {}, formatTime(board.totalMs))),
