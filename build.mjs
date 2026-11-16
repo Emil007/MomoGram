@@ -1,6 +1,7 @@
 // Builds the web app into dist/web. `node build.mjs --watch` for development.
 import * as esbuild from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { createHash } from 'crypto';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 const out = 'dist/web';
@@ -15,8 +16,14 @@ const opts = {
 };
 if (process.argv.includes('--watch')) (await esbuild.context(opts)).watch();
 else await esbuild.build(opts);
-// service worker cache list (offline play / installable web app)
-writeFileSync(`${out}/sw.js`, `const C='momogram-${pkg.version}';const F=['./','index.html','app.js','app.css','worklet.js','icon.svg','manifest.webmanifest'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(F))));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x))))));
-self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`);
+// service worker (offline play / installable web app). The cache name carries a hash of the build, so every
+// deploy replaces the old cache; pages and app files are fetched network-first, so updates show up on the next
+// start and the cache is only the offline fallback.
+const files = ['./', 'index.html', 'app.js', 'app.css', 'worklet.js', 'icon.svg', 'manifest.webmanifest'];
+const hash = createHash('sha1');
+for (const f of ['app.js', 'app.css', 'worklet.js', 'index.html']) { try { hash.update(readFileSync(`${out}/${f}`)); } catch { /* not built */ } }
+writeFileSync(`${out}/sw.js`, `const C='momogram-${pkg.version}-${hash.digest('hex').slice(0, 10)}';const F=${JSON.stringify(files)};
+self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(F)))});
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',e=>{const r=e.request;if(r.method!=='GET'||new URL(r.url).origin!==location.origin)return;
+e.respondWith(fetch(r).then(res=>{if(res.ok){const c=res.clone();caches.open(C).then(x=>x.put(r,c))}return res}).catch(()=>caches.match(r).then(m=>m||caches.match('index.html'))))});`);
