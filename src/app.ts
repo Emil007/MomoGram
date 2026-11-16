@@ -4,7 +4,7 @@ import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter } from './game/picture';
 import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
 import { PicrossDsData, pckFile, readPicrossDs } from './rom/picrossds';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager } from './ui/packs';
@@ -205,7 +205,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
   showLevel();
   lv.puzzles.forEach((p, i) => {
     const pr = getProgress(pack.id, p.id);
-    const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => play(pack, lv, i, back),
+    const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => play(pack, lv, i, () => puzzleList(pack, lv, back)),
       onMouseenter: () => showPuzzle(p, i), onFocus: () => showPuzzle(p, i), onMouseleave: () => showLevel(),
       'aria-label': `${t('puzzleNo')} ${i + 1}` });
     if (pr.cleared) tile.append(thumbnail(p, pck, 64));
@@ -213,7 +213,8 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     tile.append(h('small', {}, pr.cleared ? (pickText(p.name, packLang()) || `${p.width}×${p.height}`) : `${p.width}×${p.height}`));
     if (pr.best !== undefined) tile.append(h('em', {}, formatTime(pr.best)));
     tile.append(h('span', { class: 'num' }, String(i + 1)));
-    if (pr.underLimit) tile.append(h('span', { class: 'star', title: '< 60:00' }, '★'));
+    if (pr.medal) tile.append(medalEl(pr.medal));
+    else if (pr.underLimit) tile.append(h('span', { class: 'star', title: '< 60:00' }, '★'));
     grid.append(tile);
   });
   // level tabs for quick switching within the same mode, like the level selector on the DS
@@ -237,6 +238,9 @@ function resumeQuick() {
   if (!pack || !lv || i < 0) { setQuickSave(null); return home(); }
   play(pack, lv, i, home, q.state);
 }
+
+/** puzzles within a level are lettered A, B, C … (numbers past Z) */
+function levelLetter(i: number): string { return i < 26 ? String.fromCharCode(65 + i) : String(i + 1); }
 
 /** the rules a level is played with: its own, or the difficulty the player picked */
 type PlayRules = 'easy' | 'normal' | 'free';
@@ -301,16 +305,16 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const isDs = pack.id === 'picross-ds';
   usePack(pack, 'play', rules === 'free' ? settings.freeStyle : settings.normalStyle);
 
-  // DS-style layout: a "top screen" with the live picture, zoom frame and timer; the "touch screen" with the grid.
+  // slim status bar instead of a second screen: picture, level, LCD timer; the board gets the rest
   const timeEl = h('span', { class: 'time' }, '00:00');
   const mistakesEl = h('span', { class: 'mist' });
   const preview = h('canvas', { class: 'preview' });
-  const levelLabel = h('div', { class: 'lvl' }, h('b', {}, pickAny(lv.title, packLang())), h('span', {}, `${t('puzzleNo')} ${index + 1}`));
-  const sizeLabel = h('div', { class: 'size' }, `${pz.width} × ${pz.height}`);
-  const top = h('section', { class: 'top' },
-    h('div', { class: 'screen-frame' }, preview),
-    h('div', { class: 'info' }, levelLabel, sizeLabel, h('div', { class: 'stats' }, h('span', { class: 'clock' }, '⏱'), timeEl, mistakesEl),
-      h('div', { class: 'rulechip ' + rules }, rulesName(rules))));
+  const top = h('section', { class: 'hud' },
+    h('div', { class: 'hud-pic' }, preview),
+    h('div', { class: 'hud-info' },
+      h('div', { class: 'hud-lvl' }, h('span', { class: 'badge ' + rules }, rulesName(rules).slice(0, 1)), h('b', {}, pickAny(lv.title, packLang()) + ' · ' + levelLetter(index))),
+      h('div', { class: 'hud-size' }, `${pz.width}×${pz.height}`, mistakesEl)),
+    h('div', { class: 'lcd' }, timeEl));
   const canvas = h('canvas', { class: 'board' });
   // tool pad in the clue corner, like the stylus icons on the DS
   const penBtn = h('button', { class: 'pad on', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool('fill') }, h('i', { class: 'ico pen' }));
@@ -324,14 +328,15 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const trialLabel = h('small', {}, t('tryIt'));
   const trialBtn = rules === 'free' ? h('button', { class: 'btn tool icon', title: t('tryIt'), onClick: () => trialToggle() }, h('span', { class: 'big-ico' }, '✎'), trialLabel) : null;
   const logicBtn = h('button', { class: 'btn tool icon' + (settings.logicHints ? ' on' : ''), title: t('logicHints'), 'aria-label': t('logicHints'), 'aria-pressed': String(settings.logicHints),
-    onClick: () => { settings.logicHints = !settings.logicHints; saveSettings(); view.logicHints = settings.logicHints; view.invalidate(); logicBtn.classList.toggle('on', settings.logicHints); logicBtn.setAttribute('aria-pressed', String(settings.logicHints)); } },
+    onClick: () => { settings.logicHints = !settings.logicHints; saveSettings(); view.logicHints = settings.logicHints; if (settings.logicHints) usedHints = true; view.invalidate(); logicBtn.classList.toggle('on', settings.logicHints); logicBtn.setAttribute('aria-pressed', String(settings.logicHints)); } },
     h('span', { class: 'big-ico' }, '💡'), h('small', {}, t('logic')));
-  const menuBtn = h('button', { class: 'btn tool icon', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, h('span', { class: 'big-ico' }, '☰'), h('small', {}, t('menu')));
+  const menuBtn = h('button', { class: 'btn hud-menu', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, '☰');
   // tools within thumb reach at the bottom: pen / cross / zoom as a segmented pad, then undo, try-it and menu
-  const tools = h('nav', { class: 'tools' + (settings.lefty ? ' lefty' : '') }, toolPad, h('span', { class: 'gap' }), logicBtn, undoBtn, trialBtn, menuBtn);
+  const tools = h('nav', { class: 'tools' }, toolPad, h('span', { class: 'gap' }), logicBtn, undoBtn, trialBtn);
   const fillBtn = penBtn, crossBtn = xBtn;
 
-  screen(h('div', { class: 'play' }, top, boardWrap, tools));
+  top.append(menuBtn);
+  screen(h('div', { class: 'play side-' + settings.toolsSide }, top, boardWrap, tools));
   const colors = packColors(pack);
 
   const view = new BoardView(canvas, board, {
@@ -344,6 +349,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
 
   view.setTheme(colors ? colors.board : null);
   view.logicHints = settings.logicHints;
+  // medal: bronze on Easy, silver on Normal, gold on Hard, platinum on Hard without logic hints
+  let usedHints = settings.logicHints || !!restore?.usedHints;
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
     board, view,
     solve() { for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS; board.touch(); view.invalidate(); if (board.checkSolved()) solved(); },
@@ -382,13 +389,12 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
     if (preview.width !== W || preview.height !== H) { preview.width = W; preview.height = H; }
     const pc = preview.getContext('2d')!;
-    const sc = Math.min(W / board.w, H / board.h) * 0.9;
-    pc.fillStyle = colors?.board.bg ?? '#f7fbff'; pc.fillRect(0, 0, W, H);
+    const sc = Math.min(W / board.w, H / board.h);
+    pc.fillStyle = '#ffffff'; pc.fillRect(0, 0, W, H);
     const ox = (W - board.w * sc) / 2, oy = (H - board.h * sc) / 2;
-    pc.fillStyle = colors?.board.cell === '#ffffff' || !colors ? '#e3edf8' : colors.board.cell; if (colors && colors.board.cell === '#ffffff') pc.fillStyle = colors.board.clueBg; pc.fillRect(ox, oy, board.w * sc, board.h * sc);
     for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) {
       const v = board.at(x, y);
-      if (v === FILL) { pc.fillStyle = board.isTrialCell(x, y) ? '#e08a2c' : colors?.board.fill ?? '#24375f'; pc.fillRect(ox + x * sc, oy + y * sc, Math.ceil(sc), Math.ceil(sc)); }
+      if (v === FILL) { pc.fillStyle = board.isTrialCell(x, y) ? '#e08a2c' : '#1a1a1a'; pc.fillRect(ox + x * sc, oy + y * sc, Math.ceil(sc), Math.ceil(sc)); }
     }
     if (view.zoomed) {
       const v = view.visibleCells();
@@ -398,30 +404,11 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   }
 
   // layout
-  // Portrait: the grid takes the height it needs and the top screen grows into the rest (bigger picture),
-  // like the DS where the top screen never steals room from the touch screen.
-  const playEl = boardWrap.parentElement!;
-  const portrait = () => !matchMedia('(orientation: landscape) and (min-width: 640px)').matches;
-  const fitPortrait = () => {
-    if (!portrait()) {
-      boardWrap.style.height = '';
-      top.style.setProperty('--pv', Math.max(96, Math.min(top.clientWidth - 40, playEl.clientHeight * 0.42, 300)) + 'px');
-      return;
-    }
-    const W = boardWrap.clientWidth;
-    const avail = playEl.clientHeight - tools.offsetHeight - 112;
-    const bh = Math.max(160, Math.min(avail, view.naturalHeight(W)));
-    boardWrap.style.height = bh + 'px';
-    const topH = playEl.clientHeight - tools.offsetHeight - bh;
-    top.style.setProperty('--pv', Math.max(64, Math.min(topH - 24, W * 0.48, 280)) + 'px');
-  };
   const ro = new ResizeObserver(() => {
     const r = boardWrap.getBoundingClientRect();
     if (Math.floor(r.width) !== view.width || Math.floor(r.height) !== view.height) view.resize(Math.floor(r.width), Math.floor(r.height));
   });
   ro.observe(boardWrap);
-  const ro2 = new ResizeObserver(() => fitPortrait());
-  ro2.observe(playEl);
 
   // timer
   let last = performance.now(), running = true, finished = false;
@@ -466,7 +453,6 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     finished = true;
     clearTimeout(timerId);
     ro.disconnect();
-    ro2.disconnect();
     view.destroy();
     window.removeEventListener('keydown', key);
     window.removeEventListener('keyup', keyUp);
@@ -477,7 +463,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     running = false;
     await choose(t('menu'), [
       [t('resume'), () => {}],
-      [t('stopSave'), () => { setQuickSave({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: board.snapshot() }); cleanup(); back(); }],
+      [t('stopSave'), () => { setQuickSave({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints } as any }); cleanup(); back(); }],
       [t('restart'), () => { cleanup(); setQuickSave(null); play(pack, lv, index, back); }],
       [t('quit'), () => { cleanup(); setQuickSave(null); back(); }],
     ]);
@@ -487,7 +473,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
 
   // hint roulette at a fresh start: always on Easy, as set in the options on Normal, never on Hard
   if (!restore && rules !== 'free' && pz.width * pz.height > 25) {
-    const ask = rules === 'easy' ? 'always' : settings.hints;
+    const ask = settings.hints; // asked on Easy too (the default), never on Hard
     const go = async () => {
       running = false;
       const row = Math.floor(Math.random() * board.h), col = Math.floor(Math.random() * board.w);
@@ -506,14 +492,19 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     if (pack.theme?.music?.clear && settings.packMusic) usePack(pack, 'clear', 'game_clear_jingle_SEQ', false);
     else Snd.play('game_clear_jingle_SEQ', false);
     const under = board.totalMs < TIME_LIMIT;
-    if (pack.id !== 'daily') recordClear(pack.id, pz.id, board.totalMs, under);
+    const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
+    const newMedal = pack.id !== 'daily' ? recordClear(pack.id, pz.id, board.totalMs, under, medal) : false;
     setQuickSave(null);
     cleanup();
-    showSolved(pack, lv, index, board, under, isDs ? ctx.pck : null, back);
+    showSolved(pack, lv, index, board, under, isDs ? ctx.pck : null, back, medal, newMedal);
   }
 }
 
-function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, under: boolean, pck: PckGetter | null, back: () => void) {
+function medalEl(m: Medal, big = false) {
+  return h('span', { class: 'medal ' + m + (big ? ' big' : ''), title: t(m) }, big ? t(m) : '');
+}
+
+function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, under: boolean, pck: PckGetter | null, back: () => void, medal?: Medal, newMedal = false) {
   const pz = lv.puzzles[index];
   const cv = h('canvas', { class: 'solved-pic' });
   const anim = new PictureAnimator(pz as any, pck);
@@ -521,6 +512,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
   const next = index + 1 < lv.puzzles.length ? h('button', { class: 'btn primary', onClick: () => { stop(); play(pack, lv, index + 1, back); } }, t('next') + ' ›') : null;
   screen(h('div', { class: 'solved' },
     h('div', { class: 'stamp' }, t('cleared')),
+    medal ? h('div', { class: 'medal-row' + (newMedal ? ' new' : '') }, medalEl(medal, true)) : null,
     under ? h('div', { class: 'pic-frame' }, cv) : h('p', { class: 'over' }, t('overLimit')),
     h('h2', {}, pickText(pz.name, packLang()) || `${pz.width}×${pz.height}`),
     h('div', { class: 'result' },
@@ -638,7 +630,7 @@ function optionsScreen() {
     row(t('packColors'), chk('packColors')),
     row(t('hints'), sel('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
     row(t('unlockAll'), chk('unlockAll')),
-    row('Lefty toolbar', chk('lefty')),
+    row(t('toolsSide'), sel('toolsSide', [['bottom', t('sideBottom')], ['right', t('sideRight')], ['left', t('sideLeft')]])),
     h('p', { class: 'fine' }, t('controls')),
     ctx.ds ? h('div', { class: 'row' },
       h('button', { class: 'btn', onClick: () => { if (confirm(t('confirmReset'))) resetProgress('picross-ds'); } }, t('resetProgress')),

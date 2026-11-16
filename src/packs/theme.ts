@@ -38,7 +38,7 @@ export function accentFromColors(px: RGB[]): string | null {
 
 export interface ThemeColors {
   accent: string; accentDark: string; bg: string; panel: string; top: string; topLine: string;
-  board: { bg: string; grid: string; grid5: string; cell: string; fill: string; cross: string; clueBg: string; clueBgAlt: string; clue: string; clueDone: string };
+  board: { bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; cross: string; clueBg: string; clueBgAlt: string; clue: string; clueDone: string; outline: string };
 }
 
 /** full set of colours for the screens and the board, from a pack palette */
@@ -48,7 +48,7 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     const c0 = p.cell ?? '#c4cfa1', c1 = '#8b956d', c2 = p.grid ?? '#4d533c', c3 = p.fill ?? '#1f1f1f';
     return {
       accent: '#4d533c', accentDark: '#2c3024', bg: '#d7deb8', panel: '#eef2dc', top: '#b5c08e', topLine: '#4d533c',
-      board: { bg: '#d7deb8', grid: c1, grid5: c2, cell: c0, fill: c3, cross: c2, clueBg: '#b5c08e', clueBgAlt: '#a7b282', clue: c3, clueDone: c1 },
+      board: { bg: '#e3e9c8', grid: c1, grid5: c2, cell: c0, cellDither: '#b9c595', fill: c3, fillDither: '#33372a', cross: c2, clueBg: '#b5c08e', clueBgAlt: '#b5c08e', clue: c3, clueDone: c1, outline: c3 },
     };
   }
   const [h, s] = hexToHsl(p.accent);
@@ -56,10 +56,11 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
   return {
     accent: hsl(h, sat, 0.38), accentDark: hsl(h, sat, 0.26), bg: hsl(h, sat * 0.6, 0.91), panel: hsl(h, sat * 0.4, 0.97),
     top: hsl(h, sat * 0.7, 0.8), topLine: hsl(h, sat, 0.38),
+    // same structure as MomoGram's own look, in the game's hue
     board: {
-      bg: hsl(h, sat * 0.5, 0.94), grid: hsl(h, sat * 0.4, 0.74), grid5: hsl(h, sat, 0.36), cell: p.cell ?? '#ffffff',
-      fill: p.fill ?? hsl(h, sat * 0.8, 0.24), cross: hsl(h, sat * 0.25, 0.55),
-      clueBg: hsl(h, sat * 0.55, 0.87), clueBgAlt: hsl(h, sat * 0.55, 0.82), clue: hsl(h, sat * 0.6, 0.16), clueDone: hsl(h, sat * 0.3, 0.68),
+      bg: '#ffffff', grid: hsl(h, 0.6, 0.78), grid5: '#f39a2c', cell: p.cell ?? hsl(h, 0.8, 0.93), cellDither: hsl(h, 0.75, 0.89),
+      fill: p.fill ?? hsl(h, 0.65, 0.42), fillDither: hsl(h, 0.65, 0.37), cross: hsl(h, 0.55, 0.68),
+      clueBg: hsl(h, 0.75, 0.84), clueBgAlt: hsl(h, 0.75, 0.84), clue: '#151515', clueDone: hsl(h, 0.15, 0.75), outline: '#1a1a1a',
     },
   };
 }

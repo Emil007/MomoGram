@@ -8,14 +8,17 @@ export interface ViewEvents {
   onStroke?(): void;
 }
 
-interface Theme {
-  bg: string; grid: string; grid5: string; cell: string; fill: string; trialFill: string; cross: string; mistake: string;
-  clueBg: string; clueBgAlt: string; clue: string; clueDone: string; hl: string; cursor: string; hint: string; roulette: string;
+export interface Theme {
+  bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; trialFill: string; cross: string; mistake: string;
+  clueBg: string; clueBgAlt: string; clue: string; clueOutline: string; clueDone: string; hl: string; cursor: string; hint: string; roulette: string; outline: string;
 }
 
+// MomoGram's own sky-blue look: striped clue bands, dithered cells, orange 5-cell guides
 const THEME: Theme = {
-  bg: '#e9f2fb', grid: '#9db7d3', grid5: '#3d6593', cell: '#ffffff', fill: '#2a3f6e', trialFill: '#e08a2c', cross: '#7a8ca6', mistake: '#d64545',
-  clueBg: '#d4e4f6', clueBgAlt: '#c3d8ef', clue: '#13284a', clueDone: '#9fb0c6', hl: 'rgba(255, 214, 92, 0.35)', cursor: '#f0a020', hint: '#1b6fe8', roulette: 'rgba(240, 140, 30, 0.45)',
+  bg: '#ffffff', grid: '#9fd6f2', grid5: '#f39a2c', cell: '#dff3fd', cellDither: '#cfecfb', fill: '#2b9fe0', fillDither: '#2291d2',
+  trialFill: '#f0a040', cross: '#7cc4ea', mistake: '#e04040',
+  clueBg: '#b5e3fa', clueBgAlt: '#b5e3fa', clue: '#151515', clueOutline: '#ffffff', clueDone: '#b4c2cc',
+  hl: 'rgba(255, 196, 70, 0.42)', cursor: '#f08a10', hint: '#1565e0', roulette: 'rgba(240, 140, 30, 0.5)', outline: '#1a1a1a',
 };
 
 export class BoardView {
@@ -202,7 +205,7 @@ export class BoardView {
     this.padX = Math.max(0, Math.floor((this.cssW - this.clueW - b.w * this.cell) / 2));
     // horizontally centred; vertically close to the top screen (thumb reach on phones), centred on wide screens
     const freeY = Math.max(0, this.cssH - this.clueH - b.h * this.cell);
-    this.padY = Math.floor(this.cssW < this.cssH ? Math.min(freeY / 2, 12) : freeY / 2);
+    this.padY = Math.floor(freeY / 2);
     this.onLayout?.();
   }
 
@@ -364,10 +367,28 @@ export class BoardView {
     if (r !== 'nochange') { this.dirty = true; this.ev.onChange(r); }
   }
 
+  // dither patterns, rebuilt when colours or the pixel size change
+  private pats = new Map<string, CanvasPattern | string>();
+  private dither(a: string, b: string, px: number): CanvasPattern | string {
+    const key = a + b + px;
+    let p = this.pats.get(key);
+    if (!p) {
+      const c = document.createElement('canvas');
+      c.width = c.height = px * 2;
+      const g = c.getContext('2d')!;
+      g.fillStyle = a; g.fillRect(0, 0, px * 2, px * 2);
+      g.fillStyle = b; g.fillRect(0, 0, px, px); g.fillRect(px, px, px, px);
+      p = this.ctx.createPattern(c, 'repeat') ?? a;
+      if (this.pats.size > 40) this.pats.clear();
+      this.pats.set(key, p);
+    }
+    return p;
+  }
+
   draw() {
     this.dirty = false;
-    const ctx = this.ctx, b = this.board, T = this.theme, cs = this.cell;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const ctx = this.ctx, b = this.board, T = this.theme, cs = this.cell, dpr = this.dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = T.bg;
     ctx.fillRect(0, 0, this.cssW, this.cssH);
     ctx.translate(this.padX, this.padY);
@@ -376,120 +397,133 @@ export class BoardView {
     const vx0 = Math.max(0, Math.floor(this.scrollX / cs)), vy0 = Math.max(0, Math.floor(this.scrollY / cs));
     const vx1 = Math.min(b.w, Math.ceil((this.scrollX + viewW - this.clueW) / cs));
     const vy1 = Math.min(b.h, Math.ceil((this.scrollY + viewH - this.clueH) / cs));
-
-    // grid
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(this.clueW, this.clueH, viewW - this.clueW, viewH - this.clueH);
-    ctx.clip();
-    ctx.fillStyle = T.cell;
-    ctx.fillRect(ox + vx0 * cs, oy + vy0 * cs, (vx1 - vx0) * cs, (vy1 - vy0) * cs);
-    // row/column highlight under the cursor
-    ctx.fillStyle = T.hl;
-    ctx.fillRect(ox, oy + this.cursorY * cs, b.w * cs, cs);
-    ctx.fillRect(ox + this.cursorX * cs, oy, cs, b.h * cs);
-    if (this.spin) {
-      ctx.fillStyle = this.spin.flash ? 'rgba(255, 200, 60, 0.75)' : T.roulette;
-      ctx.fillRect(ox, oy + this.spin.row * cs, b.w * cs, cs);
-      ctx.fillRect(ox + this.spin.col * cs, oy, cs, b.h * cs);
-    }
+    const gw = Math.min(b.w * cs, viewW - this.clueW), gh = Math.min(b.h * cs, viewH - this.clueH);
+    // dither dot size in device pixels: fine texture like the DS cells
+    const dp = Math.max(1, Math.round(cs * dpr / 14));
+    const pat = (a: string, c: string) => { const p = this.dither(a, c, dp); if (typeof p !== 'string') p.setTransform(new DOMMatrix().scale(1 / dpr)); return p; };
     const now = performance.now();
+    const cueX = this.showCursor || this.spin ? (this.spin ? this.spin.col : this.cursorX) : -1;
+    const cueY = this.showCursor || this.spin ? (this.spin ? this.spin.row : this.cursorY) : -1;
+
+    // ---- clue bands: alternating colour stripes that fade out towards the edge
+    const bandH = ctx.createLinearGradient(0, 0, this.clueW, 0);
+    bandH.addColorStop(0, T.clueBg + '00'); bandH.addColorStop(0.45, T.clueBg); bandH.addColorStop(1, T.clueBg);
+    const bandV = ctx.createLinearGradient(0, 0, 0, this.clueH);
+    bandV.addColorStop(0, T.clueBg + '00'); bandV.addColorStop(0.45, T.clueBg); bandV.addColorStop(1, T.clueBg);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.clip();
+    for (let y = vy0; y < vy1; y++) if (y % 2 === 0) { ctx.fillStyle = bandH; ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(this.clueW, 0, gw, this.clueH); ctx.clip();
+    for (let x = vx0; x < vx1; x++) if (x % 2 === 0) { ctx.fillStyle = bandV; ctx.fillRect(ox + x * cs, 0, cs, this.clueH); }
+    ctx.restore();
+
+    // ---- cells
+    ctx.save();
+    ctx.beginPath(); ctx.rect(this.clueW, this.clueH, gw, gh); ctx.clip();
+    ctx.fillStyle = pat(T.cell, T.cellDither);
+    ctx.fillRect(ox + vx0 * cs, oy + vy0 * cs, (vx1 - vx0) * cs, (vy1 - vy0) * cs);
+    const fillPat = pat(T.fill, T.fillDither), trialPat = pat(T.trialFill, T.trialFill);
     for (let y = vy0; y < vy1; y++) for (let x = vx0; x < vx1; x++) {
       const v = b.at(x, y), px = ox + x * cs, py = oy + y * cs, i = y * b.w + x;
       const trial = b.isTrialCell(x, y);
       if (v === FILL) {
-        ctx.fillStyle = trial ? T.trialFill : T.fill;
-        const pad = cs > 12 ? 1 : 0;
-        ctx.fillRect(px + pad, py + pad, cs - pad * 2, cs - pad * 2);
+        ctx.fillStyle = trial ? trialPat : fillPat;
+        ctx.fillRect(px, py, cs, cs);
       } else if (v === CROSS) {
         const t = this.mistakeFlash.get(i);
         let col = trial ? T.trialFill : T.cross;
-        if (t !== undefined) {
-          if (now - t > 1200) this.mistakeFlash.delete(i);
-          else col = T.mistake;
-        }
-        // mistakes stay red-ish: Normal rules marks caught mistakes permanently
+        if (t !== undefined) { if (now - t > 1200) this.mistakeFlash.delete(i); else col = T.mistake; }
         ctx.strokeStyle = col;
-        ctx.lineWidth = Math.max(1, cs / 10);
-        const m = cs * 0.25;
+        ctx.lineWidth = Math.max(1.5, cs / 7);
+        ctx.lineCap = 'round';
+        const m = cs * 0.24;
         ctx.beginPath();
         ctx.moveTo(px + m, py + m); ctx.lineTo(px + cs - m, py + cs - m);
         ctx.moveTo(px + cs - m, py + m); ctx.lineTo(px + m, py + cs - m);
         ctx.stroke();
       }
     }
-    // grid lines
-    for (let x = vx0; x <= vx1; x++) {
-      ctx.fillStyle = x % 5 === 0 || x === b.w ? T.grid5 : T.grid;
-      const wl = x % 5 === 0 || x === b.w ? Math.max(1, cs / 14) : 1;
-      ctx.fillRect(Math.round(ox + x * cs - wl / 2), oy + vy0 * cs, wl, (vy1 - vy0) * cs);
+    // thin cell lines, then the orange guide lines every 5 cells
+    ctx.fillStyle = T.grid;
+    for (let x = vx0; x <= vx1; x++) ctx.fillRect(Math.round(ox + x * cs) - 0.5, oy + vy0 * cs, 1, (vy1 - vy0) * cs);
+    for (let y = vy0; y <= vy1; y++) ctx.fillRect(ox + vx0 * cs, Math.round(oy + y * cs) - 0.5, (vx1 - vx0) * cs, 1);
+    ctx.fillStyle = T.grid5;
+    const g5 = Math.max(1.5, cs / 12);
+    for (let x = vx0; x <= vx1; x++) if (x % 5 === 0 && x > 0 && x < b.w) ctx.fillRect(ox + x * cs - g5 / 2, oy + vy0 * cs, g5, (vy1 - vy0) * cs);
+    for (let y = vy0; y <= vy1; y++) if (y % 5 === 0 && y > 0 && y < b.h) ctx.fillRect(ox + vx0 * cs, oy + y * cs - g5 / 2, (vx1 - vx0) * cs, g5);
+    // roulette / cursor beams over the grid
+    if (cueY >= 0) {
+      ctx.fillStyle = this.spin?.flash ? 'rgba(255, 200, 60, 0.7)' : this.spin ? T.roulette : T.hl;
+      ctx.fillRect(ox, oy + cueY * cs, b.w * cs, cs);
+      ctx.fillRect(ox + cueX * cs, oy, cs, b.h * cs);
     }
-    for (let y = vy0; y <= vy1; y++) {
-      ctx.fillStyle = y % 5 === 0 || y === b.h ? T.grid5 : T.grid;
-      const wl = y % 5 === 0 || y === b.h ? Math.max(1, cs / 14) : 1;
-      ctx.fillRect(ox + vx0 * cs, Math.round(oy + y * cs - wl / 2), (vx1 - vx0) * cs, wl);
-    }
-    if (this.showCursor) {
-      ctx.strokeStyle = T.cursor;
-      ctx.lineWidth = Math.max(2, cs / 8);
-      ctx.strokeRect(ox + this.cursorX * cs + 1, oy + this.cursorY * cs + 1, cs - 2, cs - 2);
+    if (this.showCursor && !this.spin) {
+      // black-and-white cursor box
+      const x = ox + this.cursorX * cs, y = oy + this.cursorY * cs, lw = Math.max(2, cs / 9);
+      ctx.lineWidth = lw * 2; ctx.strokeStyle = '#fff'; ctx.strokeRect(x + lw, y + lw, cs - lw * 2, cs - lw * 2);
+      ctx.lineWidth = lw; ctx.strokeStyle = T.outline; ctx.strokeRect(x + lw / 2, y + lw / 2, cs - lw, cs - lw);
     }
     ctx.restore();
+    // outer frame
+    ctx.strokeStyle = T.outline;
+    ctx.lineWidth = Math.max(2, cs / 10);
+    ctx.strokeRect(this.clueW - ctx.lineWidth / 2 + Math.min(0, ox - this.clueW), this.clueH - ctx.lineWidth / 2 + Math.min(0, oy - this.clueH),
+      b.w * cs + ctx.lineWidth, b.h * cs + ctx.lineWidth);
+    // the frame may run under the clues when scrolled: repaint the clue areas' backgrounds where needed
+    // (clues are drawn on top below)
 
-    // clues, pinned to the top / left edges
+    // ---- clue numbers: chunky digits with a white outline
+    const fs = Math.max(9, Math.min(cs * 0.66, 24));
+    const font = `800 ${fs}px "Nunito", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif`;
+    ctx.font = font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    const text = (s: string, x: number, y: number, col: string) => {
+      ctx.lineWidth = Math.max(2, fs * 0.28);
+      ctx.strokeStyle = T.clueOutline;
+      ctx.strokeText(s, x, y);
+      ctx.fillStyle = col;
+      ctx.fillText(s, x, y);
+    };
     const cc = Math.max(cs, 14);
-    const font = (sz: number) => `600 ${sz}px system-ui, "Segoe UI", Roboto, sans-serif`;
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH);
-    ctx.clip();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.beginPath(); ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH); ctx.clip();
+    if (cueX >= 0) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
+    const stepV = Math.min(cc * 0.66, 28, fs * 1.12);
     for (let x = vx0; x < vx1; x++) {
-      ctx.fillStyle = x === this.cursorX ? '#ffe7a6' : x % 2 ? T.clueBgAlt : T.clueBg;
-      ctx.fillRect(ox + x * cs, 0, cs, this.clueH);
       const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
-      if (this.spin?.col === x) { ctx.fillStyle = T.roulette; ctx.fillRect(ox + x * cs, 0, cs, this.clueH); }
-      const fs = Math.max(8, Math.min(cs * 0.62, 22));
-      ctx.font = font(fs);
-      const step = Math.min(cc * 0.66, 28, fs * 1.18);
       for (let k = 0; k < clues.length; k++) {
-        ctx.fillStyle = done[k] ? T.clueDone : blue ? T.hint : T.clue;
-        const yy = this.clueH - (clues.length - k - 0.5) * step - 2;
-        ctx.fillText(String(clues[k] || 0), ox + x * cs + cs / 2, yy);
+        const col = done[k] ? T.clueDone : x === cueX ? T.cursor : blue ? T.hint : T.clue;
+        text(String(clues[k] || 0), ox + x * cs + cs / 2, this.clueH - (clues.length - k - 0.5) * stepV - 3, col);
       }
     }
     ctx.restore();
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, this.clueH, this.clueW, viewH - this.clueH);
-    ctx.clip();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, viewH - this.clueH); ctx.clip();
+    if (cueY >= 0) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
+    const stepH = Math.min(cc * 0.62, 26, fs * 0.95);
     for (let y = vy0; y < vy1; y++) {
-      ctx.fillStyle = y === this.cursorY ? '#ffe7a6' : y % 2 ? T.clueBgAlt : T.clueBg;
-      ctx.fillRect(0, oy + y * cs, this.clueW, cs);
       const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);
-      if (this.spin?.row === y) { ctx.fillStyle = T.roulette; ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
-      const fs = Math.max(8, Math.min(cs * 0.62, 22));
-      ctx.font = font(fs);
-      const step = Math.min(cc * 0.62, 26, fs * 1.05);
       for (let k = 0; k < clues.length; k++) {
-        ctx.fillStyle = done[k] ? T.clueDone : blue ? T.hint : T.clue;
-        ctx.fillText(String(clues[k] || 0), this.clueW - (clues.length - k - 0.5) * step - 3, oy + y * cs + cs / 2 + 1);
+        const col = done[k] ? T.clueDone : y === cueY ? T.cursor : blue ? T.hint : T.clue;
+        text(String(clues[k] || 0), this.clueW - (clues.length - k - 0.5) * stepH - 4, oy + y * cs + cs / 2 + 1, col);
       }
     }
     ctx.restore();
-    // corner (the tool pad is drawn over it by the UI)
-    ctx.fillStyle = T.clueBgAlt;
-    ctx.fillRect(0, 0, this.clueW, this.clueH);
+    // corner stays plain
+    ctx.fillStyle = T.bg;
+    ctx.fillRect(0, 0, this.clueW - 2, this.clueH - 2);
+
     if (this.dragAt && this.dragLen > 1) {
-      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      const bx = Math.min(this.cssW - 30, Math.max(30, this.dragAt.x)), by = Math.max(26, this.dragAt.y - 48);
-      ctx.fillStyle = 'rgba(19,40,74,.88)';
-      ctx.beginPath(); ctx.arc(bx, by, 20, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = '700 20px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(this.dragLen), bx, by + 1);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bx = Math.min(this.cssW - 30, Math.max(30, this.dragAt.x)), by = Math.max(26, this.dragAt.y - 52);
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = T.outline; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(bx, by, 21, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.font = `800 21px "Nunito", system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = T.outline; ctx.fillText(String(this.dragLen), bx, by + 1);
     }
   }
 }

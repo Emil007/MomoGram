@@ -46,7 +46,9 @@ export const storage = {
 
 // ---- progress & settings ----
 
-export interface PuzzleProgress { best?: number; cleared?: boolean; underLimit?: boolean }
+export type Medal = 'bronze' | 'silver' | 'gold' | 'platinum';
+export const MEDALS: Medal[] = ['bronze', 'silver', 'gold', 'platinum'];
+export interface PuzzleProgress { best?: number; cleared?: boolean; underLimit?: boolean; medal?: Medal }
 export interface Settings {
   lang: string;
   music: boolean;
@@ -62,12 +64,13 @@ export interface Settings {
   packColors: boolean; // colour the screens like the pack's original game
   difficulty: 'auto' | 'easy' | 'normal' | 'hard'; // auto = the level's own rules
   logicHints: boolean;
+  toolsSide: 'bottom' | 'left' | 'right'; // where the tool bar sits (right/left for one-handed play)
 }
 
 const DEFAULTS: Settings = {
   lang: '', music: true, musicVolume: 0.7, sfx: true, hints: 'ask', unlockAll: false,
   normalStyle: 'stage_jazz_SEQ', freeStyle: 'stage_musicbox_SEQ', lefty: false, showTimer: true,
-  packMusic: true, packColors: true, difficulty: 'auto', logicHints: false,
+  packMusic: true, packColors: true, difficulty: 'auto', logicHints: false, toolsSide: 'bottom',
 };
 
 function readJson<T>(k: string, def: T): T {
@@ -84,14 +87,18 @@ export function getProgress(packId: string, puzzleId: string): PuzzleProgress {
   return progress[packId + '/' + puzzleId] ?? {};
 }
 
-export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean) {
+/** returns true when the medal is better than the one the puzzle had */
+export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal): boolean {
   const k = packId + '/' + puzzleId;
   const p = progress[k] ?? {};
   p.cleared = true;
+  const better = !!medal && (!p.medal || MEDALS.indexOf(medal) > MEDALS.indexOf(p.medal));
+  if (better) p.medal = medal;
   if (underLimit) p.underLimit = true;
   if (p.best === undefined || totalMs < p.best) p.best = totalMs;
   progress[k] = p;
   localStorage.setItem('momogram.progress', JSON.stringify(progress));
+  return better;
 }
 
 export function resetProgress(packId: string) {

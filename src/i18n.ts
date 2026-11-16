@@ -27,10 +27,12 @@ const en: Dict = {
   unsupported: 'Not supported', encrypted: 'Encrypted 3DS file: please use a decrypted copy.',
   done: 'Done', analyzing: 'Reading…', solvedCount: '{a} / {b} cleared',
   controls: 'Controls: tap or drag to fill, right-click / Mark to cross out, two fingers or mouse wheel to zoom and pan. Keyboard / gamepad: arrows, A/Z = fill, B/X = mark, Y/C = zoom, Start = menu.',
+  bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum',
+  toolsSide: 'Tool bar', sideBottom: 'Bottom', sideRight: 'Right (left hand)', sideLeft: 'Left',
   hard: 'Hard', logic: 'Hints', logicHints: 'Logic hints (blue numbers)', difficulty: 'Difficulty',
-  rulesEasy: 'Easy: mistakes are caught without costing time, and the hint roulette always helps.',
-  rulesHard: 'Hard: no hint roulette and no mistake checks. Use "Try it out" to test an idea.',
-  rulesNormal: 'Normal rules: mistakes are caught and cost time (2, 4, then 8 minutes).',
+  rulesEasy: 'Easy: mistakes are caught without costing time. Bronze medal.',
+  rulesHard: 'Hard: no hint roulette and no mistake checks. Gold medal, platinum without logic hints.',
+  rulesNormal: 'Normal: mistakes are caught and cost time (2, 4, then 8 minutes). Silver medal.',
   rulesFree: 'Free rules: no mistake checks. Use "Try it out" to test an idea and keep or drop it.',
 };
 
@@ -58,10 +60,12 @@ const de: Dict = {
   unsupported: 'Nicht unterstützt', encrypted: 'Verschlüsselte 3DS-Datei: bitte eine entschlüsselte Kopie verwenden.',
   done: 'Fertig', analyzing: 'Lese…', solvedCount: '{a} / {b} gelöst',
   controls: 'Steuerung: tippen oder ziehen zum Füllen, Rechtsklick / Kreuz zum Markieren, zwei Finger oder Mausrad zum Zoomen und Verschieben. Tastatur / Gamepad: Pfeile, A/Z = füllen, B/X = Kreuz, Y/C = Zoom, Start = Menü.',
+  bronze: 'Bronze', silver: 'Silber', gold: 'Gold', platinum: 'Platin',
+  toolsSide: 'Werkzeugleiste', sideBottom: 'Unten', sideRight: 'Rechts (linke Hand)', sideLeft: 'Links',
   hard: 'Schwer', logic: 'Tipps', logicHints: 'Logik-Tipps (blaue Zahlen)', difficulty: 'Schwierigkeit',
-  rulesEasy: 'Leicht: Fehler werden erkannt, kosten aber keine Zeit, und das Tipp-Roulette hilft immer.',
-  rulesHard: 'Schwer: kein Tipp-Roulette und keine Fehlerprüfung. Mit „Ausprobieren“ testest du eine Idee.',
-  rulesNormal: 'Normal-Regeln: Fehler werden erkannt und kosten Zeit (2, 4, dann 8 Minuten).',
+  rulesEasy: 'Leicht: Fehler werden erkannt, kosten aber keine Zeit. Bronzemedaille.',
+  rulesHard: 'Schwer: kein Tipp-Roulette und keine Fehlerprüfung. Goldmedaille, Platin ohne Logik-Tipps.',
+  rulesNormal: 'Normal: Fehler werden erkannt und kosten Zeit (2, 4, dann 8 Minuten). Silbermedaille.',
   rulesFree: 'Frei-Regeln: keine Fehlerprüfung. Mit „Ausprobieren“ testest du eine Idee und behältst oder verwirfst sie.',
 };
 
