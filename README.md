@@ -72,7 +72,7 @@ language's names. Do it once, keep the files, import them anywhere.
 | Pokémon Picross (prototype) | Game Boy Color | ✓ all 217 stages (main game incl. Mew, Safari Zone); 20×20 and 30×30 pictures as their four sections | ✓ the game's music (emulated); colours in progress |
 | Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | ✓ the game's music (emulated) |
 | Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | ✓ the game's music (emulated) |
-| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | in progress | music ready (emulated), used once the puzzle importer lands |
+| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | ✓ all puzzles of each volume, in sets of twelve (tested with Vol. 1: 120 puzzles) | ✓ the game's own music (emulated) |
 | Picross S series | Switch | later | later |
 
 Only puzzles from Jupiter / Nintendo releases are supported.

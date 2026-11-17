@@ -1,7 +1,7 @@
 {
   "name": "momogram",
   "productName": "MomoGram",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Nonogram player for your own Picross DS ROM",
   "main": "main.cjs",
   "license": "MIT",
