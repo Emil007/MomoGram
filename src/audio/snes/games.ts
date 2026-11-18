@@ -1,4 +1,4 @@
-// Music of the Super Famicom / Satellaview Picross games (Jupiter). All of them use the same sound engine: a
+// Music of the Super Famicom / Satellaview nonogram games (Jupiter). All of them use the same sound engine: a
 // 65816 library in its own ROM bank (entry at bank:$0000, A = command, Y = parameter; command $13 starts song Y,
 // $1A stops the music) that uploads an SPC700 driver through the boot ROM protocol, then song data through its
 // own handshake. Song numbers with bit 6 set loop, the others are one-shot jingles.
@@ -97,7 +97,7 @@ export function loadSong(asset: Uint8Array, song: number): Spc | null {
   return spc;
 }
 
-/** music for a pack made from a Super Famicom / Satellaview Picross game */
+/** music for a pack made from a Super Famicom / Satellaview nonogram game */
 export async function snesPackMusic(rom: Uint8Array, yieldFn?: () => Promise<void>): Promise<{ asset: { name: string; data: Uint8Array }; music: Record<string, string> } | null> {
   const title = headerTitle(rom);
   const roles = GAMES.find(([re]) => re.test(title))?.[1] ?? (findSoundBank(rom) >= 0 ? GAMES[1][1] : null);

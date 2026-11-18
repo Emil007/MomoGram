@@ -219,3 +219,19 @@ body { background: #fff; }
 .save-box { display: flex; flex-direction: column; gap: .4rem; }
 .save-box input[type=text] { font: inherit; font-weight: 700; border: 2px solid var(--line); border-radius: 8px; padding: .3em .5em; max-width: 60%; }
 .profile-chip { align-self: flex-end; position: relative; z-index: 1; padding: .25em .7em; font-size: .9rem; border-radius: 999px; margin-bottom: -.4rem; }
+
+/* ---------- home: the game library ---------- */
+.section-title { margin: .4rem .2rem -.2rem; font-size: 1rem; font-weight: 900; }
+.library { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .7rem; }
+.game { --game: var(--accent); align-items: stretch; text-align: left; gap: .25rem; padding: .7em .8em .6em; min-height: 6.2rem; position: relative; overflow: hidden; }
+.game::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--game); }
+.game b { font-size: 1rem; line-height: 1.2; padding-left: .2rem; }
+.game small { padding-left: .2rem; }
+.game .count { color: var(--ink); font-weight: 800; }
+.game .bar-outer.slim { height: 8px; flex: none; margin: .2rem 0 0 .2rem; }
+.game .bar-outer.slim .bar-inner { background: var(--game); }
+.game.add { border-style: dashed; justify-content: center; align-items: center; text-align: center; background: transparent; box-shadow: none; }
+.game.add::before { display: none; }
+.home .menu .btn.primary b { font-size: 1.15rem; }
+.pack-info { margin: .8rem 1rem 0; text-align: center; color: var(--muted); font-size: .85rem; font-weight: 700; }
+.menu > :only-child { grid-column: 1 / -1; min-height: 4.2rem; }

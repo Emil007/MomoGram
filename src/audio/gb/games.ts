@@ -1,4 +1,4 @@
-// Sound drivers of the Game Boy Picross games, located by byte patterns in the user's ROM (no addresses or game
+// Sound drivers of the Game Boy nonogram games, located by byte patterns in the user's ROM (no addresses or game
 // data are stored here, so regional versions with shifted code work too).
 import { GbDriver } from './music';
 
@@ -14,7 +14,7 @@ export function findPattern(d: Uint8Array, pat: number[], from = 0, to = d.lengt
 const _ = -1;
 
 /**
- * Jupiter's Game Boy Picross games use Toshiyuki Ueno's "DSEQ" sound driver. Bank 0 has two wrappers that switch
+ * Jupiter's Game Boy nonogram games use Toshiyuki Ueno's "DSEQ" sound driver. Bank 0 has two wrappers that switch
  * to the driver's bank: `request(A = command, C = parameter)` (command 0 resets, 1 starts song C, 0 stops) and
  * `update()` (called from VBlank). MomoGram calls them like a GBS player.
  */
@@ -86,7 +86,7 @@ const ROLES: Array<[RegExp, Roles]> = [
   [/^POKEPICROSS/, { title: 0x01, menu: 0x03, play: 0x04, clear: 0x0b }],
 ];
 
-/** music for a pack made from a Game Boy Picross game: the sound asset and the refs per role */
+/** music for a pack made from a Game Boy nonogram game: the sound asset and the refs per role */
 export function gbPackMusic(rom: Uint8Array): { asset: { name: string; data: Uint8Array }; music: Record<string, string> } | null {
   const title = String.fromCharCode(...rom.subarray(0x134, 0x143)).replace(/\0.*$/, '');
   const roles = ROLES.find(([re]) => re.test(title))?.[1];

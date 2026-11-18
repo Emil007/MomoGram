@@ -2,13 +2,14 @@
 
 <h1 align="center">MomoGram</h1>
 
-<p align="center"><b>Picross DS, rebuilt for every screen</b>: your phone (in portrait!), the browser, Windows, macOS, Linux, Steam Deck and Android.<br>
-Plus every other Picross game you own, turned into puzzle packs.</p>
+<p align="center"><b>One nonogram player for all the nonogram games you own</b>, on every screen: your phone (in portrait!),
+the browser, Windows, macOS, Linux, Steam Deck and Android.<br>
+Add your games once: MomoGram turns each into a pack with its levels, puzzle names, pictures, music and colours.</p>
 
 <p align="center">
 <a href="https://emil007.github.io/MomoGram/"><b>▶ Play in the browser</b></a> ·
 <a href="https://github.com/Emil007/MomoGram/releases/latest"><b>⬇ Downloads</b></a> ·
-<a href="#puzzle-packs">Puzzle packs</a> ·
+<a href="#supported-games">Supported games</a> ·
 <a href="#platforms">Platforms</a>
 </p>
 
@@ -26,8 +27,8 @@ Plus every other Picross game you own, turned into puzzle packs.</p>
 <p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in landscape: the tool column beside the board" width="80%"><br>
 <em>Desktop / Steam Deck: keyboard, mouse and gamepad. Screenshots show MomoGram's own starter puzzles.</em></p>
 
-> **No game data is included.** Start with MomoGram's own starter puzzles, then add the Picross games you own
-> (**Add your Picross games**): MomoGram reads puzzles, names, pictures and music from your files at runtime.
+> **No game data is included.** Start with MomoGram's own starter puzzles, then add the games you own
+> (**Add games** on the home screen): MomoGram reads puzzles, names, pictures and music from your files.
 > Everything stays on your device.
 
 > **Disclaimer: 100% AI.** MomoGram (the game, the ROM readers, the importers, the sound code, the builds and
@@ -35,11 +36,12 @@ Plus every other Picross game you own, turned into puzzle packs.</p>
 > No line of code was written by hand. Expect AI-typical mistakes, and please report what you find.
 
 The name: *nonogram* + **Momo**, from Michael Ende's novel about the grey men who steal people's time.
-Picross does that too.
+Nonograms do that too.
 
 ## What you get
 
-- **Picross DS as the main game:** add your ROM and get all 345 puzzles in their original levels (Easy, Normal 1–10 + Extra, Free 1–10 + Extra, Daily Picross), with the puzzle names, the animated solved pictures and the original music. European, US, Japanese and Korean releases.
+- **Your games in one library:** every game you add becomes a card on the home screen, with its own modes and levels, puzzle names, solved pictures, music and colours, and its own progress.
+- **A daily nonogram:** five small puzzles a day, picked from all the games in your library.
 - **A board that feels like the handheld:** striped clue bands, dithered cells, orange guides every five cells, a cursor that lights up its row and column into the clues, a drag counter, and clue numbers that grey out only when their block is certainly in place.
 - **Made for one hand on a phone:** portrait layout, the tools at the bottom within thumb reach, pinch to zoom, drags that stay on their row or column.
 - **Every level on every difficulty**, with medals:
@@ -52,20 +54,21 @@ Picross does that too.
 
 - **Logic hints** (💡): clue numbers turn blue when their line lets you deduce a new cell, like the newer 3DS and Switch games.
 - **The hint roulette**, spinning over rows and columns like the original.
-- **Puzzle packs** from your other Picross games, with **their own music and colours** where the game has them.
-- **Eight starter puzzles** by MomoGram itself, so you can try it before you add a ROM.
+- **Random music** from the game you're playing, or from all your games.
+- **Eight starter puzzles** by MomoGram itself, so you can try it before you add a game.
+- **Profiles** with their own saves; export a save and import it on another device (only newer games are taken over).
 - Quick save, best times, offline play after the first start, English and German UI.
 
-## Puzzle packs
+## Supported games
 
-**Puzzle packs → Create packs from your games**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
+**Add games** (home screen) or **Puzzle packs → Create packs from your games**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
 MomoGram finds the puzzles and makes one pack per game, with the original level structure and the puzzle
 names where the game has them. Regional versions of the same game become **one** pack with every
 language's names. Do it once, keep the files, import them anywhere.
 
 | Game | Platform | Puzzles | Music & colours |
 |---|---|---|---|
-| Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ | ✓ the game's own |
+| Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ all modes and levels, solved-picture animations, daily puzzles | ✓ the game's own (title, nine in-game styles, clear jingle) |
 | Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted) | ✓ | ✓ the game's music, colours from its icon |
 | Mario's Picross | Game Boy | ✓ Easy, Kinoko, Star, Time Trial | ✓ the game's music (emulated), Super Game Boy colours |
 | Picross 2 | Game Boy | ✓ as 15×15 sections | ✓ the game's music (emulated), Super Game Boy colours |
@@ -199,5 +202,6 @@ APK via Capacitor, released when `version` in `package.json` changes).
 
 ## License
 
-MIT for MomoGram's own code and its starter puzzles. Picross and Picross DS are trademarks of Nintendo and
-Jupiter. MomoGram is an unofficial fan project, not affiliated with or endorsed by them.
+MIT for MomoGram's own code and its starter puzzles. Picross is a trademark of Nintendo; the game titles
+named in the table of supported games are trademarks of their owners (Nintendo, Jupiter). MomoGram is an
+unofficial fan project, not affiliated with or endorsed by them.

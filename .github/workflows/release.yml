@@ -2,7 +2,7 @@
 #  * push to main with a new "version" in package.json -> release v<version> (the tag is created here)
 #  * push of a tag v1.2.3                               -> release for that tag
 #  * manual run (workflow_dispatch)                     -> artifacts only, no release
-# No game data is included anywhere: players add their own Picross DS ROM and games in the app.
+# No game data is included anywhere: players add the games they own inside the app.
 name: Release
 on:
   push:
@@ -149,4 +149,4 @@ jobs:
           generate_release_notes: true
           body: |
             **Downloads:** Windows (`Windows-x64` / `Windows-arm64` zip, or the setup `.exe`), macOS (`mac-arm64` / `mac-x64` dmg), Linux / Steam Deck (`Linux` AppImage or tar.gz, x64 and arm64), Android (`Android.apk`), web version (`web.zip`, or play at https://emil007.github.io/MomoGram/). Also installs from RecompLauncher.
-            No game data is included: try the starter puzzles, then add the Picross games you own (Picross DS, 3DS, Game Boy, Super Famicom …) inside the app. See the README.
+            No game data is included: try the starter puzzles, then add the nonogram games you own (DS, 3DS, Game Boy, Super Famicom …) inside the app. See the README.

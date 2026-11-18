@@ -2,12 +2,14 @@
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter } from './game/picture';
-import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny, mergePacks } from './packs/format';
-import { PicrossDsData, pckFile, readPicrossDs, dsToPack, dsFromPack } from './rom/picrossds';
+import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
+import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
+import { importGameFile } from './packs/importers/index';
+import './packs/importers/all';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
-import { openPackManager } from './ui/packs';
+import { openPackManager, storePacks } from './ui/packs';
 import { Audio as Snd } from './audio';
 import { unzipFirst, packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
@@ -16,12 +18,12 @@ import { STARTER } from './packs/starter';
 const TIME_LIMIT = 60 * 60_000;
 
 interface Ctx {
-  ds: PicrossDsData | null;
   packs: Pack[];
-  pck: PckGetter | null;
+  /** solved-picture animation data per pack (Picross DS), loaded when the pack is opened */
+  pcks: Map<string, PckGetter | null>;
 }
 
-const ctx: Ctx = { ds: null, packs: [], pck: null };
+const ctx: Ctx = { packs: [], pcks: new Map() };
 const root = () => document.getElementById('app')!;
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, any> = {}, ...kids: Array<Node | string | null | undefined | false>): HTMLElementTagNameMap[K] {
@@ -69,73 +71,61 @@ export function levelUnlocked(pack: Pack, lv: PackLevel): boolean {
   return !lv.unlockAfter || clearedInGroup(pack, lv.group) >= lv.unlockAfter;
 }
 
-// ---------------------------------------------------------------- home
+// ---------------------------------------------------------------- start
 
 export async function boot() {
   const want = (settings.lang || navigator.language.slice(0, 2)) as Lang;
   setLang(['en', 'de', 'fr', 'it', 'es', 'ja', 'ko'].includes(want) ? want : 'en');
   storage.persist();
-  // Picross DS is a pack like every other game; an older stored ROM is converted once and removed
+  ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
+  // older versions: a stored Picross DS ROM becomes a pack once, then the ROM is removed
   try {
     const rom = await storage.loadRom('picross-ds');
-    if (rom) { await addPicrossDs(rom); await storage.deleteRom('picross-ds'); }
+    if (rom) { await addGameFiles([{ name: 'rom.nds', data: rom }]); await storage.deleteRom('picross-ds'); }
   } catch (e) { console.warn(e); }
-  // desktop app started with --rom <file> (shortcuts, RecompLauncher)
+  // packs from before the music playlists: Picross DS gets its nine in-game styles
+  for (const p of ctx.packs as Array<Pack & { ds?: unknown }>) {
+    if (p.ds && !p.theme?.tracks) { p.theme = dsTheme(); p.levels = p.levels.map(l => ({ ...l, groupTitle: l.groupTitle ?? (l.group ? DS_GROUPS[l.group] : undefined) })); await storage.savePack(p); }
+  }
+  // desktop app started with --rom <file> (shortcuts, RecompLauncher): import that game
   if (new URLSearchParams(location.search).has('rom')) {
     try {
       const r = await fetch('/__rom');
-      if (r.ok) await useRomBytes(new Uint8Array(await r.arrayBuffer()), r.headers.get('content-type')?.includes('zip') ? 'rom.zip' : 'rom.nds');
-    } catch (e) { console.warn('rom from command line', e); }
+      if (r.ok) await addGameFiles([{ name: r.headers.get('content-type')?.includes('zip') ? 'game.zip' : 'game.nds', data: new Uint8Array(await r.arrayBuffer()) }]);
+    } catch (e) { console.warn('game from command line', e); }
   }
-  ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
-  await openPicrossDs();
-  Snd.init(() => ctx.ds?.sdat ?? null);
   home();
 }
 
-/** read a full Picross DS ROM into a pack (puzzles, names, animations, music) and store that instead of the ROM */
-async function addPicrossDs(rom: Uint8Array): Promise<void> {
-  let p: Pack = dsToPack(readPicrossDs(rom));
-  const assets = p.assets ?? [];
-  // another region of Picross DS: one pack with every release's names
-  const old = ctx.packs.find(x => x.id === p.id);
-  if (old) p = mergePacks(p, old);
-  for (const a of assets) await storage.saveAsset(p.id, a.name, a.data);
-  delete p.assets;
-  await storage.savePack(p);
-  ctx.packs = [...ctx.packs.filter(x => x.id !== p.id), p];
-  await openPicrossDs();
-}
+const DS_GROUPS: Record<string, Pack['title']> = {
+  easy: { en: 'Easy', de: 'Leicht', ja: 'かんたん' }, normal: { en: 'Normal', de: 'Normal', ja: 'ノーマル' }, free: { en: 'Free', de: 'Frei', ja: 'フリー' },
+};
 
-/** make the stored Picross DS pack the main game (its modes on the home screen) */
-async function openPicrossDs() {
-  const p = ctx.packs.find(x => x.id === 'picross-ds') as any;
-  if (!p?.ds) { ctx.ds = null; ctx.pck = null; return; }
-  const [sdat, pck] = await Promise.all([storage.loadAsset(p.id, 'sound.sdat'), storage.loadAsset(p.id, 'anim.pck')]);
-  ctx.ds = dsFromPack(p, sdat ?? null, pck ?? null);
-  ctx.pck = i => (ctx.ds ? pckFile(ctx.ds, i) : null);
-  if (ctx.ds && !settings.lang) setLang(ctx.ds.languages.includes(lang()) ? lang() : ctx.ds.languages[0]);
-}
-
-async function pickRom() {
-  const f = await pickFile('.nds,.zip,.srl');
-  if (!f) return;
-  await useRomBytes(new Uint8Array(await f.arrayBuffer()), f.name);
-  home();
-}
-
-async function useRomBytes(data: Uint8Array, name: string) {
-  if (/\.zip$/i.test(name) || (data[0] === 0x50 && data[1] === 0x4b)) {
-    const inner = await unzipFirst(data, /\.nds$/i);
-    if (!inner) { alert('No .nds file in this zip.'); return; }
-    data = inner as Uint8Array<ArrayBuffer>;
+/** import game files without the pack screen (command line, old storage) */
+async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>) {
+  const found: Pack[] = [];
+  for (let { name, data } of files) {
+    if (/\.zip$/i.test(name) || (data[0] === 0x50 && data[1] === 0x4b)) {
+      const inner = await unzipFirst(data, /\.(nds|gbc?|sfc|smc|bs|3ds|cia|cxi)$/i);
+      if (!inner) continue;
+      data = inner as Uint8Array<ArrayBuffer>;
+    }
+    const r = await importGameFile(name, data);
+    if (r.ok) found.push(...r.packs);
   }
-  try {
-    await addPicrossDs(data);
-  } catch (e: any) {
-    alert(e.message || String(e));
-  }
+  if (found.length) ctx.packs = await storePacks(ctx.packs, found);
 }
+
+/** extras a pack needs before its lists are shown (Picross DS: the solved-picture animations) */
+async function loadExtras(pack: Pack): Promise<void> {
+  if (ctx.pcks.has(pack.id)) return;
+  const p = pack as Pack & { ds?: DsPackMeta };
+  if (!p.ds) { ctx.pcks.set(pack.id, null); return; }
+  const pck = await storage.loadAsset(pack.id, 'anim.pck').catch(() => undefined);
+  const ds = dsFromPack(p, null, pck ?? null);
+  ctx.pcks.set(pack.id, ds?.pck ? (i => pckFile(ds, i)) : null);
+}
+const pckOf = (pack: Pack) => ctx.pcks.get(pack.id) ?? null;
 
 export function pickFile(accept: string, multiple = false): Promise<File | null> {
   return pickFiles(accept, multiple).then(f => f[0] ?? null);
@@ -156,40 +146,59 @@ function logo(): HTMLElement {
   return h('div', { class: 'logo' }, g, h('div', {}, h('div', { class: 'logo-name' }, 'MomoGram'), h('div', { class: 'tagline' }, t('tagline'))));
 }
 
+// ---------------------------------------------------------------- home: the game library
+
+function countPack(pack: Pack): [number, number] {
+  let a = 0, b = 0;
+  for (const l of pack.levels) for (const p of l.puzzles) { b++; if (getProgress(pack.id, p.id).cleared) a++; }
+  return [a, b];
+}
+
+/** the pack played last (its menu music plays on the home screen) */
+function lastPack(): Pack | null {
+  const id = localStorage.getItem('momogram.lastPack');
+  return allPacks().find(p => p.id === id) ?? null;
+}
+
 export function home() {
   applyThemeCss(root(), null);
-  Snd.play('title_SEQ');
-  const items: HTMLElement[] = [];
-  if (!ctx.ds) {
-    items.push(h('section', { class: 'card setup' },
-      h('p', {}, t('romHelp')),
-      h('button', { class: 'btn primary big', onClick: () => packsScreen(true) }, '✚ ' + t('addGames'))));
-    items.push(h('button', { class: 'btn big mode starter', onClick: () => puzzleList(STARTER, STARTER.levels[0], home) },
-      h('b', {}, t('starter')), h('small', {}, progressText(STARTER, STARTER.levels))));
-  } else {
-    const q = getQuickSave();
-    if (q) items.push(h('button', { class: 'btn primary big', onClick: () => resumeQuick() }, '▶ ' + t('continue')));
-    const ds = ctx.ds.pack;
-    const easy = ds.levels.find(l => l.group === 'easy')!;
-    items.push(h('div', { class: 'menu' },
-      h('button', { class: 'btn big mode easy', onClick: () => puzzleList(ds, easy, home) }, h('b', {}, t('easy')), h('small', {}, progressText(ds, [easy]))),
-      h('button', { class: 'btn big mode normal', onClick: () => levelList(ds, 'normal') }, h('b', {}, t('normal')), h('small', {}, progressText(ds, ds.levels.filter(l => l.group === 'normal')))),
-      h('button', { class: 'btn big mode free', onClick: () => levelList(ds, 'free') }, h('b', {}, t('free')), h('small', {}, progressText(ds, ds.levels.filter(l => l.group === 'free')))),
-      h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily')), h('small', {}, '7×7')),
-    ));
-    items.push(h('button', { class: 'btn mode starter slim', onClick: () => puzzleList(STARTER, STARTER.levels[0], home) },
-      h('b', {}, t('starter')), h('small', {}, progressText(STARTER, STARTER.levels))));
-  }
-  items.push(h('div', { class: 'menu small' },
-    h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs') + (ctx.packs.length ? ` (${ctx.packs.length})` : '')),
-    h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))));
-  let total = 0, cleared = 0;
-  if (ctx.ds) for (const l of ctx.ds.pack.levels) for (const p of l.puzzles) { total++; if (getProgress(ctx.ds.pack.id, p.id).cleared) cleared++; }
-  const topScreen = h('section', { class: 'home-top' },
+  menuMusic();
+  const q = getQuickSave();
+  const qPack = q ? allPacks().find(p => p.id === q.packId) : null;
+  const packs = allPacks();
+  let solved = 0, total = 0;
+  for (const p of packs) { const [a, b] = countPack(p); solved += a; total += b; }
+
+  const top = h('section', { class: 'home-top' },
     h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
     logo(),
-    ctx.ds ? h('div', { class: 'home-progress' }, h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (cleared / total) * 100 : 0}%` })), h('small', {}, t('solvedCount', { a: cleared, b: total }))) : null);
-  screen(h('div', { class: 'home' }, topScreen, h('section', { class: 'home-bottom' }, ...items), h('footer', { class: 'fine' }, ctx.ds ? t('romLoaded', { region: ctx.ds.region }) : '')));
+    h('div', { class: 'home-progress' },
+      h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (solved / total) * 100 : 0}%` })),
+      h('small', {}, t('solvedCount', { a: solved, b: total }))));
+
+  const quick = h('div', { class: 'menu' },
+    qPack ? h('button', { class: 'btn primary big', onClick: () => resumeQuick() }, h('b', {}, '▶ ' + t('continue')), h('small', {}, pickAny(qPack.title, packLang()))) : null,
+    h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily')), h('small', {}, t('dailyHelp'))));
+
+  // one card per game: its own colour, platform and progress
+  const lib = h('div', { class: 'library' });
+  for (const p of packs) {
+    const [a, b] = countPack(p);
+    const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
+    lib.append(h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: () => openPack(p, home) },
+      h('b', {}, pickAny(p.title, packLang())),
+      h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : '')),
+      h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
+      h('small', { class: 'count' }, t('solvedCount', { a, b }))));
+  }
+  lib.append(h('button', { class: 'btn game add', onClick: () => packsScreen(true) }, h('b', {}, '✚ ' + t('addGames')), h('small', {}, t('addGamesHelp'))));
+
+  screen(h('div', { class: 'home' }, top, quick,
+    h('h2', { class: 'section-title' }, t('library')), lib,
+    h('div', { class: 'menu small' },
+      h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
+      h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))),
+    h('footer', { class: 'fine' }, t('noGameData'))));
 }
 
 function progressText(pack: Pack, levels: PackLevel[]) {
@@ -198,30 +207,70 @@ function progressText(pack: Pack, levels: PackLevel[]) {
   return t('solvedCount', { a, b });
 }
 
-// ---------------------------------------------------------------- level & puzzle lists
+// ---------------------------------------------------------------- a game: modes → levels → puzzles
 
-function levelList(pack: Pack, group: string, back: () => void = home) {
-  const levels = pack.levels.filter(l => l.group === group);
+async function openPack(pack: Pack, back: () => void) {
+  await loadExtras(pack);
+  localStorage.setItem('momogram.lastPack', pack.id);
+  packLevels(pack, back);
+}
+
+function packLevels(pack: Pack, back: () => void = home) {
+  usePack(pack, 'menu');
+  if (pack.levels.length === 1) return puzzleList(pack, pack.levels[0], back);
+  const groups = [...new Set(pack.levels.map(l => l.group ?? ''))];
+  if (groups.length === 1) return groupLevels(pack, groups[0], back, back);
+  const self = () => packLevels(pack, back);
+  const list = h('div', { class: 'levels' });
+  for (const g of groups) {
+    const lvs = pack.levels.filter(l => (l.group ?? '') === g);
+    // a mode with a single level (Picross DS "Easy") opens its puzzles directly
+    const open = () => lvs.length === 1 ? puzzleList(pack, lvs[0], self) : groupLevels(pack, g, self, back);
+    list.append(h('button', { class: 'btn level mode-' + g, onClick: open }, h('b', {}, groupTitle(pack, g)), h('small', {}, progressText(pack, lvs))));
+  }
+  screen(header(pickAny(pack.title, packLang()), back), packInfo(pack), list, packFooter(pack, self));
+}
+
+function packInfo(pack: Pack): HTMLElement {
+  const s = pack.source;
+  return h('p', { class: 'pack-info' }, [s.game !== pickAny(pack.title, 'en') ? s.game : '', s.platform, s.region, s.developer, s.year].filter(Boolean).join(' · '));
+}
+
+function packFooter(pack: Pack, rerender: () => void): HTMLElement {
+  return h('div', { class: 'row' }, h('button', { class: 'btn ghost', onClick: () => { if (confirm(t('confirmReset'))) { resetProgress(pack.id); rerender(); } } }, t('resetProgress')));
+}
+
+function groupTitle(pack: Pack, g: string) {
+  const lv = pack.levels.find(l => (l.group ?? '') === g);
+  return lv?.groupTitle ? pickAny(lv.groupTitle, packLang()) : g ? g[0].toUpperCase() + g.slice(1) : pickAny(pack.title, packLang());
+}
+
+function groupLevels(pack: Pack, g: string, back: () => void, packBack: () => void) {
+  usePack(pack, 'menu');
+  const self = () => groupLevels(pack, g, back, packBack);
+  const levels = pack.levels.filter(l => (l.group ?? '') === g);
   const list = h('div', { class: 'levels' });
   for (const lv of levels) {
     const open = levelUnlocked(pack, lv);
     const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
-    const sz = `${lv.puzzles[0].width}×${lv.puzzles[0].height}`;
+    const sizes = [...new Set(lv.puzzles.map(p => `${p.width}×${p.height}`))];
+    const sz = sizes.length === 1 ? sizes[0] : `${sizes[0]}–${sizes[sizes.length - 1]}`;
+    const hint = lv.extra ? t('extraHint') : t('unlockHint', { n: lv.unlockAfter ?? 0 });
     list.append(h('button', {
       class: 'btn level' + (open ? '' : ' locked') + (done === lv.puzzles.length ? ' complete' : ''),
-      disabled: open ? undefined : true,
-      title: open ? '' : lv.extra ? t('extraHint') : t('unlockHint', { n: lv.unlockAfter ?? 0 }),
-      onClick: () => puzzleList(pack, lv, () => levelList(pack, group, back)),
-    }, h('b', {}, pickAny(lv.title, packLang())), h('small', {}, open ? `${sz} · ${done}/${lv.puzzles.length}` : '🔒 ' + (lv.extra ? t('extraHint') : t('unlockHint', { n: lv.unlockAfter ?? 0 })))));
+      disabled: open ? undefined : true, title: open ? '' : hint,
+      onClick: () => puzzleList(pack, lv, self),
+    }, h('b', {}, pickAny(lv.title, packLang())), h('small', {}, open ? `${sz} · ${done}/${lv.puzzles.length}` : '🔒 ' + hint)));
   }
-  screen(header(group === 'normal' ? t('normal') : group === 'free' ? t('free') : pickAny(pack.title, packLang()), back), list);
+  const title = g ? `${pickAny(pack.title, packLang())} · ${groupTitle(pack, g)}` : pickAny(pack.title, packLang());
+  screen(header(title, back), list, back === packBack ? packFooter(pack, self) : null);
 }
 
 function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
-  usePack(pack, 'menu', 'title_SEQ');
+  usePack(pack, 'menu');
   const grid = h('div', { class: 'puzzles' });
-  const pck = pack.id === 'picross-ds' ? ctx.pck : null;
-  // info strip like the DS top screen: shows the focused puzzle, otherwise the level summary
+  const pck = pckOf(pack);
+  // info strip: the focused puzzle, otherwise the level summary
   const info = h('div', { class: 'puzzle-info' });
   const showLevel = () => {
     const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
@@ -253,7 +302,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     else if (pr.underLimit) tile.append(h('span', { class: 'star', title: '< 60:00' }, '★'));
     grid.append(tile);
   });
-  // level tabs for quick switching within the same mode, like the level selector on the DS
+  // level tabs for quick switching within the same mode
   const sib = lv.group ? pack.levels.filter(l => l.group === lv.group) : [];
   const tabs = sib.length > 1 ? h('div', { class: 'tabs' }, ...sib.map(l => {
     const open = levelUnlocked(pack, l);
@@ -265,13 +314,14 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))));
 }
 
-function resumeQuick() {
+async function resumeQuick() {
   const q = getQuickSave();
   if (!q) return home();
   const pack = allPacks().find(p => p.id === q.packId);
   const lv = pack?.levels.find(l => l.id === q.levelId);
   const i = lv?.puzzles.findIndex(p => p.id === q.puzzleId) ?? -1;
   if (!pack || !lv || i < 0) { setQuickSave(null); return home(); }
+  await loadExtras(pack);
   play(pack, lv, i, home, q.state);
 }
 
@@ -296,45 +346,32 @@ function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
       rulesName(r) + (r === lv.rules ? ' ·' : ''))));
 }
 
-function allPacks(): Pack[] { return [...(ctx.ds ? [ctx.ds.pack] : []), STARTER, ...ctx.packs.filter(p => p.id !== 'picross-ds')]; }
+/** every game in the library: MomoGram's starter puzzles first, then the imported games */
+function allPacks(): Pack[] { return [STARTER, ...ctx.packs]; }
 
-// ---------------------------------------------------------------- pack look & sound
+// ---------------------------------------------------------------- music & colours of a game
 
-const DS_STAGES: Array<[string, string]> = [
-  ['stage_jazz_SEQ', 'Jazz'], ['stage_reggae_SEQ', 'Reggae'], ['stage_bossanova_SEQ', 'Bossa Nova'], ['stage_waltz_SEQ', 'Waltz'],
-  ['stage_musette_SEQ', 'Musette'], ['stage_musicbox_SEQ', 'Music Box'], ['stage_rock_SEQ', 'Rock'], ['stage_house_SEQ', 'House'], ['stage_sine_SEQ', 'Sine'],
-];
-
-type Track = { pack: Pack | null; ref: string }; // pack null = Picross DS sound archive sequence
-/** in-game tracks a pack offers (Picross DS: its nine music styles) */
-function packTracks(pack: Pack | null): Track[] {
-  if (!pack || pack.id === 'picross-ds' || pack.id === 'daily' || pack.id === 'momogram-starter' || !pack.theme?.music || !settings.packMusic) {
-    return ctx.ds ? DS_STAGES.map(([ref]) => ({ pack: null, ref })) : [];
-  }
-  const m = pack.theme.music;
-  const refs = [...new Set([m.play, m.play2, m.menu, m.title].filter((r): r is string => !!r))];
+type Track = { pack: Pack; ref: string };
+/** in-game tracks a pack offers */
+function packTracks(pack: Pack): Track[] {
+  const m = pack.theme?.music;
+  if (!m || !settings.packMusic) return [];
+  const refs = pack.theme?.tracks?.length ? pack.theme.tracks : [...new Set([m.play, m.play2].filter((r): r is string => !!r))];
   return refs.map(ref => ({ pack, ref }));
 }
 let lastTrack = '';
-/** music while playing: random from this pack (default), random from everything, or the fixed choice from the options */
-function playMusicFor(pack: Pack, rules: 'easy' | 'normal' | 'free') {
-  const fixed = rules === 'free' ? settings.freeStyle : settings.normalStyle;
-  let pool: Track[] = [];
-  if (settings.musicMode === 'random-all') {
-    pool = [...packTracks(null), ...(settings.packMusic ? ctx.packs.flatMap(p => p.theme?.music ? packTracks(p) : []) : [])];
-  } else if (settings.musicMode === 'random-pack') {
-    pool = packTracks(pack);
-  } else {
-    return usePack(pack, 'play', fixed);
-  }
-  if (!pool.length) return usePack(pack, 'play', fixed);
-  // a different track than last time when there is a choice
-  const choices = pool.length > 1 ? pool.filter(t => (t.pack?.id ?? '') + t.ref !== lastTrack) : pool;
-  const tr = choices[Math.floor(Math.random() * choices.length)];
-  lastTrack = (tr.pack?.id ?? '') + tr.ref;
+/** music while playing: random from this game (default), random from all games, or the game's main track */
+function playMusicFor(pack: Pack) {
   applyThemeCss(root(), packColors(pack));
-  if (!tr.pack) Snd.play(tr.ref);
-  else Snd.playPack(tr.pack.id, tr.ref).then(ok => { if (!ok) Snd.play(fixed); });
+  let pool: Track[];
+  if (settings.musicMode === 'fixed') pool = packTracks(pack).slice(0, 1);
+  else if (settings.musicMode === 'random-all' || !packTracks(pack).length) pool = allPacks().flatMap(packTracks); // games without music borrow
+  else pool = packTracks(pack);
+  if (!pool.length) { Snd.stop(); return; }
+  const choices = pool.length > 1 ? pool.filter(x => x.pack.id + x.ref !== lastTrack) : pool;
+  const tr = choices[Math.floor(Math.random() * choices.length)];
+  lastTrack = tr.pack.id + tr.ref;
+  Snd.playPack(tr.pack.id, tr.ref);
 }
 
 /** colours of the pack's original game (or null for MomoGram's own) */
@@ -342,29 +379,37 @@ function packColors(pack: Pack | null): ThemeColors | null {
   return pack?.theme?.palette && settings.packColors ? themeColors(pack.theme.palette) : null;
 }
 
-/**
- * Switch screens to a pack's own look and music. `role` picks the track; without pack music the Picross DS
- * music plays (`fallback`), so every pack still sounds like Picross.
- */
-function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear' | null, fallback?: string, loop = true) {
+/** a game's look and one of its tracks ('menu', 'clear' …); games without music stay quiet */
+function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear', loop = true) {
   applyThemeCss(root(), packColors(pack));
-  if (!role) return;
   const music = pack?.theme?.music;
-  const ref = music?.[role] ?? (role === 'menu' ? music?.title : role === 'play' ? music?.play2 : undefined);
-  if (!pack || !ref) { if (fallback) Snd.play(fallback, loop); return; }
-  Snd.playPack(pack.id, ref, loop).then(ok => { if (!ok && fallback) Snd.play(fallback, loop); });
+  const ref = music?.[role] ?? (role === 'menu' ? music?.title : undefined);
+  if (!pack || !ref || !settings.packMusic) { if (role !== 'clear') menuMusic(); return; }
+  Snd.playPack(pack.id, ref, loop);
 }
 
-// ---------------------------------------------------------------- daily
+/** menu music: the title track of the game played last, or of any game that has music */
+function menuMusic() {
+  const p = [lastPack(), ...allPacks()].find(x => x && (x.theme?.music?.title || x.theme?.music?.menu));
+  const ref = p?.theme?.music?.title ?? p?.theme?.music?.menu;
+  if (p && ref && settings.packMusic) Snd.playPack(p.id, ref); else Snd.stop();
+}
 
+// ---------------------------------------------------------------- daily nonogram
+
+/** five small puzzles a day, picked from all games in the library (the same for everyone with the same games) */
 function daily() {
-  if (!ctx.ds) return;
   const d = new Date();
   const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-  const pool = ctx.ds.daily7.filter(p => p.rows.some(r => r.includes('#')));
-  const puzzles = [0, 1, 2, 3, 4].map(k => ({ ...pool[(seed * 7919 + k * 104729) % pool.length], id: `daily-${seed}-${k}` }));
+  const pool: PackPuzzle[] = [];
+  for (const p of allPacks()) {
+    const extra = (p as Pack & { ds?: DsPackMeta }).ds?.daily7 ?? [];
+    for (const z of [...extra, ...p.levels.flatMap(l => l.puzzles)]) if (z.width * z.height <= 100 && z.rows.some(r => r.includes('#'))) pool.push(z);
+  }
+  if (!pool.length) return;
+  const puzzles = [0, 1, 2, 3, 4].map(k => ({ ...pool[(seed * 7919 + k * 104729) % pool.length], id: `daily-${seed}-${k}`, name: undefined }));
   const lv: PackLevel = { id: 'daily-' + seed, title: { en: t('daily') }, rules: 'normal', puzzles };
-  const pack: Pack = { format: 'momogram-pack', version: 1, id: 'daily', title: { en: t('daily') }, source: { game: 'Picross DS', platform: 'Nintendo DS' }, levels: [lv] };
+  const pack: Pack = { format: 'momogram-pack', version: 1, id: 'daily', title: { en: t('daily') }, source: { game: 'MomoGram', platform: 'MomoGram' }, levels: [lv] };
   puzzleList(pack, lv, home);
 }
 
@@ -375,8 +420,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const rules = rulesFor(lv);
   const board = new Board(pz.rows, rules);
   if (restore) board.restore(restore);
-  const isDs = pack.id === 'picross-ds';
-  playMusicFor(pack, rules);
+  playMusicFor(pack);
 
   // slim status bar instead of a second screen: picture, level, LCD timer; the board gets the rest
   const timeEl = h('span', { class: 'time' }, '00:00');
@@ -562,14 +606,14 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
 
   function solved() {
     finished = true;
-    if (pack.theme?.music?.clear && settings.packMusic) usePack(pack, 'clear', 'game_clear_jingle_SEQ', false);
-    else Snd.play('game_clear_jingle_SEQ', false);
+    if (pack.theme?.music?.clear && settings.packMusic) usePack(pack, 'clear', false);
+    else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
     const newMedal = pack.id !== 'daily' ? recordClear(pack.id, pz.id, board.totalMs, under, medal) : false;
     setQuickSave(null);
     cleanup();
-    showSolved(pack, lv, index, board, under, isDs ? ctx.pck : null, back, medal, newMedal);
+    showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal);
   }
 }
 
@@ -593,8 +637,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
       board.mistakes ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(board.penaltyMs))) : null,
       best !== undefined ? h('div', {}, t('best'), h('b', {}, formatTime(best))) : null),
     h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => { stop(); back(); } }, t('toList')), next)));
-  const themedMusic = !!pack.theme?.music && settings.packMusic;
-  setTimeout(() => themedMusic ? usePack(pack, 'menu', 'game_clear_loop_SEQ') : Snd.play('game_clear_loop_SEQ'), themedMusic && pack.theme?.music?.clear ? 4500 : 2500);
+  setTimeout(() => usePack(pack, 'menu'), pack.theme?.music?.clear ? 4500 : 1500);
   let raf = 0, last = performance.now();
   const loop = () => {
     const r = cv.getBoundingClientRect();
@@ -630,55 +673,15 @@ export function choose(title: string, options: Array<[string, () => void]>): Pro
 
 function packsScreen(autoCreate = false) {
   applyThemeCss(root(), null);
-  Snd.play('title_SEQ');
   openPackManager({
     root: root(),
     packs: () => ctx.packs,
-    setPacks: p => { ctx.packs = p; if (!p.some(x => x.id === 'picross-ds')) { ctx.ds = null; ctx.pck = null; } },
+    setPacks: p => { ctx.packs = p; for (const id of [...ctx.pcks.keys()]) if (!p.some(x => x.id === id)) ctx.pcks.delete(id); },
     header: (title: string) => header(title, home),
     screen,
-    openPack: (p: Pack) => p.id === 'picross-ds' ? home() : packLevels(p),
+    openPack: (p: Pack) => openPack(p, () => packsScreen()),
     autoCreate,
-    addMainRom: async (data: Uint8Array) => {
-      // only the full game (not the demos) becomes the main game
-      try { readPicrossDs(data); } catch { return false; }
-      await addPicrossDs(data);
-      return true;
-    },
   });
-}
-
-function packLevels(pack: Pack) {
-  usePack(pack, 'menu', 'title_SEQ');
-  if (pack.levels.length === 1) return puzzleList(pack, pack.levels[0], packsScreen);
-  const groups = [...new Set(pack.levels.map(l => l.group ?? ''))];
-  if (groups.length > 1 || groups[0]) {
-    const list = h('div', { class: 'levels' });
-    for (const g of groups) {
-      const lvs = pack.levels.filter(l => (l.group ?? '') === g);
-      list.append(h('button', { class: 'btn level', onClick: () => groupLevels(pack, g) }, h('b', {}, groupTitle(pack, g)), h('small', {}, progressText(pack, lvs))));
-    }
-    return screen(header(pickAny(pack.title, packLang()), packsScreen), list);
-  }
-  groupLevels(pack, '');
-}
-
-function groupTitle(pack: Pack, g: string) {
-  const lv = pack.levels.find(l => (l.group ?? '') === g);
-  return (lv as any)?.groupTitle ? pickText((lv as any).groupTitle, packLang()) : g || pickAny(pack.title, packLang());
-}
-
-function groupLevels(pack: Pack, g: string) {
-  usePack(pack, 'menu', 'title_SEQ');
-  const levels = pack.levels.filter(l => (l.group ?? '') === g);
-  const list = h('div', { class: 'levels' });
-  for (const lv of levels) {
-    const open = levelUnlocked(pack, lv);
-    const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
-    list.append(h('button', { class: 'btn level' + (open ? '' : ' locked'), disabled: open ? undefined : true, onClick: () => puzzleList(pack, lv, () => groupLevels(pack, g)) },
-      h('b', {}, pickAny(lv.title, packLang())), h('small', {}, `${lv.puzzles.length} ${t('puzzles')} · ${done}/${lv.puzzles.length}`)));
-  }
-  screen(header(groupTitle(pack, g), () => packLevels(pack)), list);
 }
 
 // ---------------------------------------------------------------- save file
@@ -748,17 +751,14 @@ function optionsScreen() {
     const c = h('input', { type: 'checkbox', checked: settings[key] ? true : undefined, onChange: (e: Event) => { (settings as any)[key] = (e.target as HTMLInputElement).checked; saveSettings(); after?.(); } });
     return c;
   };
-  const styles = DS_STAGES;
   const vol = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: settings.musicVolume, onInput: (e: Event) => { settings.musicVolume = +(e.target as HTMLInputElement).value; saveSettings(); Snd.setVolume(settings.musicVolume); } });
   const row = (label: string, ctl: Node) => h('label', { class: 'opt' }, h('span', {}, label), ctl);
   screen(header(t('options'), home), h('div', { class: 'options' },
     row(t('language'), sel('lang', [['', 'Auto'], ...(Object.entries(LANG_NAMES) as Array<[string, string]>)])),
-    row(t('music'), chk('music', () => settings.music ? Snd.play('title_SEQ') : Snd.stop())),
+    row(t('music'), chk('music', () => settings.music ? menuMusic() : Snd.stop())),
     row(t('volume'), vol),
     row(t('sfx'), chk('sfx')),
     row(t('musicMode'), sel('musicMode', [['random-pack', t('musicRandomPack')], ['random-all', t('musicRandomAll')], ['fixed', t('musicFixed')]])),
-    settings.musicMode === 'fixed' ? row(t('normalMusic'), sel('normalStyle', styles)) : null,
-    settings.musicMode === 'fixed' ? row(t('freeMusic'), sel('freeStyle', styles)) : null,
     row(t('packMusic'), chk('packMusic')),
     row(t('packColors'), chk('packColors')),
     row(t('toolsRight'), chk('toolsRight')),
@@ -767,9 +767,6 @@ function optionsScreen() {
     h('h2', { class: 'opt-head' }, t('saveData')),
     saveSection(),
     h('p', { class: 'fine' }, t('controls')),
-    ctx.ds ? h('div', { class: 'row' },
-      h('button', { class: 'btn', onClick: () => { if (confirm(t('confirmReset'))) resetProgress('picross-ds'); } }, t('resetProgress')),
-      h('button', { class: 'btn', onClick: async () => { await storage.deletePack('picross-ds'); await storage.deleteAssets('picross-ds'); ctx.packs = ctx.packs.filter(p => p.id !== 'picross-ds'); ctx.ds = null; ctx.pck = null; home(); } }, t('removeRom'))) : null,
     h('p', { class: 'fine' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · No game data included.')));
 }
 

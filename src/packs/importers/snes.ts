@@ -1,4 +1,4 @@
-// Super Famicom / Satellaview Picross games by Jupiter.
+// Super Famicom / Satellaview nonogram games by Jupiter.
 //
 // Mario no Super Picross (1995) and Tamori no Picross (Satellaview, 1995) share one puzzle format:
 // a table of 4-byte entries (24-bit HiROM pointer + 00) points to one record per puzzle. A record is a

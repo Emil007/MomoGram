@@ -393,9 +393,19 @@ export function dsToPack(d: PicrossDsData): Pack & { ds: DsPackMeta } {
   ];
   return {
     ...d.pack,
-    theme: { music: { menu: 'sound.sdat#title_SEQ', title: 'sound.sdat#title_SEQ', play: 'sound.sdat#stage_jazz_SEQ', clear: 'sound.sdat#game_clear_jingle_SEQ' } },
+    levels: d.pack.levels.map(l => ({ ...l, groupTitle: l.group ? LEVEL_TITLES[l.group] : undefined })),
+    theme: dsTheme(),
     assets,
     ds: { region: d.region, gameCode: d.gameCode, languages: d.languages, daily7: d.daily7, daily10: d.daily10, pckOffsets: d.pckOffsets },
+  };
+}
+
+const DS_STAGES = ['jazz', 'reggae', 'bossanova', 'waltz', 'musette', 'musicbox', 'rock', 'house', 'sine'];
+/** the game's music: title, the nine in-game styles, clear jingle */
+export function dsTheme(): NonNullable<Pack['theme']> {
+  return {
+    music: { menu: 'sound.sdat#title_SEQ', title: 'sound.sdat#title_SEQ', play: 'sound.sdat#stage_jazz_SEQ', clear: 'sound.sdat#game_clear_jingle_SEQ' },
+    tracks: DS_STAGES.map(s => `sound.sdat#stage_${s}_SEQ`),
   };
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "momogram",
-  "version": "0.5.1",
-  "description": "Nonogram player for your own Picross DS ROM, with puzzle packs from your other Picross games",
+  "version": "0.6.0",
+  "description": "One nonogram player for all the nonogram games you own",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",

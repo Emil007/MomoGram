@@ -1,5 +1,5 @@
-// Audio facade: music from the user's Picross DS sound archive or from a pack's own music (extracted from the
-// user's other games), plus MomoGram's own small UI sounds.
+// Audio facade: each game's own music (extracted from the
+// user's own games), plus MomoGram's own small UI sounds.
 import { Sdat } from './audio/sdat';
 import { SeqPlayer } from './audio/player';
 import { decodeBcstm, isBcstm } from './audio/bcstm';

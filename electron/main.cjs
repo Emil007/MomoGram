@@ -6,7 +6,7 @@ const { pathToFileURL } = require('url');
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 app.commandLine.appendSwitch('enable-features', 'WebGamepad');
 
-// "--rom <file>" (or a .nds / .zip dropped on the program): load that Picross DS ROM at start, e.g. from RecompLauncher
+// "--rom <file>" (or a .nds / .zip dropped on the program): import that game at start, e.g. from RecompLauncher
 function romArg() {
   const a = process.argv.slice(1);
   const i = a.indexOf('--rom');

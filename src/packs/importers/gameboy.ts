@@ -1,4 +1,4 @@
-// Game Boy Picross games.
+// Game Boy nonogram games by Jupiter.
 // Mario's Picross (1995): 32-byte level records (w, h, 15 rows of 16 bits, MSB = left column):
 // Easy 64, Kinoko 64, Star 64, Time Trial 64, then the demo puzzle.
 import { registerImporter } from './index';

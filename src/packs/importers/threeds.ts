@@ -62,7 +62,7 @@ function chunk(prefix: string, title: Text, group: string, puzzles: PackPuzzle[]
 export function read3ds(data: Uint8Array): Pack[] {
   const t = readCtr(data);
   const raws = t.files.filter(f => /\.bprs2?$/i.test(f.path) && !/sample/i.test(f.path)).map(parseBprs).filter((r): r is Raw => !!r);
-  if (!raws.length) throw new Error('No Picross puzzles found in this 3DS title.');
+  if (!raws.length) throw new Error('No puzzles found in this 3DS title.');
   raws.sort((a, b) => a.file.localeCompare(b.file, 'en', { numeric: true }));
   const toPuzzle = (r: Raw, id: string): PackPuzzle => ({
     id, width: r.w, height: r.h,

@@ -58,11 +58,11 @@ export interface Settings {
   sfx: boolean;
   hints: 'ask' | 'always' | 'never';
   unlockAll: boolean;
-  normalStyle: string; // Picross DS music style for Normal mode
+  normalStyle: string; // unused (older versions)
   freeStyle: string;
   lefty: boolean;
   showTimer: boolean;
-  packMusic: boolean; // play a pack's own music (from the user's game) instead of the Picross DS music
+  packMusic: boolean; // play the games' own music
   packColors: boolean; // colour the screens like the pack's original game
   difficulty: 'auto' | 'easy' | 'normal' | 'hard'; // auto = the level's own rules
   logicHints: boolean;

@@ -15,8 +15,6 @@ interface PM {
   header(title: string): HTMLElement;
   screen(...kids: Array<Node | null>): HTMLElement;
   openPack(p: Pack): void;
-  /** a full Picross DS ROM: becomes the main game (modes on the home screen) instead of a pack */
-  addMainRom?(data: Uint8Array, name: string): Promise<boolean>;
   /** start the "create packs" file picker right away */
   autoCreate?: boolean;
 }
@@ -47,22 +45,7 @@ export function openPackManager(pm: PM) {
   const status = h('div', { class: 'status' });
 
   async function addPacks(incoming: Pack[]) {
-    // the same game from several regions (or imported twice) becomes one pack with all names
-    const merged = new Map<string, Pack>();
-    for (const p of [...pm.packs().filter(x => incoming.some(i => i.id === x.id)), ...incoming]) {
-      const m = merged.get(p.id);
-      merged.set(p.id, m ? mergePacks(m, p) : p);
-    }
-    const ps = [...merged.values()];
-    const cur = pm.packs().filter(x => !merged.has(x.id));
-    for (const p of ps) {
-      // music and other binaries go to their own store; the pack object stays small
-      const { assets, ...rest } = p;
-      for (const a of assets ?? []) await storage.saveAsset(p.id, a.name, a.data);
-      delete (p as any).assets;
-      await storage.savePack(rest as Pack);
-    }
-    pm.setPacks([...cur, ...ps].sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en'))));
+    pm.setPacks(await storePacks(pm.packs(), incoming));
     render();
   }
 
@@ -106,11 +89,6 @@ export function openPackManager(pm: PM) {
       entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png)$/i.test(e.name));
       const msgs: string[] = [];
       for (const e of entries) {
-        if (pm.addMainRom && /\.(nds|srl)$/i.test(e.name) && await pm.addMainRom(e.data, e.name).catch(() => false)) {
-          msgs.push('✓ Picross DS → ' + t('mainGame'));
-          render();
-          continue;
-        }
         const r = await importGameFile(e.name, e.data);
         if (r.ok) {
           for (const p of r.packs) { p.source.file = e.name; made.push(p); }
@@ -152,4 +130,24 @@ export function openPackManager(pm: PM) {
       h('button', { class: 'btn', onClick: () => exportZip(pm.packs()) }, '⤓ ' + t('exportAll'))),
     h('p', { class: 'fine' }, t('createHelp')),
     status, list));
+}
+
+/**
+ * Save new packs (from games, pack files or the command line): the same game from several regions (or imported
+ * twice) becomes one pack with all names; music and other binaries go to their own store. Returns the new list.
+ */
+export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
+  const merged = new Map<string, Pack>();
+  for (const p of [...existing.filter(x => incoming.some(i => i.id === x.id)), ...incoming]) {
+    const m = merged.get(p.id);
+    merged.set(p.id, m ? mergePacks(m, p) : p);
+  }
+  const ps = [...merged.values()];
+  for (const p of ps) {
+    const { assets, ...rest } = p;
+    for (const a of assets ?? []) await storage.saveAsset(p.id, a.name, a.data);
+    delete (p as any).assets;
+    await storage.savePack(rest as Pack);
+  }
+  return [...existing.filter(x => !merged.has(x.id)), ...ps].sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en')));
 }

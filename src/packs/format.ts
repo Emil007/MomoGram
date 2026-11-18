@@ -20,6 +20,8 @@ export interface PackPuzzle {
 export interface PackLevel {
   id: string;
   title: Text;
+  /** name of the level's group (mode), shown when a pack has several */
+  groupTitle?: Text;
   rules: Rules;
   puzzles: PackPuzzle[];
   /** puzzles solved (across the pack) needed to unlock; 0 = open */
@@ -35,6 +37,8 @@ export interface PackTheme {
   palette?: { accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string; style?: 'dmg' | 'gbc' | 'default' };
   /** asset names per role; an SDAT asset also names the sequence ("sound.sdat#SEQ_NAME") */
   music?: Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', string>>;
+  /** every in-game track the game offers (random music picks from these); defaults to play / play2 */
+  tracks?: string[];
 }
 
 /** Binary file belonging to a pack (music), kept in IndexedDB and written next to the pack in zip exports. */

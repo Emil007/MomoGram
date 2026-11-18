@@ -2,7 +2,7 @@
   "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
   "format": 1,
   "repo": "Emil007/MomoGram",
-  "name": "MomoGram (Picross DS)",
+  "name": "MomoGram",
   "start": {
     "program": [
       "MomoGram.exe",
