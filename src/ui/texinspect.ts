@@ -41,12 +41,30 @@ export async function textureInspector(screen: (...k: Array<Node | null>) => HTM
   // tap the pictures that look right; the summary below can be copied and sent to the developer
   const picked = new Set<string>();
   const out = h('textarea', { class: 'tex-out', readonly: true, rows: 6 }) as HTMLTextAreaElement;
-  const update = () => { out.value = picked.size ? `${t.productCode} ${t.names[1] || t.names[0] || ''}\n` + [...picked].join('\n') : ''; };
+  const notes = new Map<string, HTMLInputElement>();
+  const general = h('input', { type: 'text', class: 'tex-note', placeholder: 'General comment (optional)', onInput: () => update() }) as HTMLInputElement;
+  // everything the developer needs in one block: which file, which release, what looked right
+  const update = () => {
+    const lines = [
+      'MomoGram texture report ' + (window as any).MOMOGRAM_VERSION,
+      `file: ${f.name} (${f.size} bytes)`,
+      `product: ${t.productCode}  title id: ${t.titleId}`,
+      `title: ${t.names.filter(Boolean).slice(0, 3).join(' | ')}`,
+      `puzzle files: ${t.files.filter(x => /\.bprs2?$/i.test(x.path)).length}, textures: ${t.files.filter(x => /\.jtex$/i.test(x.path)).length}`,
+      'looks right:',
+      ...[...picked].map(k => '  ' + k),
+      ...[...notes].filter(([, el]) => el.value.trim()).map(([k, el]) => `note ${k}: ${el.value.trim()}`),
+      general.value.trim() ? 'comment: ' + general.value.trim() : '',
+    ];
+    out.value = lines.filter(Boolean).join('\n');
+  };
   const copy = h('button', { class: 'btn primary', onClick: () => { out.select(); navigator.clipboard?.writeText(out.value).catch(() => document.execCommand('copy')); } }, 'Copy');
   const body = h('div', { class: 'tex-inspect' }, h('p', { class: 'fine' }, f.name + ' · tap every picture that looks right (the coloured solution), then copy the text at the bottom.'));
   for (const p of puzzles) {
     const base = p.path.replace(/\.bprs2?$/i, '');
-    const row = h('div', { class: 'tex-row' }, h('b', {}, base.split('/').pop()!));
+    const note = h('input', { type: 'text', class: 'tex-note', placeholder: 'Comment for this puzzle (optional)', onInput: () => update() }) as HTMLInputElement;
+    notes.set(base.split('/').pop()!, note);
+    const row = h('div', { class: 'tex-row' }, h('b', {}, base.split('/').pop()!), note);
     const sibs = t.files.filter(x => x.path.startsWith(base + '_') && /\.jtex$/i.test(x.path));
     for (const s of sibs) {
       let x: Uint8Array;
@@ -67,6 +85,7 @@ export async function textureInspector(screen: (...k: Array<Node | null>) => HTM
     body.append(row);
     void byName;
   }
-  body.append(h('div', { class: 'tex-result' }, out, copy));
+  update();
+  body.append(general, h('div', { class: 'tex-result' }, out, copy));
   screen(header, body);
 }
