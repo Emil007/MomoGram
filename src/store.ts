@@ -81,7 +81,30 @@ function readJson<T>(k: string, def: T): T {
 }
 
 export const settings: Settings = readJson('momogram.settings', DEFAULTS);
-export function saveSettings() { localStorage.setItem('momogram.settings', JSON.stringify(settings)); }
+/** settings that belong to this device and aren't synced with an account */
+const DEVICE_SETTINGS: Array<keyof Settings> = ['music', 'musicVolume', 'sfx', 'lefty', 'toolsRight', 'normalStyle', 'freeStyle'];
+export function saveSettings() {
+  const old = localStorage.getItem('momogram.settings');
+  localStorage.setItem('momogram.settings', JSON.stringify(settings));
+  // only a change of a shared setting counts for syncing
+  try {
+    const was = old ? JSON.parse(old) : {};
+    if (Object.keys(settings).some(k => !DEVICE_SETTINGS.includes(k as keyof Settings) && JSON.stringify(was[k]) !== JSON.stringify((settings as any)[k]))) {
+      localStorage.setItem('momogram.settingstime', new Date().toISOString());
+      changed();
+    }
+  } catch { /* ignore */ }
+}
+function sharedSettings(): Partial<Settings> {
+  const out: any = {};
+  for (const [k, v] of Object.entries(settings)) if (!DEVICE_SETTINGS.includes(k as keyof Settings)) out[k] = v;
+  return out;
+}
+
+// ---- change notifications (the server sync listens) ----
+const listeners: Array<() => void> = [];
+export function onLocalChange(f: () => void) { listeners.push(f); }
+function changed() { for (const f of listeners) try { f(); } catch { /* ignore */ } }
 
 type ProgressMap = Record<string, PuzzleProgress>;
 
@@ -114,7 +137,10 @@ const pk = (k: string) => `momogram.${k}.${activeProfile().id}`;
 let progress: ProgressMap = {};
 /** per pack: when its progress last changed (ISO date) — decides what an import may overwrite */
 let packTimes: Record<string, string> = {};
+/** per pack: when its progress was last reset — an older clear elsewhere must not bring it back */
+let resetTimes: Record<string, string> = {};
 function loadActive() {
+  try { resetTimes = JSON.parse(localStorage.getItem(pk('resets')) || '{}'); } catch { resetTimes = {}; }
   try { progress = JSON.parse(localStorage.getItem(pk('progress')) || '{}'); } catch { progress = {}; }
   try { packTimes = JSON.parse(localStorage.getItem(pk('packtimes')) || '{}'); } catch { packTimes = {}; }
 }
@@ -126,6 +152,7 @@ function persist(touched?: string[]) {
   for (const id of touched ?? []) packTimes[id] = now;
   localStorage.setItem(pk('progress'), JSON.stringify(progress));
   localStorage.setItem(pk('packtimes'), JSON.stringify(packTimes));
+  if (touched?.length) changed();
 }
 
 export function switchProfile(id: string) { if (loadProfiles().some(p => p.id === id)) { localStorage.setItem('momogram.profile', id); loadActive(); } }
@@ -143,7 +170,7 @@ export function deleteProfile(id: string) {
   const all = loadProfiles().filter(p => p.id !== id);
   if (!all.length) return;
   storeProfiles(all);
-  for (const k of ['progress', 'quick', 'packtimes']) localStorage.removeItem(`momogram.${k}.${id}`);
+  for (const k of ['progress', 'quick', 'quicktime', 'packtimes', 'resets', 'account']) localStorage.removeItem(`momogram.${k}.${id}`);
   if (localStorage.getItem('momogram.profile') === id) switchProfile(all[0].id);
 }
 
@@ -169,13 +196,17 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
 export function resetProgress(packId: string) {
   loadActive();
   for (const k of Object.keys(progress)) if (k.startsWith(packId + '/')) delete progress[k];
+  resetTimes[packId] = new Date().toISOString();
+  localStorage.setItem(pk('resets'), JSON.stringify(resetTimes));
   persist([packId]);
 }
 
 export interface QuickSave { packId: string; levelId: string; puzzleId: string; state: BoardSnapshot }
 export function setQuickSave(q: QuickSave | null) {
+  const had = localStorage.getItem(pk('quick')) !== null;
   if (q) localStorage.setItem(pk('quick'), JSON.stringify(q));
   else localStorage.removeItem(pk('quick'));
+  if (q || had) { localStorage.setItem(pk('quicktime'), new Date().toISOString()); changed(); }
 }
 export function getQuickSave(): QuickSave | null {
   try { return JSON.parse(localStorage.getItem(pk('quick')) || 'null'); } catch { return null; }
@@ -189,9 +220,11 @@ export interface SaveFile {
   format: 'momogram-save'; version: 2;
   profile: { id: string; name: string };
   saved: string;
-  packs: Record<string, { updated: string; progress: Record<string, PuzzleProgress> }>;
+  packs: Record<string, { updated: string; progress: Record<string, PuzzleProgress>; reset?: string }>;
   quick: QuickSave | null;
   settings?: Partial<Settings>;
+  quickSaved?: string; // when the quick save was last set or cleared
+  settingsSaved?: string; // when a shared setting last changed
 }
 
 function packsOf(p: ProgressMap): SaveFile['packs'] {
@@ -201,12 +234,89 @@ function packsOf(p: ProgressMap): SaveFile['packs'] {
     (out[id] ??= { updated: packTimes[id] ?? '1970-01-01T00:00:00.000Z', progress: {} }).progress[k.slice(i + 1)] = v;
   }
   for (const id of Object.keys(packTimes)) out[id] ??= { updated: packTimes[id], progress: {} }; // reset packs too
+  for (const [id, r] of Object.entries(resetTimes)) if (out[id]) out[id].reset = r;
   return out;
 }
 
 export function makeSave(): SaveFile {
   const me = activeProfile();
-  return { format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: new Date().toISOString(), packs: packsOf(progress), quick: getQuickSave(), settings };
+  return {
+    format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: new Date().toISOString(), packs: packsOf(progress), quick: getQuickSave(),
+    settings: sharedSettings(), quickSaved: localStorage.getItem(pk('quicktime')) ?? undefined, settingsSaved: localStorage.getItem('momogram.settingstime') ?? undefined,
+  };
+}
+
+/**
+ * Merge a save of the active profile (from the server) into this device: per pack the newer data wins, the quick
+ * save and the shared settings likewise. Returns true when anything here changed.
+ */
+export function mergeSave(s: SaveFile): boolean {
+  loadActive();
+  let any = false;
+  for (const [id, rp] of Object.entries(s.packs)) {
+    const local = packTimes[id];
+    const mine: Record<string, PuzzleProgress> = {};
+    for (const [k, v] of Object.entries(progress)) if (k.startsWith(id + '/')) mine[k.slice(id.length + 1)] = v;
+    // a reset on one side drops what the other side did before it; otherwise both sides are joined puzzle by puzzle
+    let merged: Record<string, PuzzleProgress>;
+    if (!local || (rp.reset && rp.reset > local)) merged = { ...rp.progress };
+    else if (resetTimes[id] && resetTimes[id] > rp.updated) merged = mine;
+    else {
+      merged = { ...mine };
+      for (const [pz, v] of Object.entries(rp.progress)) merged[pz] = bestOf(merged[pz], v);
+    }
+    const same = (x: Record<string, PuzzleProgress>) => JSON.stringify(sortKeys(x)) === JSON.stringify(sortKeys(merged));
+    if (rp.reset && (!resetTimes[id] || rp.reset > resetTimes[id])) { resetTimes[id] = rp.reset; any = true; }
+    if (same(mine) && local) continue;
+    for (const k of Object.keys(mine)) delete progress[id + '/' + k];
+    for (const [pz, v] of Object.entries(merged)) progress[id + '/' + pz] = { ...v };
+    // the result is what the server has: take its time; something new from both sides: it's new for everyone
+    packTimes[id] = same(rp.progress) ? rp.updated : new Date().toISOString();
+    any = true;
+  }
+  if (any) { localStorage.setItem(pk('resets'), JSON.stringify(resetTimes)); persist(); }
+  const qt = localStorage.getItem(pk('quicktime'));
+  if (s.quickSaved && (!qt || s.quickSaved > qt)) {
+    if (s.quick) localStorage.setItem(pk('quick'), JSON.stringify(s.quick)); else localStorage.removeItem(pk('quick'));
+    localStorage.setItem(pk('quicktime'), s.quickSaved);
+    any = true;
+  }
+  const st = localStorage.getItem('momogram.settingstime');
+  if (s.settings && s.settingsSaved && (!st || s.settingsSaved > st)) {
+    for (const [k, v] of Object.entries(s.settings)) if (!DEVICE_SETTINGS.includes(k as keyof Settings) && k in DEFAULTS) (settings as any)[k] = v;
+    localStorage.setItem('momogram.settings', JSON.stringify(settings));
+    localStorage.setItem('momogram.settingstime', s.settingsSaved);
+    any = true;
+  }
+  return any;
+}
+
+function sortKeys(o: Record<string, PuzzleProgress>) {
+  return Object.keys(o).sort().map(k => [k, Object.keys(o[k]).sort().map(j => [j, (o[k] as any)[j]])]);
+}
+function bestOf(a: PuzzleProgress | undefined, b: PuzzleProgress): PuzzleProgress {
+  if (!a) return { ...b };
+  const medal = !a.medal ? b.medal : !b.medal ? a.medal : MEDALS.indexOf(a.medal) >= MEDALS.indexOf(b.medal) ? a.medal : b.medal;
+  const best = a.best === undefined ? b.best : b.best === undefined ? a.best : Math.min(a.best, b.best);
+  const out: PuzzleProgress = { ...a, ...b };
+  if (a.cleared || b.cleared) out.cleared = true;
+  if (a.underLimit || b.underLimit) out.underLimit = true;
+  if (medal) out.medal = medal; else delete out.medal;
+  if (best !== undefined) out.best = best; else delete out.best;
+  return out;
+}
+
+/** give a local profile another id (to join it with an account's profile); its progress moves along */
+export function rekeyProfile(from: string, to: string, name?: string) {
+  if (from === to) return;
+  for (const k of ['progress', 'quick', 'quicktime', 'packtimes', 'resets', 'account']) {
+    const v = localStorage.getItem(`momogram.${k}.${from}`);
+    if (v !== null) localStorage.setItem(`momogram.${k}.${to}`, v);
+    localStorage.removeItem(`momogram.${k}.${from}`);
+  }
+  storeProfiles(loadProfiles().map(p => p.id === from ? { ...p, id: to, name: name ?? p.name } : p));
+  if (localStorage.getItem('momogram.profile') === from) localStorage.setItem('momogram.profile', to);
+  loadActive();
 }
 
 /** solved puzzles per pack id (of the active profile, or of a save) */

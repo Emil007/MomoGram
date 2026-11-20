@@ -4,7 +4,8 @@ import { importGameFile } from '../packs/importers/index';
 import '../packs/importers/all';
 import { storage } from '../store';
 import { t, lang } from '../i18n';
-import { h, pickFiles } from '../app';
+import { h, pickFiles, serverError } from '../app';
+import * as Sync from '../sync';
 import { download, makeZip, unzipAll } from '../util/files';
 import { extractAll, isArchive } from '../util/archive';
 
@@ -45,6 +46,7 @@ export function openPackManager(pm: PM) {
   async function addPacks(incoming: Pack[]) {
     pm.setPacks(await storePacks(pm.packs(), incoming));
     render();
+    renderOnline();
   }
 
   /** one button for everything: game files, archives of games, pack files (.json) and pack exports (.zip) */
@@ -65,8 +67,25 @@ export function openPackManager(pm: PM) {
         if (/\.zip$/i.test(f.name)) { const d = new Uint8Array(await f.arrayBuffer()); try { entries = unzipAll(d); } catch { entries = await extractAll(f); } }
         else entries = isArchive(f.name) ? await extractAll(f) : [{ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }];
       } catch (e: any) { li.textContent = f.name + ': ✕ ' + (e.message || e); continue; }
+      const r = await readEntries(entries, withMusic());
+      made.push(...r.made); fromPackFiles += r.fromPackFiles;
+      li.textContent = f.name + ': ' + (r.msgs.join(' · ') || '✕ ' + t('unsupported'));
+    }
+    if (made.length) {
+      await addPacks(made);
+      const ids = new Set(made.map(p => p.id));
+      const unique = pm.packs().filter(p => ids.has(p.id));
+      // offering an export only makes sense for packs made from games
+      if (made.length > fromPackFiles) results.append(h('li', {}, h('button', { class: 'btn primary', onClick: () => exportZip(unique, 'momogram-new-packs.zip') }, t('exportAll'))));
+    }
+  }
+
+  /** what's in a file or archive: MomoGram packs (with their files) and games */
+  async function readEntries(entries: Array<{ name: string; data: Uint8Array }>, keepAssets: boolean) {
+    const made: Pack[] = [], msgs: string[] = [];
+    let fromPackFiles = 0;
+    {
       entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png|md)$/i.test(e.name) && !/(^|\/)(__MACOSX|\.)/.test(e.name));
-      const msgs: string[] = [];
       // MomoGram pack files, with their music next to them (<pack>.assets/<name>)
       const assetDirs: string[] = [];
       for (const e of entries) {
@@ -77,7 +96,7 @@ export function openPackManager(pm: PM) {
         const dir = e.name.replace(/[^/]*$/, '') + assetDir(p);
         assetDirs.push(dir, e.name);
         const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => ({ name: x.name.slice(dir.length), data: x.data }));
-        if (assets.length && withMusic()) p.assets = assets;
+        if (assets.length && keepAssets) p.assets = assets;
         made.push(p); fromPackFiles++;
         msgs.push(`✓ ${pickAny(p.title, lang())} (${p.levels.reduce((a: number, l: any) => a + l.puzzles.length, 0)})`);
       }
@@ -92,15 +111,8 @@ export function openPackManager(pm: PM) {
           msgs.push(`✕ ${e.name}: ${r.message === 'encrypted' ? t('encrypted') : r.message === 'unsupported' ? t('unsupported') : r.message}`);
         }
       }
-      li.textContent = f.name + ': ' + (msgs.join(' · ') || '✕ ' + t('unsupported'));
     }
-    if (made.length) {
-      await addPacks(made);
-      const ids = new Set(made.map(p => p.id));
-      const unique = pm.packs().filter(p => ids.has(p.id));
-      // offering an export only makes sense for packs made from games
-      if (made.length > fromPackFiles) results.append(h('li', {}, h('button', { class: 'btn primary', onClick: () => exportZip(unique, 'momogram-new-packs.zip') }, t('exportAll'))));
-    }
+    return { made, msgs, fromPackFiles };
   }
 
   // music in zip exports / imports can be left out to save space (the switch is remembered)
@@ -108,17 +120,83 @@ export function openPackManager(pm: PM) {
   const musicSwitch = h('label', { class: 'opt zipmusic' }, h('span', {}, t('zipMusic')),
     h('input', { type: 'checkbox', checked: withMusic() ? true : undefined, onChange: (e: Event) => localStorage.setItem('momogram.zipMusic', (e.target as HTMLInputElement).checked ? 'on' : 'off') }));
 
-  async function exportZip(ps: Pack[], name = 'momogram-packs.zip') {
+  async function packZip(ps: Pack[], withAssets: boolean): Promise<Uint8Array> {
     const entries: Array<{ name: string; text?: string; data?: Uint8Array }> = [];
     for (const p of ps) {
       const { assets, ...rest } = p;
       entries.push({ name: packFileName(p), text: JSON.stringify(rest) });
-      for (const a of withMusic() ? await storage.assetNames(p.id).catch(() => [] as string[]) : []) {
+      for (const a of withAssets ? await storage.assetNames(p.id).catch(() => [] as string[]) : []) {
         const data = await storage.loadAsset(p.id, a);
         if (data) entries.push({ name: assetDir(p) + a, data });
       }
     }
-    download(name, makeZip(entries), 'application/zip');
+    return makeZip(entries);
+  }
+  async function exportZip(ps: Pack[], name = 'momogram-packs.zip') { download(name, await packZip(ps, withMusic()), 'application/zip'); }
+
+  // ---- packs on the MomoGram server (everything: packs from games keep their music and pictures) ----
+  const online = h('div', { class: 'online' });
+  const puzzlesOf = (p: Pack) => p.levels.reduce((a, l) => a + l.puzzles.length, 0);
+  async function renderOnline() {
+    online.innerHTML = '';
+    if (!Sync.account()) { if (Sync.serverUrl()) online.append(h('p', { class: 'fine' }, t('serverLogin'))); return; }
+    const msg = h('p', { class: 'fine server-msg' });
+    online.append(h('h2', {}, '☁ ' + t('onServer')), msg);
+    let list: Sync.ServerPack[];
+    try { list = await Sync.serverPacks(); } catch (e) { msg.textContent = serverError(e); msg.classList.add('bad'); return; }
+    const have = new Set(pm.packs().map(p => p.id));
+    if (!list.length) online.append(h('p', { class: 'fine' }, t('serverEmpty')));
+    for (const sp of list) {
+      const title = pickAny(sp.meta?.title, lang()) || sp.id;
+      const dl = h('button', { class: 'btn ghost', title: t('download') }, '⤓');
+      dl.onclick = async () => {
+        dl.disabled = true; dl.textContent = '…';
+        try {
+          const r = await readEntries(unzipAll(await Sync.downloadPack(sp.id)), true);
+          if (r.made.length) await addPacks(r.made);
+          renderOnline();
+        } catch (e) { msg.textContent = serverError(e); msg.classList.add('bad'); dl.disabled = false; dl.textContent = '⤓'; }
+      };
+      const mine = sp.by === Sync.account()?.name || Sync.account()?.admin;
+      online.append(h('div', { class: 'pack' },
+        h('div', { class: 'btn packbtn static' },
+          h('b', {}, title),
+          h('small', {}, [sp.meta?.platform, sp.meta?.puzzles !== undefined ? `${sp.meta.puzzles} ${t('puzzles')}` : '', sp.size < 1048576 ? `${Math.max(1, Math.round(sp.size / 1024))} KB` : `${(sp.size / 1048576).toFixed(1)} MB`, sp.by ? t('uploadedBy', { name: sp.by }) : '', have.has(sp.id) ? '✓ ' + t('installed') : ''].filter(Boolean).join(' · '))),
+        dl,
+        mine ? h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
+          if (!confirm(t('delete') + ' (' + t('onServer') + '): ' + title + '?')) return;
+          try { await Sync.deleteServerPack(sp.id); } catch (e) { alert(serverError(e)); }
+          renderOnline();
+        } }, '🗑') : null));
+    }
+    // upload: pick local packs
+    const onServer = new Map(list.map(s => [s.id, s]));
+    const up = h('button', { class: 'btn', onClick: () => {
+      const box = h('div', { class: 'uplist' });
+      const checks = pm.packs().map(p => {
+        const c = h('input', { type: 'checkbox', checked: onServer.has(p.id) ? undefined : true }) as HTMLInputElement;
+        box.append(h('label', {}, c, pickAny(p.title, lang()) + (onServer.has(p.id) ? ' (☁)' : '')));
+        return [p, c] as const;
+      });
+      const bar = h('div', { class: 'bar-inner', style: 'width:0%' });
+      const go = h('button', { class: 'btn primary' }, '⇧ ' + t('upload'));
+      go.onclick = async () => {
+        const pick = checks.filter(([, c]) => c.checked).map(([p]) => p);
+        go.disabled = true;
+        try {
+          for (let i = 0; i < pick.length; i++) {
+            const p = pick[i];
+            const zip = await packZip([p], true);
+            await Sync.uploadPack(p.id, { title: p.title, puzzles: puzzlesOf(p), platform: p.source.platform }, zip,
+              d => { bar.style.width = ((i + d) / pick.length) * 100 + '%'; });
+          }
+          renderOnline();
+        } catch (e) { msg.textContent = serverError(e); msg.classList.add('bad'); go.disabled = false; }
+      };
+      box.append(h('div', { class: 'bar-outer' }, bar), go);
+      up.replaceWith(box);
+    } }, '⇧ ' + t('uploadPacks'));
+    if (pm.packs().length) online.append(up);
   }
 
   render();
@@ -128,7 +206,8 @@ export function openPackManager(pm: PM) {
       h('button', { class: 'btn', onClick: () => exportZip(pm.packs()) }, '⤓ ' + t('exportAll'))),
     musicSwitch,
     h('p', { class: 'fine' }, t('createHelp')),
-    status, list));
+    status, list, online));
+  renderOnline();
 }
 
 /**

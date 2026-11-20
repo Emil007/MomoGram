@@ -162,6 +162,10 @@ Every push that changes the version builds a release on GitHub, for all of these
 The desktop app takes `--rom <file.nds>` (or a ROM dropped on the program) to load a ROM at start, and
 `--fullscreen`.
 
+## Your own server
+
+If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there and shows high scores (puzzles solved, medals, fastest times). Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
+
 ## Controls
 
 | | Touch / mouse | Keyboard | Gamepad / Steam Deck |

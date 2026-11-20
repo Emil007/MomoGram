@@ -10,6 +10,7 @@ import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager, storePacks } from './ui/packs';
+import * as Sync from './sync';
 import { Audio as Snd } from './audio';
 import { unzipFirst, packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
@@ -100,6 +101,8 @@ export async function boot() {
     } catch (e) { console.warn('game from command line', e); }
   }
   home();
+  // a MomoGram server keeps the profile the same on every device: when it brings news, show them
+  Sync.startAutoSync(() => { if (document.querySelector('.home')) home(); });
 }
 
 const DS_GROUPS: Record<string, Pack['title']> = {
@@ -200,6 +203,7 @@ export function home() {
   screen(h('div', { class: 'home' }, nowPlaying(), top, quick,
     h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, t('library')), arrange), lib,
     h('div', { class: 'menu small' },
+      Sync.account() ? h('button', { class: 'btn', onClick: () => scoresScreen() }, '🏆 ' + t('scores')) : null,
       h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
       h('button', { class: 'btn', onClick: () => editorScreen() }, '✎ ' + t('editor')),
       h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))),
@@ -457,9 +461,56 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
       stat(t('level'), h('span', { class: 'diff d' + puzzleLevel(pz) }, t('diff' + puzzleLevel(pz)))),
       stat(t('best'), pr.best !== undefined ? formatTime(pr.best) : '–'),
       stat(t('medal'), pr.medal ? medalEl(pr.medal, true) : '–')),
+    fastestRow(pack.id, pz.id),
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
     h('button', { class: 'btn primary big start', onClick: go }, icon('play'), t('start'))));
+}
+
+/** the best times of everyone on the server for one puzzle (this profile's own time from here, it may be newer) */
+function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
+  const sc = Sync.scores(), me = Sync.account();
+  if (!sc || !me) return null;
+  const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name);
+  const mine = getProgress(packId, puzzleId).best;
+  if (mine !== undefined) list.push([me.name, mine]);
+  if (!list.length) return null;
+  list.sort((a, b) => a[1] - b[1]);
+  return h('p', { class: 'fastest' }, '🏆 ' + t('fastest') + ': ',
+    ...list.slice(0, 3).map(([n, ms], k) => h('span', { class: n === me.name ? 'me' : '' }, `${k + 1}. ${n} ${formatTime(ms)}`)));
+}
+
+/** everyone on the server: puzzles solved, medals, and per game */
+async function scoresScreen() {
+  const body = h('div', { class: 'scores' });
+  screen(header(t('scores'), home), body);
+  let sc = Sync.scores(), note = '';
+  const draw = () => {
+    body.innerHTML = '';
+    if (!sc || !sc.users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); return; }
+    const me = Sync.account()?.name;
+    const medal = (m: string, n: number) => n ? h('span', { class: 'mcount' }, medalEl(m as Medal, false), '×' + n) : null;
+    body.append(h('ol', { class: 'ranking' }, ...sc.users.map((u, k) => h('li', { class: u.name === me ? 'me' : '' },
+      h('span', { class: 'rank' }, String(k + 1)),
+      h('div', { class: 'who' }, h('b', {}, u.name), h('small', {}, medal('platinum', u.medals.platinum), medal('gold', u.medals.gold), medal('silver', u.medals.silver), medal('bronze', u.medals.bronze))),
+      h('b', { class: 'num' }, String(u.solved))))));
+    // per game: the installed packs anyone has played
+    const packs = allPacks().filter(p => sc!.users.some(u => u.packs[p.id]));
+    if (packs.length) {
+      body.append(h('h2', { class: 'section-title' }, t('perGame')), h('div', { class: 'score-table' }, h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}), ...sc.users.map(u => h('th', { class: u.name === me ? 'me' : '' }, u.name)))),
+        h('tbody', {}, ...packs.map(p => {
+          const total = countPack(p)[1];
+          const top = Math.max(...sc!.users.map(u => u.packs[p.id] ?? 0));
+          return h('tr', {}, h('th', {}, pickAny(p.title, packLang())),
+            ...sc!.users.map(u => { const n = u.packs[p.id] ?? 0; return h('td', { class: (n && n === top ? 'top' : '') + (u.name === me ? ' me' : '') }, n ? `${n}/${total}` : '–'); }));
+        })))));
+    }
+    if (note) body.append(h('p', { class: 'fine' }, note));
+  };
+  draw();
+  try { await Sync.sync(); sc = await Sync.refreshScores(); note = ''; } catch { note = t('scoresOffline'); }
+  if (body.isConnected) draw();
 }
 
 async function resumeQuick() {
@@ -862,6 +913,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
       h('div', {}, t('time'), h('b', {}, formatTime(board.totalMs))),
       board.mistakes ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(board.penaltyMs))) : null,
       best !== undefined ? h('div', {}, t('best'), h('b', {}, formatTime(best))) : null),
+    fastestRow(pack.id, pz.id),
     h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => { stop(); back(); } }, t('toList')), next)));
   setTimeout(() => { Snd.stop(); usePack(pack, 'menu'); }, pack.theme?.music?.clear ? 4500 : 1500);
   let raf = 0, last = performance.now();
@@ -965,6 +1017,65 @@ function saveSection(): HTMLElement {
     h('p', { class: 'fine' }, t('saveHelp')));
 }
 
+export function serverError(e: any): string {
+  const code = e instanceof Sync.ServerError ? e.code : String(e?.message || e);
+  const s = t('err.' + code);
+  return s === 'err.' + code ? t('err.other', { code }) : s;
+}
+
+/** the server: its address (this device), and the active profile's account there */
+function serverSection(): HTMLElement {
+  const box = h('div', { class: 'server-box' });
+  const msg = h('p', { class: 'fine left server-msg' });
+  const say = (s: string, bad = false) => { msg.textContent = s; msg.classList.toggle('bad', bad); };
+  const url = h('input', { type: 'url', class: 'text', placeholder: 'https://…', value: Sync.serverUrl(), 'aria-label': t('serverUrl'), autocapitalize: 'off', spellcheck: 'false' }) as HTMLInputElement;
+  const connect = async () => {
+    Sync.setServerUrl(url.value); url.value = Sync.serverUrl();
+    if (!url.value) { draw(); return; }
+    draw();
+    try { await Sync.serverInfo(); say(t('serverOk')); } catch (e) { say(serverError(e), true); }
+  };
+  const draw = () => {
+    box.innerHTML = '';
+    box.append(h('label', { class: 'field' }, h('span', {}, t('serverUrl')), h('div', { class: 'row' }, url, h('button', { class: 'btn', onClick: connect }, t('serverConnect')))));
+    const a = Sync.account();
+    if (a) {
+      const st = Sync.syncState();
+      const when = a.synced ? new Date(a.synced).toLocaleString() : '–';
+      box.append(
+        h('p', { class: 'fine left' }, '☁ ' + t('loggedIn', { name: a.name }) + ' · ' + (st.state === 'syncing' ? t('syncing') : t('syncedAt', { when }))),
+        h('div', { class: 'row wrap' },
+          h('button', { class: 'btn primary', onClick: async () => { say(t('syncing')); const c = await Sync.sync(); const s = Sync.syncState(); say(s.error ? serverError(new Sync.ServerError(s.error, 0)) : t('syncedAt', { when: new Date().toLocaleString() }), !!s.error); if (c) optionsScreen(); else draw(); } }, '⟳ ' + t('syncNow')),
+          h('button', { class: 'btn', onClick: async () => { await Sync.signOut(); draw(); } }, t('logout'))));
+      if (st.error) say(serverError(new Sync.ServerError(st.error, 0)), true);
+    } else if (Sync.serverUrl()) {
+      const name = h('input', { type: 'text', class: 'text', autocomplete: 'username', value: activeProfile().name, 'aria-label': t('accName') }) as HTMLInputElement;
+      const pass = h('input', { type: 'password', class: 'text', autocomplete: 'current-password', 'aria-label': t('accPassword') }) as HTMLInputElement;
+      const invite = h('input', { type: 'text', class: 'text', placeholder: t('accInviteNote'), autocapitalize: 'off', 'aria-label': t('accInvite') }) as HTMLInputElement;
+      const ask = (q: { local: string; remote: string }) => new Promise<'merge' | 'separate'>(res =>
+        choose(t('mergeAsk', q), [[t('mergeYes'), () => res('merge')], [t('mergeNo'), () => res('separate')]]));
+      const go = async (register: boolean) => {
+        say('…');
+        try {
+          Sync.setServerUrl(url.value);
+          await Sync.signIn(name.value.trim(), pass.value, register ? invite.value.trim() : undefined, ask);
+          optionsScreen();
+        } catch (e) { say(serverError(e), true); }
+      };
+      box.append(
+        h('label', { class: 'field' }, h('span', {}, t('accName')), name),
+        h('label', { class: 'field' }, h('span', {}, t('accPassword')), pass),
+        h('label', { class: 'field' }, h('span', {}, t('accInvite')), invite),
+        h('div', { class: 'row wrap' },
+          h('button', { class: 'btn primary', onClick: () => go(false) }, t('login')),
+          h('button', { class: 'btn', onClick: () => go(true) }, t('register'))));
+    }
+    box.append(msg, h('p', { class: 'fine left' }, t('serverHelp')));
+  };
+  draw();
+  return box;
+}
+
 /** switch, create, rename or delete profiles */
 function profileDialog(after: () => void) {
   const me = activeProfile();
@@ -973,7 +1084,7 @@ function profileDialog(after: () => void) {
   opts.push(['✎ ' + t('renameProfile'), () => { const n = prompt(t('profileName'), me.name); if (n !== null && n.trim()) renameProfile(n); }]);
   if (profiles().length > 1) opts.push(['🗑 ' + t('deleteProfile', { name: me.name }), () => { if (confirm(t('deleteProfile', { name: me.name }) + '?')) deleteProfile(me.id); }]);
   opts.push([t('back'), () => {}]);
-  choose(t('profile'), opts).then(after);
+  choose(t('profile'), opts).then(() => { after(); if (Sync.account()) Sync.sync().then(c => { if (c) after(); }); });
 }
 
 // ---------------------------------------------------------------- options
@@ -1009,6 +1120,7 @@ function optionsScreen() {
       row(t('toolsRight'), toggle('toolsRight')),
       row(t('language'), langSel)),
     card(t('secSave'), saveSection()),
+    card(t('secServer'), serverSection()),
     card(t('secAbout'),
       h('p', { class: 'fine left' }, t('controls')),
       h('p', { class: 'fine left' }, t('musicNote')),

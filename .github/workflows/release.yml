@@ -54,6 +54,8 @@ jobs:
           cp README.md LICENSE momogram-web/
           zip -qr out/MomoGram-${{ needs.version.outputs.version }}-web.zip momogram-web
           cp recomplauncher.json out/
+          # the server for your own web space (PHP + MySQL/SQLite)
+          cp -r server momogram-server && zip -qr out/MomoGram-${{ needs.version.outputs.version }}-server.zip momogram-server
       - uses: actions/upload-artifact@v4
         with: { name: web, path: out/* }
 
