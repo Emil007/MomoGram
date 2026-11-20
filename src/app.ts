@@ -192,7 +192,7 @@ export function home() {
   renderLibrary(lib, null);
   const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { libEdit = !libEdit; renderLibrary(lib, null); arrange.classList.toggle('on', libEdit); } }, t('arrange'));
 
-  screen(h('div', { class: 'home' }, top, quick,
+  screen(h('div', { class: 'home' }, nowPlaying(), top, quick,
     h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, t('library')), arrange), lib,
     h('div', { class: 'menu small' },
       h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
@@ -528,6 +528,34 @@ function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear', loop = true
   if (role === 'menu') return menuMusic(pack);
   const ref = pack?.theme?.music?.[role];
   if (pack && ref && settings.packMusic) Snd.playPack(pack.id, ref, loop);
+}
+
+/** readable name of a track ref: "stage_jazz_SEQ" → "stage jazz", "Bgm_Home.bcstm" → "Bgm Home", "x#gb:5" → "Song 5" */
+function trackName(ref: string): string {
+  const [file, seq] = ref.split('#');
+  const m = seq?.match(/^(?:gb|spc|snes):(\d+)/i);
+  if (m) return `Song ${m[1]}`;
+  return (seq ?? file).replace(/\.(bcstm|sdat|gbsnd|spc)$/i, '').replace(/_SEQ$/i, '').replace(/[_-]+/g, ' ').trim();
+}
+
+/** "♪ track · game" on the home screen; tapping it skips to another track from all games */
+function nowPlaying(): HTMLElement {
+  const el = h('button', { class: 'now-playing', title: t('skipTrack'), onClick: () => {
+    const pool = allPacks().flatMap(p => [...menuTracks(p), ...packTracks(p)]).filter(x => x.pack.id + '/' + x.ref !== Snd.current());
+    if (!pool.length) return;
+    const tr = pool[Math.floor(Math.random() * pool.length)];
+    Snd.playPack(tr.pack.id, tr.ref);
+  } });
+  const show = (id: string) => {
+    if (!el.isConnected && el.dataset.on) return;
+    const i = id.indexOf('/'), pack = allPacks().find(p => p.id === id.slice(0, i));
+    el.hidden = !id || !pack;
+    el.replaceChildren(h('span', { class: 'np-note' }, '♪'), h('b', {}, id ? trackName(id.slice(i + 1)) : ''), h('small', {}, pack ? pickAny(pack.title, packLang()) : ''), h('span', { class: 'np-skip' }, '⏭'));
+  };
+  el.dataset.on = '1';
+  show(Snd.current());
+  Snd.onChange(show);
+  return el;
 }
 
 /** title and menu tracks of a game */

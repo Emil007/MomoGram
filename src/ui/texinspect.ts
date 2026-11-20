@@ -38,7 +38,12 @@ export async function textureInspector(screen: (...k: Array<Node | null>) => HTM
   const t = readCtr(new Uint8Array(await f.arrayBuffer()));
   const byName = new Map(t.files.map(x => [x.path, x]));
   const puzzles = t.files.filter(x => /\.bprs2?$/i.test(x.path) && !/sample/i.test(x.path)).slice(0, 8);
-  const body = h('div', { class: 'tex-inspect' }, h('p', { class: 'fine' }, f.name));
+  // tap the pictures that look right; the summary below can be copied and sent to the developer
+  const picked = new Set<string>();
+  const out = h('textarea', { class: 'tex-out', readonly: true, rows: 6 }) as HTMLTextAreaElement;
+  const update = () => { out.value = picked.size ? `${t.productCode} ${t.names[1] || t.names[0] || ''}\n` + [...picked].join('\n') : ''; };
+  const copy = h('button', { class: 'btn primary', onClick: () => { out.select(); navigator.clipboard?.writeText(out.value).catch(() => document.execCommand('copy')); } }, 'Copy');
+  const body = h('div', { class: 'tex-inspect' }, h('p', { class: 'fine' }, f.name + ' · tap every picture that looks right (the coloured solution), then copy the text at the bottom.'));
   for (const p of puzzles) {
     const base = p.path.replace(/\.bprs2?$/i, '');
     const row = h('div', { class: 'tex-row' }, h('b', {}, base.split('/').pop()!));
@@ -51,7 +56,10 @@ export async function textureInspector(screen: (...k: Array<Node | null>) => HTM
       const cell = h('div', { class: 'tex-file' }, h('small', {}, `${s.path.slice(base.length + 1)} · format ${fm}`));
       for (const name of Object.keys(DEC)) for (const flip of [false, true]) {
         const c = decode(x, name, flip);
-        if (c) cell.append(h('figure', {}, c, h('figcaption', {}, name + (flip ? ' ↕' : ''))));
+        if (!c) continue;
+        const key = `${base.split('/').pop()}  ${s.path.slice(base.length + 1)}  format ${fm}  ${name}${flip ? '  flipped' : ''}`;
+        const fig = h('figure', { onClick: () => { if (picked.has(key)) picked.delete(key); else picked.add(key); fig.classList.toggle('on', picked.has(key)); update(); } }, c, h('figcaption', {}, name + (flip ? ' ↕' : '')));
+        cell.append(fig);
       }
       row.append(cell);
     }
@@ -59,5 +67,6 @@ export async function textureInspector(screen: (...k: Array<Node | null>) => HTM
     body.append(row);
     void byName;
   }
+  body.append(h('div', { class: 'tex-result' }, out, copy));
   screen(header, body);
 }

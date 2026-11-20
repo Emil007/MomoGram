@@ -13,6 +13,8 @@ let player: SeqPlayer | null = null;
 let getSdat: () => Uint8Array | null = () => null;
 let sdatFor: Uint8Array | null = null;
 let current = '';
+const listeners: Array<(id: string) => void> = [];
+const changed = () => { for (const f of listeners) f(current); };
 let pending: (() => void) | null = null;
 
 // pack music: decoded streams are cached (a few per session); sound archives get their own sequencer
@@ -93,7 +95,7 @@ export const Audio = {
     if (!ac || ac.state !== 'running') { pending = () => Audio.play(name, loop); return; }
     ensure();
     stopPackMusic();
-    current = name;
+    current = name; changed();
     player?.play(name, loop);
   },
   /**
@@ -107,7 +109,7 @@ export const Audio = {
     if (id === current && (stream || packSeqPlaying?.playing || chip?.playing)) return true;
     if (!ac || ac.state !== 'running') { pending = () => Audio.playPack(packId, ref, loop); return true; }
     ensure();
-    current = id;
+    current = id; changed();
     try {
       const [file, seq] = ref.split('#');
       const cm = seq?.match(/^(gb|spc):(\d+)$/);
@@ -156,7 +158,9 @@ export const Audio = {
       return false;
     }
   },
-  stop() { current = ''; player?.stop(0.1); stopPackMusic(0.1); },
+  stop() { current = ''; changed(); player?.stop(0.1); stopPackMusic(0.1); },
+  /** called whenever the track changes ("packId/ref", or '' when silent) */
+  onChange(f: (id: string) => void) { listeners.push(f); },
   /** "packId/ref" of the track playing (or queued) */
   current: () => current,
   setVolume(v: number) { if (master) master.gain.value = v; },
