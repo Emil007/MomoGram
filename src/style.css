@@ -249,19 +249,20 @@ body { background: #fff; }
 .rbtn.small small { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); font-size: .62rem; font-weight: 800; color: var(--muted); white-space: nowrap; }
 .rbtn:focus-visible { outline: 3px solid var(--accent2); outline-offset: 3px; }
 
-/* fill / cross: one switch. The active tool is big at lower left, the other one small at upper right, and two
-   arrows circle between them; a tap swaps them with a quick turn. */
-.tool-toggle { --s: 62px; overflow: visible; }
-.tool-toggle .swap { position: absolute; inset: 4px; display: grid; place-items: center; color: var(--muted); opacity: .75; transition: transform .22s cubic-bezier(.3, 1.4, .5, 1); pointer-events: none; }
-.tool-toggle .swap .svg-ico { width: 100%; height: 100%; }
-.tool-toggle.crossing .swap { transform: rotate(180deg); }
-.tool-toggle .face { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
-  transition: transform .22s cubic-bezier(.3, 1.3, .5, 1), opacity .22s; }
-.tool-toggle .face .svg-ico { width: 24px; height: 24px; }
-.tool-toggle .cross-face .svg-ico { color: #c43c3c; }
-/* active: big, a little left of and below the middle; inactive: small at the upper right */
-.tool-toggle .fill-face, .tool-toggle.crossing .cross-face { transform: translate(-5px, 5px) scale(1); opacity: 1; }
-.tool-toggle .cross-face, .tool-toggle.crossing .fill-face { transform: translate(12px, -12px) scale(.5); opacity: .8; }
+/* fill / cross: one switch. Active tool big in the middle, the other small at the upper right, an arrow between */
+.tool-toggle { --s: 62px; overflow: visible; padding: 0; }
+.tool-toggle .switch-art { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.switch-art .arrow { fill: var(--accent); transition: transform .25s; transform-origin: 48px 34px; }
+.switch-art .badge { fill: #fff; stroke: var(--line); stroke-width: 2.5; }
+.switch-art .tool-f rect { fill: #1a1a1a; }
+.switch-art .tool-x path { stroke: #c43c3c; stroke-width: 5.2; stroke-linecap: round; fill: none; }
+.switch-art g { transition: transform .22s cubic-bezier(.3, 1.35, .5, 1); }
+/* big in the middle / small in the circle */
+.switch-art .tool-f, .tool-toggle.crossing .switch-art .tool-x { transform: translate(28px, 34px) scale(1); }
+.switch-art .tool-x, .tool-toggle.crossing .switch-art .tool-f { transform: translate(50px, 12px) scale(.43); }
+.tool-toggle.crossing .switch-art .tool-x path { stroke-width: 5.2; }
+.tool-toggle.swapping .switch-art .arrow { transform: rotate(-25deg) scale(1.12); }
+.tool-toggle.idle .switch-art { opacity: .5; }
 
 /* bottom bar */
 .tools { gap: .6rem; padding: .55rem .8rem calc(1.35rem + var(--safe-b)); align-items: center; }
@@ -415,6 +416,5 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .sync-chip { padding: .25em .7em; font-size: .8rem; border-radius: 999px; color: var(--muted); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sync-chip.bad { color: var(--hard); }
 .puzzle .inprogress { position: absolute; bottom: -6px; right: -6px; width: 1.25rem; height: 1.25rem; display: grid; place-items: center; font-size: .75rem; background: var(--accent2); color: #fff; border: 2px solid var(--line); border-radius: 50%; }
-.tool-toggle.idle { opacity: .55; }
 .mark-tool .svg-ico { color: #8a52c8; }
 .mark-tool.on { background: linear-gradient(#e9dcf7, #cdb3ec); }

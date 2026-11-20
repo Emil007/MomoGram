@@ -472,6 +472,21 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     saved ? h('button', { class: 'btn ghost', onClick: () => { clearBoard(pack.id, lv.id, pz.id); play(pack, lv, i, back, undefined, true); } }, t('restart')) : null));
 }
 
+/**
+ * The fill/cross switch: the active tool big in the middle, the other one small in a circle at the upper right,
+ * and an arrow from the small one to the big one. A tap swaps the two (CSS moves them).
+ */
+function toolSwitchArt(): Element {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = `<svg class="switch-art" viewBox="0 0 62 62" aria-hidden="true">
+    <path class="arrow" d="M53.6 24.0L53.5 24.9L53.4 25.7L53.3 26.6L53.2 27.4L53.0 28.1L52.8 28.9L52.6 29.6L52.4 30.2L52.1 30.9L51.8 31.5L51.5 32.0L51.2 32.6L50.9 33.1L50.5 33.6L50.1 34.0L49.7 34.5L49.3 34.9L48.9 35.2L48.4 35.6L48.0 35.9L47.5 36.2L47.0 36.5L46.5 36.7L45.9 36.9L47.5 40.2L48.1 39.8L48.8 39.3L49.3 38.9L49.9 38.4L50.4 37.8L50.9 37.3L51.4 36.7L51.8 36.2L52.2 35.6L52.5 34.9L52.9 34.3L53.2 33.6L53.4 32.9L53.6 32.2L53.8 31.5L54.0 30.7L54.2 29.9L54.3 29.2L54.4 28.3L54.4 27.5L54.5 26.7L54.5 25.8L54.4 24.9L54.4 24.0ZM42 40L45.4 34.2L48.0 42.8Z"/>
+    <circle class="badge" cx="50" cy="12" r="10.5"/>
+    <g class="tool-f"><rect x="-11" y="-11" width="22" height="22" rx="4"/></g>
+    <g class="tool-x"><path d="M-10 -10L10 10M10 -10L-10 10"/></g>
+  </svg>`;
+  return tpl.content.firstElementChild!;
+}
+
 /** home: is this profile in sync with the server? tap to sync now */
 function syncChip(): HTMLElement | null {
   if (!Sync.account()) return null;
@@ -753,7 +768,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const canvas = h('canvas', { class: 'board' });
   // bottom bar: one tool button that switches between filling and crossing out, zoom, then hints / undo / try it
   const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'mark' ? lastTool : view.tool === 'fill' ? 'cross' : 'fill') },
-    h('span', { class: 'swap' }, icon('swap')), h('span', { class: 'face fill-face' }, icon('fill')), h('span', { class: 'face cross-face' }, icon('cross')));
+    toolSwitchArt());
   const lensBtn = h('button', { class: 'rbtn', title: t('zoom'), 'aria-label': t('zoom'), onClick: () => { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } }, icon('zoom'));
   const boardWrap = h('section', { class: 'boardwrap' }, canvas);
   const tbtn = (ico: string, label: string, fn: () => void) => h('button', { class: 'rbtn small', title: label, 'aria-label': label, onClick: fn }, icon(ico), h('small', {}, label));
@@ -803,6 +818,9 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     if (tool !== 'mark') lastTool = tool;
     markBtn.classList.toggle('on', tool === 'mark'); markBtn.setAttribute('aria-pressed', String(tool === 'mark'));
     toolBtn.classList.toggle('idle', tool === 'mark');
+    if (toolBtn.classList.contains('crossing') !== (lastTool === 'cross')) {
+      toolBtn.classList.add('swapping'); setTimeout(() => toolBtn.classList.remove('swapping'), 160);
+    }
     toolBtn.classList.toggle('crossing', lastTool === 'cross');
     const l = lastTool === 'fill' ? t('fill') : t('cross');
     toolBtn.title = l; toolBtn.setAttribute('aria-label', l);
