@@ -51,6 +51,13 @@ const unlock = () => {
   ac!.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } });
 };
 window.addEventListener('pointerdown', unlock);
+// app in the background (other app, locked phone, hidden tab): pause all sound, continue when it comes back
+document.addEventListener('visibilitychange', () => {
+  if (!ac) return;
+  if (document.hidden) ac.suspend().catch(() => {});
+  else ac.resume().catch(() => {});
+});
+window.addEventListener('pagehide', () => { ac?.suspend().catch(() => {}); });
 (window as any).__music = () => current;
 window.addEventListener('keydown', unlock);
 
