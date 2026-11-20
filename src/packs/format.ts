@@ -8,6 +8,8 @@ export type Rules = 'normal' | 'free';
 export interface PackPuzzle {
   /** where a puzzle comes from when it is shown outside its game (daily, random) */
   from?: string;
+  /** only in this region's release of the game (set when regions are merged) */
+  exclusive?: string;
   /** stable id within the pack, e.g. "n01-03" */
   id: string;
   width: number;
@@ -110,18 +112,29 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   out.title = { ...b.title, ...a.title };
   const regions = new Set([a.source.region, b.source.region].flatMap(r => (r ?? '').split('/')).filter(Boolean));
   out.source.region = [...regions].join('/');
-  const byId = new Map(out.levels.flatMap(l => l.puzzles).map(p => [p.id, p]));
+  // puzzles are matched by their pattern, not their id: regions number some puzzles differently and some
+  // puzzles exist in one region only
+  const all = out.levels.flatMap(l => l.puzzles);
+  const byRows = new Map(all.map(p => [p.rows.join('/'), p]));
+  const ids = new Set(all.map(p => p.id));
+  const region = b.source.region || 'other';
   for (const l of b.levels) for (const p of l.puzzles) {
-    const q = byId.get(p.id);
-    if (q && q.rows.join() === p.rows.join()) q.name = { ...p.name, ...q.name };
-  }
-  // puzzles only the second file has (e.g. another Satellaview broadcast): add them, by level id
-  for (const l of b.levels) {
-    const extra = l.puzzles.filter(p => !byId.has(p.id));
-    if (!extra.length) continue;
-    const mine = out.levels.find(x => x.id === l.id);
-    if (mine) mine.puzzles = [...mine.puzzles, ...JSON.parse(JSON.stringify(extra))].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
-    else out.levels.push(JSON.parse(JSON.stringify({ ...l, puzzles: extra })));
+    const q = byRows.get(p.rows.join('/'));
+    if (q) { q.name = { ...p.name, ...q.name }; continue; }
+    // exclusive to the other version: into the level it has there, or a level of its own
+    const x: PackPuzzle = JSON.parse(JSON.stringify(p));
+    delete (x as any).anim; // animation data belongs to the other version's files
+    x.exclusive = x.exclusive ?? region;
+    let id = x.id;
+    for (let n = 2; ids.has(id); n++) id = `${x.id}~${region.toLowerCase()}${n > 2 ? n : ''}`;
+    x.id = id; ids.add(id); byRows.set(x.rows.join('/'), x);
+    const mine = out.levels.find(v => v.id === l.id);
+    if (mine) mine.puzzles.push(x);
+    else {
+      let lv = out.levels.find(v => v.id === l.id + '~' + region.toLowerCase());
+      if (!lv) { lv = JSON.parse(JSON.stringify({ ...l, id: l.id + '~' + region.toLowerCase(), puzzles: [] })) as PackLevel; out.levels.push(lv); }
+      lv.puzzles.push(x);
+    }
   }
   return out;
 }

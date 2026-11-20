@@ -401,6 +401,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     tile.append(h('small', {}, pr.cleared ? (pickText(p.name, packLang()) || `${p.width}×${p.height}`) : `${p.width}×${p.height}`));
     if (pr.best !== undefined) tile.append(h('em', {}, formatTime(pr.best)));
     tile.append(h('span', { class: 'num' }, String(i + 1)));
+    if (p.exclusive) tile.append(h('span', { class: 'excl', title: t('exclusive', { r: p.exclusive }) }, p.exclusive));
     if (pr.medal) tile.append(medalEl(pr.medal));
     else if (pr.underLimit) tile.append(h('span', { class: 'star', title: '< 60:00' }, '★'));
     grid.append(tile);
@@ -434,7 +435,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
       h('div', { class: 'pic-frame' }, pic),
       h('button', { class: 'rbtn ghost', disabled: i + 1 >= lv.puzzles.length ? true : undefined, 'aria-label': t('nextPuzzle'), onClick: () => nav(1) }, icon('next'))),
     h('h2', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
-    h('p', { class: 'pstart-from' }, pz.from ?? `${pickAny(pack.title, packLang())} · ${pickAny(lv.title, packLang())}`),
+    h('p', { class: 'pstart-from' }, (pz.from ?? `${pickAny(pack.title, packLang())} · ${pickAny(lv.title, packLang())}`) + (pz.exclusive ? ' · ' + t('exclusive', { r: pz.exclusive }) : '')),
     h('div', { class: 'stats' },
       stat(t('size'), `${pz.width}×${pz.height}`),
       stat(t('level'), h('span', { class: 'diff d' + puzzleLevel(pz) }, t('diff' + puzzleLevel(pz)))),

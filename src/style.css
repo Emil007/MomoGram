@@ -329,3 +329,5 @@ body { background: #fff; }
 .folder-tabs { display: flex; gap: 3px; padding-left: .2rem; }
 .folder-tabs i { width: 14px; height: 6px; border-radius: 3px; background: var(--game, var(--accent)); }
 .lib-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-weight: 800; padding-top: .3rem; }
+.puzzle .excl { position: absolute; bottom: -2px; right: -2px; font-size: .55rem; font-weight: 900; color: #fff; background: var(--free); padding: 0 .3em; border-radius: 5px 0 5px 0; }
+.zipmusic { margin: 0; }

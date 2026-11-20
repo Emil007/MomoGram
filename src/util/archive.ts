@@ -9,12 +9,17 @@ export async function extractAll(file: File): Promise<Array<{ name: string; data
   }
   if (!inited) { Archive.init({ workerUrl: 'worker-bundle.js' }); inited = true; }
   const arc = await Archive.open(file);
-  const list: any[] = await arc.getFilesArray();
+  // extract everything in one pass: solid 7z archives (several games compressed together) can't be read
+  // entry by entry ("Truncated 7-Zip file body")
+  const tree: any = await arc.extractFiles();
   const out: Array<{ name: string; data: Uint8Array }> = [];
-  for (const e of list) {
-    const f: File = await e.file.extract();
-    out.push({ name: (e.path ?? '') + f.name, data: new Uint8Array(await f.arrayBuffer()) });
-  }
+  const walk = async (o: any, path: string) => {
+    for (const [k, v] of Object.entries<any>(o)) {
+      if (v && typeof v.arrayBuffer === 'function') out.push({ name: path + k, data: new Uint8Array(await v.arrayBuffer()) });
+      else if (v && typeof v === 'object') await walk(v, path + k + '/');
+    }
+  };
+  await walk(tree, '');
   await arc.close?.();
   return out;
 }

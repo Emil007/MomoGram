@@ -1,7 +1,7 @@
 {
   "name": "momogram",
   "productName": "MomoGram",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "One nonogram player for all the nonogram games you own",
   "main": "main.cjs",
   "license": "MIT",

@@ -51,6 +51,7 @@ const en: Dict = {
   saveHelp: 'Saves belong to the active profile. Importing your own save from another device only takes over the games you played there more recently.',
   saveNewProfile: 'Welcome, {name}! The profile was added and is now active.', saveMerged: '{name}: {a} game(s) updated from the save, {b} kept because they\'re newer here.',
   // packs
+  zipMusic: 'Include music in .zip imports and exports', exclusive: 'only in {r}',
   importPacks: 'Import packs', exportAll: 'Export all as .zip', createPacks: 'Add games',
   createHelp: 'Pick game files you own (Game Boy, Super Famicom, DS, decrypted 3DS; loose, zipped, 7z or rar). MomoGram reads the puzzles once and turns every game into a pack: keep the pack files and you never need the games again.',
   noPacks: 'No games yet. Add one and the fun begins.', delete: 'Delete', download: 'Download',
@@ -100,6 +101,7 @@ const de: Dict = {
   saveWaiting: 'der Fortschritt für {n} Spiel(e), die hier noch fehlen, wird für später aufgehoben', notASave: 'Das ist kein MomoGram-Spielstand.',
   saveHelp: 'Spielstände gehören zum aktiven Profil. Dein eigener Spielstand von einem anderen Gerät übernimmt nur die Spiele, die du dort zuletzt gespielt hast.',
   saveNewProfile: 'Willkommen, {name}! Das Profil wurde hinzugefügt und ist jetzt aktiv.', saveMerged: '{name}: {a} Spiel(e) aus dem Spielstand übernommen, {b} behalten, weil sie hier neuer sind.',
+  zipMusic: 'Musik bei .zip-Import und -Export mitnehmen', exclusive: 'nur in {r}',
   importPacks: 'Pakete importieren', exportAll: 'Alle als .zip exportieren', createPacks: 'Spiele hinzufügen',
   createHelp: 'Wähle Spieldateien, die dir gehören (Game Boy, Super Famicom, DS, entschlüsselte 3DS; einzeln, gezippt, 7z oder rar). MomoGram liest die Rätsel einmal aus und macht aus jedem Spiel ein Paket: Heb die Pakete auf, dann brauchst du die Spiele nie wieder.',
   noPacks: 'Noch keine Spiele. Füge eins hinzu, dann geht\'s los.', delete: 'Löschen', download: 'Herunterladen',

@@ -29,7 +29,7 @@ export function openPackManager(pm: PM) {
         h('button', { class: 'btn packbtn', onClick: () => pm.openPack(p) },
           h('b', {}, pickAny(p.title, lang())),
           h('small', {}, `${p.source.platform}${p.source.region ? ' · ' + p.source.region : ''} · ${n} ${t('puzzles')}` + (p.theme?.music ? ' · ♪' : ''))),
-        h('button', { class: 'btn ghost', title: t('download'), onClick: () => p.theme?.music ? exportZip([p], packFileName(p).replace(/\.json$/, '.zip')) : download(packFileName(p), JSON.stringify(p), 'application/json') }, '⤓'),
+        h('button', { class: 'btn ghost', title: t('download'), onClick: () => p.theme?.music && withMusic() ? exportZip([p], packFileName(p).replace(/\.json$/, '.zip')) : download(packFileName(p), JSON.stringify(p), 'application/json') }, '⤓'),
         h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
           if (!confirm(t('delete') + ': ' + pickAny(p.title, lang()) + '?')) return;
           await storage.deletePack(p.id);
@@ -61,7 +61,7 @@ export function openPackManager(pm: PM) {
           // music saved next to the pack: <pack>.assets/<name>
           const dir = e.name.replace(/[^/]*$/, '') + assetDir(p);
           const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => ({ name: x.name.slice(dir.length), data: x.data }));
-          if (assets.length) p.assets = assets;
+          if (assets.length && withMusic()) p.assets = assets;
           found.push(p);
         } catch { /* skip */ }
       }
@@ -106,12 +106,17 @@ export function openPackManager(pm: PM) {
     }
   }
 
+  // music in zip exports / imports can be left out to save space (the switch is remembered)
+  const withMusic = () => localStorage.getItem('momogram.zipMusic') !== 'off';
+  const musicSwitch = h('label', { class: 'opt zipmusic' }, h('span', {}, t('zipMusic')),
+    h('input', { type: 'checkbox', checked: withMusic() ? true : undefined, onChange: (e: Event) => localStorage.setItem('momogram.zipMusic', (e.target as HTMLInputElement).checked ? 'on' : 'off') }));
+
   async function exportZip(ps: Pack[], name = 'momogram-packs.zip') {
     const entries: Array<{ name: string; text?: string; data?: Uint8Array }> = [];
     for (const p of ps) {
       const { assets, ...rest } = p;
       entries.push({ name: packFileName(p), text: JSON.stringify(rest) });
-      for (const a of await storage.assetNames(p.id).catch(() => [] as string[])) {
+      for (const a of withMusic() ? await storage.assetNames(p.id).catch(() => [] as string[]) : []) {
         const data = await storage.loadAsset(p.id, a);
         if (data) entries.push({ name: assetDir(p) + a, data });
       }
@@ -125,6 +130,7 @@ export function openPackManager(pm: PM) {
       h('button', { class: 'btn primary', onClick: createPacks }, '✚ ' + t('createPacks')),
       h('button', { class: 'btn', onClick: importPacks }, '⤒ ' + t('importPacks')),
       h('button', { class: 'btn', onClick: () => exportZip(pm.packs()) }, '⤓ ' + t('exportAll'))),
+    musicSwitch,
     h('p', { class: 'fine' }, t('createHelp')),
     status, list));
 }
