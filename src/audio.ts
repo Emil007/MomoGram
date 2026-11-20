@@ -47,8 +47,8 @@ function ensure(): boolean {
 // browsers only allow audio after a user gesture
 const unlock = () => {
   if (!ensure()) return;
-  ac!.resume();
-  if (pending) { const p = pending; pending = null; p(); }
+  // resume() is asynchronous: start the queued track once the context really runs (it was lost before)
+  ac!.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } });
 };
 window.addEventListener('pointerdown', unlock);
 (window as any).__music = () => current;
@@ -150,6 +150,8 @@ export const Audio = {
     }
   },
   stop() { current = ''; player?.stop(0.1); stopPackMusic(0.1); },
+  /** "packId/ref" of the track playing (or queued) */
+  current: () => current,
   setVolume(v: number) { if (master) master.gain.value = v; },
   sfx(kind: 'tap' | 'mistake' | 'clear') {
     if (!settings.sfx || !ac || ac.state !== 'running' || !sfxGain) return;

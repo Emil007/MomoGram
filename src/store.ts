@@ -119,6 +119,8 @@ function loadActive() {
   try { packTimes = JSON.parse(localStorage.getItem(pk('packtimes')) || '{}'); } catch { packTimes = {}; }
 }
 loadActive();
+// keep this tab's copy current when another tab (or the installed web app) saves
+window.addEventListener('storage', e => { if (e.key?.startsWith('momogram.progress.') || e.key?.startsWith('momogram.packtimes.')) loadActive(); });
 function persist(touched?: string[]) {
   const now = new Date().toISOString();
   for (const id of touched ?? []) packTimes[id] = now;
@@ -151,6 +153,7 @@ export function getProgress(packId: string, puzzleId: string): PuzzleProgress {
 
 /** returns true when the medal is better than the one the puzzle had */
 export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal): boolean {
+  loadActive(); // another tab / the installed app may have saved meanwhile: never write back an old copy
   const k = packId + '/' + puzzleId;
   const p = progress[k] ?? {};
   p.cleared = true;
@@ -164,6 +167,7 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
 }
 
 export function resetProgress(packId: string) {
+  loadActive();
   for (const k of Object.keys(progress)) if (k.startsWith(packId + '/')) delete progress[k];
   persist([packId]);
 }

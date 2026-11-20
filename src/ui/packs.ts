@@ -138,14 +138,18 @@ export function openPackManager(pm: PM) {
  */
 export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
   const merged = new Map<string, Pack>();
+  // the first version of a game is the base of the merge; only its assets fit its puzzles (animation indices
+  // differ between regions), so assets of later versions are dropped
+  const baseAssets = new Map<string, Pack['assets'] | null>();
   for (const p of [...existing.filter(x => incoming.some(i => i.id === x.id)), ...incoming]) {
     const m = merged.get(p.id);
+    if (!baseAssets.has(p.id)) baseAssets.set(p.id, existing.includes(p) ? null : p.assets ?? null);
     merged.set(p.id, m ? mergePacks(m, p) : p);
   }
   const ps = [...merged.values()];
   for (const p of ps) {
-    const { assets, ...rest } = p;
-    for (const a of assets ?? []) await storage.saveAsset(p.id, a.name, a.data);
+    const { assets: _, ...rest } = p;
+    for (const a of baseAssets.get(p.id) ?? []) await storage.saveAsset(p.id, a.name, a.data);
     delete (p as any).assets;
     await storage.savePack(rest as Pack);
   }

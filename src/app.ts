@@ -123,7 +123,9 @@ async function loadExtras(pack: Pack): Promise<void> {
   if (!p.ds) { ctx.pcks.set(pack.id, null); return; }
   const pck = await storage.loadAsset(pack.id, 'anim.pck').catch(() => undefined);
   const ds = dsFromPack(p, null, pck ?? null);
-  ctx.pcks.set(pack.id, ds?.pck ? (i => pckFile(ds, i)) : null);
+  const fits = !!ds?.pck && ds.pckOffsets.length > 0 && ds.pckOffsets[ds.pckOffsets.length - 1] <= ds.pck.length && ds.pck.length - ds.pckOffsets[ds.pckOffsets.length - 1] < 0x10000;
+  if (ds?.pck && !fits) console.warn('animation data does not match this pack: re-add the game to restore them');
+  ctx.pcks.set(pack.id, fits ? (i => pckFile(ds!, i)) : null);
 }
 const pckOf = (pack: Pack) => ctx.pcks.get(pack.id) ?? null;
 
@@ -379,20 +381,32 @@ function packColors(pack: Pack | null): ThemeColors | null {
   return pack?.theme?.palette && settings.packColors ? themeColors(pack.theme.palette) : null;
 }
 
-/** a game's look and one of its tracks ('menu', 'clear' …); games without music stay quiet */
+/** a game's look and one of its tracks ('menu', 'clear' …) */
 function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear', loop = true) {
   applyThemeCss(root(), packColors(pack));
-  const music = pack?.theme?.music;
-  const ref = music?.[role] ?? (role === 'menu' ? music?.title : undefined);
-  if (!pack || !ref || !settings.packMusic) { if (role !== 'clear') menuMusic(); return; }
-  Snd.playPack(pack.id, ref, loop);
+  if (role === 'menu') return menuMusic(pack);
+  const ref = pack?.theme?.music?.[role];
+  if (pack && ref && settings.packMusic) Snd.playPack(pack.id, ref, loop);
 }
 
-/** menu music: the title track of the game played last, or of any game that has music */
-function menuMusic() {
-  const p = [lastPack(), ...allPacks()].find(x => x && (x.theme?.music?.title || x.theme?.music?.menu));
-  const ref = p?.theme?.music?.title ?? p?.theme?.music?.menu;
-  if (p && ref && settings.packMusic) Snd.playPack(p.id, ref); else Snd.stop();
+/** title and menu tracks of a game */
+function menuTracks(pack: Pack): Track[] {
+  const m = pack.theme?.music;
+  if (!m || !settings.packMusic) return [];
+  return [...new Set([m.title, m.menu].filter((r): r is string => !!r))].map(ref => ({ pack, ref }));
+}
+
+/**
+ * Menu music: a random title / menu track — from the game whose screens are open (unless "random from all
+ * games" is set), on the home screen from all games. A track that fits keeps playing between menus.
+ */
+function menuMusic(pack: Pack | null = null) {
+  let pool = pack && settings.musicMode !== 'random-all' ? menuTracks(pack) : [];
+  if (!pool.length) pool = allPacks().flatMap(menuTracks);
+  if (!pool.length) { Snd.stop(); return; }
+  if (pool.some(x => x.pack.id + '/' + x.ref === Snd.current())) return;
+  const tr = pool[Math.floor(Math.random() * pool.length)];
+  Snd.playPack(tr.pack.id, tr.ref);
 }
 
 // ---------------------------------------------------------------- daily nonogram
@@ -610,7 +624,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
-    const newMedal = pack.id !== 'daily' ? recordClear(pack.id, pz.id, board.totalMs, under, medal) : false;
+    const newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal);
     setQuickSave(null);
     cleanup();
     showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal);
@@ -637,7 +651,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
       board.mistakes ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(board.penaltyMs))) : null,
       best !== undefined ? h('div', {}, t('best'), h('b', {}, formatTime(best))) : null),
     h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => { stop(); back(); } }, t('toList')), next)));
-  setTimeout(() => usePack(pack, 'menu'), pack.theme?.music?.clear ? 4500 : 1500);
+  setTimeout(() => { Snd.stop(); usePack(pack, 'menu'); }, pack.theme?.music?.clear ? 4500 : 1500);
   let raf = 0, last = performance.now();
   const loop = () => {
     const r = cv.getBoundingClientRect();
