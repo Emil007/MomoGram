@@ -15,8 +15,6 @@ interface PM {
   header(title: string): HTMLElement;
   screen(...kids: Array<Node | null>): HTMLElement;
   openPack(p: Pack): void;
-  /** start the "create packs" file picker right away */
-  autoCreate?: boolean;
 }
 
 export function openPackManager(pm: PM) {
@@ -122,7 +120,6 @@ export function openPackManager(pm: PM) {
   }
 
   render();
-  if (pm.autoCreate) setTimeout(createPacks, 0);
   pm.screen(pm.header(t('packs')), h('div', { class: 'packs' },
     h('div', { class: 'row wrap' },
       h('button', { class: 'btn primary', onClick: createPacks }, '✚ ' + t('createPacks')),

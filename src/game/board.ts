@@ -142,6 +142,14 @@ export class Board {
   rowCanProgress(y: number): boolean { return this.line('r', y).progress; }
   colCanProgress(x: number): boolean { return this.line('c', x).progress; }
 
+  /** Cross out every row and column whose clue is 0 (done for the player at the start, no undo step). */
+  crossEmptyLines() {
+    const zero = (c: number[]) => c.length === 0 || (c.length === 1 && c[0] === 0);
+    for (let y = 0; y < this.h; y++) if (zero(this.rowClues[y])) for (let x = 0; x < this.w; x++) if (this.at(x, y) === EMPTY) this.cells[y * this.w + x] = CROSS;
+    for (let x = 0; x < this.w; x++) if (zero(this.colClues[x])) for (let y = 0; y < this.h; y++) if (this.at(x, y) === EMPTY) this.cells[y * this.w + x] = CROSS;
+    this.touch();
+  }
+
   /** Solved when filled cells reproduce every clue (so puzzles with several solutions are fair). */
   checkSolved(): boolean {
     if (this.trial) return false;

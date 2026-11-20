@@ -109,7 +109,8 @@ export function read3ds(data: Uint8Array): Pack[] {
   const title: Text = {};
   t.names.forEach((n, i) => { const l = SMDH_LANGS[i] as Lang; if (n && ['ja', 'en', 'fr', 'de', 'it', 'es', 'ko'].includes(l)) title[l] = n; });
   // identify the game across regions by its English (or Japanese) title, not the region-specific code
-  const key = (title.en ?? title.ja ?? t.productCode).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
+  // (first 64 characters: ids from versions that read shorter titles stay the same)
+  const key = (title.en ?? title.ja ?? t.productCode).slice(0, 64).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
   const { theme, assets } = music3ds(t.files);
   const accent = accentFromColors(t.iconColors);
   const board = boardColors(t.files);

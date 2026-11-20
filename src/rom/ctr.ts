@@ -43,7 +43,7 @@ export function readCtr(d: Uint8Array): CtrTitle {
       if (ascii(d, smdh, 4) === 'SMDH') for (let l = 0; l < 12; l++) {
         const o = smdh + 8 + l * 0x200 + 0x80;
         let s = '';
-        for (let k = 0; k < 0x80; k += 2) { const c = u16(d, o + k); if (!c) break; s += String.fromCharCode(c); }
+        for (let k = 0; k < 0x100; k += 2) { const c = u16(d, o + k); if (!c) break; s += String.fromCharCode(c); }
         names.push(s.replace(/\n/g, ' ').trim());
       }
       if (ascii(d, smdh, 4) === 'SMDH') for (let k = 0; k < 48 * 48; k++) {

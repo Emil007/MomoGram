@@ -252,7 +252,8 @@ export class BoardView {
     // middle mouse: pan
     if (e.button === 1) { this.pinch = { d: 0, cell: this.cell, cx: p.x, cy: p.y, sx: this.scrollX, sy: this.scrollY }; return; }
     const c = this.cellAt(p.x, p.y);
-    if (!c) return;
+    // zoomed in: dragging on the clues or beside the grid moves the view (one finger / left mouse button)
+    if (!c) { if (this.zoomed) this.pinch = { d: 0, cell: this.cell, cx: p.x, cy: p.y, sx: this.scrollX, sy: this.scrollY }; return; }
     this.showCursor = false;
     const tool: Tool = e.button === 2 ? (this.tool === 'fill' ? 'cross' : 'fill') : this.tool;
     const cur = this.board.at(c.x, c.y);
@@ -300,6 +301,7 @@ export class BoardView {
       if (s.axis === 1) this.paint(i, s.y0); else this.paint(s.x0, i);
     }
     this.cursorX = tx; this.cursorY = ty;
+    if (this.zoomed) this.ensureVisible(tx, ty); // follow a stroke that leaves the visible part
     this.dragLen = Math.abs(b - a) + 1;
     this.dragAt = { x: p.x, y: p.y };
     this.dirty = true;
@@ -308,7 +310,11 @@ export class BoardView {
   private up(e: PointerEvent) {
     if (this.dragAt) { this.dragAt = null; this.dragLen = 0; this.dirty = true; }
     this.pointers.delete(e.pointerId);
-    if (this.pointers.size < 2 && this.pinch && this.pinch.d) this.pinch = null;
+    // pinch ended with one finger still down: keep moving the view with it
+    if (this.pointers.size === 1 && this.pinch && this.pinch.d) {
+      const q = [...this.pointers.values()][0];
+      this.pinch = { d: 0, cell: this.cell, cx: q.x, cy: q.y, sx: this.scrollX, sy: this.scrollY };
+    } else if (this.pointers.size < 2 && this.pinch && this.pinch.d) this.pinch = null;
     if (this.pinch && !this.pinch.d && this.pointers.size === 0) this.pinch = null;
     if (this.stroke && this.stroke.pointer === e.pointerId) { this.stroke = null; this.ev.onStroke?.(); }
   }
@@ -316,8 +322,13 @@ export class BoardView {
   private wheel(e: WheelEvent) {
     e.preventDefault();
     const p = { x: e.offsetX, y: e.offsetY };
-    if (e.ctrlKey || Math.abs(e.deltaY) > 0 && !e.shiftKey) this.setZoom(this.cell * (e.deltaY < 0 ? 1.15 : 1 / 1.15), p.x, p.y);
-    else { this.scrollX += e.deltaX || e.deltaY; this.clampScroll(); this.dirty = true; }
+    // Ctrl + wheel / trackpad pinch zooms; when zoomed in the wheel scrolls (Shift = sideways), otherwise it zooms in
+    if (e.ctrlKey || !this.zoomed) this.setZoom(this.cell * (e.deltaY < 0 ? 1.15 : 1 / 1.15), p.x, p.y);
+    else {
+      if (e.shiftKey) this.scrollX += e.deltaY || e.deltaX;
+      else { this.scrollX += e.deltaX; this.scrollY += e.deltaY; }
+      this.clampScroll(); this.dirty = true;
+    }
   }
 
   private paint(x: number, y: number) {

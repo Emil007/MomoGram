@@ -162,9 +162,11 @@ function lastPack(): Pack | null {
   return allPacks().find(p => p.id === id) ?? null;
 }
 
+let homeTrack = '';
 export function home() {
   applyThemeCss(root(), null);
-  menuMusic();
+  // back from a game: its music ends and the main menu picks a random track from all games
+  if (!homeTrack || Snd.current() !== homeTrack) { menuMusic(null, true); homeTrack = Snd.current(); }
   const q = getQuickSave();
   const qPack = q ? allPacks().find(p => p.id === q.packId) : null;
   const packs = allPacks();
@@ -193,7 +195,6 @@ export function home() {
       h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
       h('small', { class: 'count' }, t('solvedCount', { a, b }))));
   }
-  lib.append(h('button', { class: 'btn game add', onClick: () => packsScreen(true) }, h('b', {}, '✚ ' + t('addGames')), h('small', {}, t('addGamesHelp'))));
 
   screen(h('div', { class: 'home' }, top, quick,
     h('h2', { class: 'section-title' }, t('library')), lib,
@@ -212,6 +213,7 @@ function progressText(pack: Pack, levels: PackLevel[]) {
 // ---------------------------------------------------------------- a game: modes → levels → puzzles
 
 async function openPack(pack: Pack, back: () => void) {
+  homeTrack = '';
   await loadExtras(pack);
   localStorage.setItem('momogram.lastPack', pack.id);
   packLevels(pack, back);
@@ -400,11 +402,12 @@ function menuTracks(pack: Pack): Track[] {
  * Menu music: a random title / menu track — from the game whose screens are open (unless "random from all
  * games" is set), on the home screen from all games. A track that fits keeps playing between menus.
  */
-function menuMusic(pack: Pack | null = null) {
+function menuMusic(pack: Pack | null = null, fresh = false) {
   let pool = pack && settings.musicMode !== 'random-all' ? menuTracks(pack) : [];
   if (!pool.length) pool = allPacks().flatMap(menuTracks);
   if (!pool.length) { Snd.stop(); return; }
-  if (pool.some(x => x.pack.id + '/' + x.ref === Snd.current())) return;
+  if (!fresh && pool.some(x => x.pack.id + '/' + x.ref === Snd.current())) return;
+  if (fresh && pool.length > 1) pool = pool.filter(x => x.pack.id + '/' + x.ref !== Snd.current());
   const tr = pool[Math.floor(Math.random() * pool.length)];
   Snd.playPack(tr.pack.id, tr.ref);
 }
@@ -433,7 +436,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const pz = lv.puzzles[index];
   const rules = rulesFor(lv);
   const board = new Board(pz.rows, rules);
-  if (restore) board.restore(restore);
+  if (restore) board.restore(restore); else board.crossEmptyLines();
   playMusicFor(pack);
 
   // slim status bar instead of a second screen: picture, level, LCD timer; the board gets the rest
@@ -685,7 +688,7 @@ export function choose(title: string, options: Array<[string, () => void]>): Pro
 
 // ---------------------------------------------------------------- packs
 
-function packsScreen(autoCreate = false) {
+function packsScreen() {
   applyThemeCss(root(), null);
   openPackManager({
     root: root(),
@@ -694,7 +697,6 @@ function packsScreen(autoCreate = false) {
     header: (title: string) => header(title, home),
     screen,
     openPack: (p: Pack) => openPack(p, () => packsScreen()),
-    autoCreate,
   });
 }
 
