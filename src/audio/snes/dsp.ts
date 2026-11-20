@@ -96,9 +96,11 @@ export class Dsp {
       const b = ram[(vo.addr + 1 + (i >> 1)) & 0xffff];
       let s = (i & 1) ? (b << 28) >> 28 : (b << 24) >> 28;
       s = shift <= 12 ? (s << shift) >> 1 : (s < 0 ? -2048 : 0);
-      if (filter === 1) s += p1 + ((-p1) >> 4);
-      else if (filter === 2) s += (p1 << 1) + ((-p1 * 3) >> 5) - p2 + (p2 >> 4);
-      else if (filter === 3) s += (p1 << 1) + ((-p1 * 13) >> 6) - p2 + ((p2 * 3) >> 4);
+      // p1/p2 hold the stored (doubled) samples, as on the real chip
+      const q2 = p2 >> 1;
+      if (filter === 1) s += (p1 >> 1) + ((-p1) >> 5);
+      else if (filter === 2) s += p1 - q2 + (q2 >> 4) + ((p1 * -3) >> 6);
+      else if (filter === 3) s += p1 - q2 + ((p1 * -13) >> 7) + ((q2 * 3) >> 4);
       s = clamp16(s);
       s = (s << 17) >> 16; // the hardware keeps 15 bits, doubled (with wrap-around)
       vo.block[i] = s;
