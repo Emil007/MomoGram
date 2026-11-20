@@ -1,7 +1,7 @@
 // MomoGram UI: home, level/puzzle selection, play screen, solved screen, packs and options.
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
-import { PictureAnimator, thumbnail, PckGetter } from './game/picture';
+import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
 import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { importGameFile } from './packs/importers/index';
@@ -14,6 +14,7 @@ import { Audio as Snd } from './audio';
 import { unzipFirst, packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 import { STARTER } from './packs/starter';
+import { unpackPictures } from './rom/jtex';
 import { icon } from './ui/icons';
 import { editorHome } from './ui/editor';
 import { textureInspector } from './ui/texinspect';
@@ -123,6 +124,10 @@ async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>) {
 /** extras a pack needs before its lists are shown (Picross DS: the solved-picture animations) */
 async function loadExtras(pack: Pack): Promise<void> {
   if (ctx.pcks.has(pack.id)) return;
+  if (pack.theme?.pictures) {
+    const d = await storage.loadAsset(pack.id, 'pictures.bin').catch(() => undefined);
+    if (d) addPictures(unpackPictures(d));
+  }
   const p = pack as Pack & { ds?: DsPackMeta };
   if (!p.ds) { ctx.pcks.set(pack.id, null); return; }
   const pck = await storage.loadAsset(pack.id, 'anim.pck').catch(() => undefined);
@@ -608,7 +613,7 @@ function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new
 const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, packLang())} · ${pickAny(e.lv.title, packLang())}`;
 
 /** 15 puzzles a day, 5 per difficulty, from all visible games; solved ones are saved for the day */
-function daily() {
+async function daily() {
   const d = new Date();
   const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
   const rand = rng(seed), seen = new Set<string>();
@@ -617,6 +622,8 @@ function daily() {
     puzzles: drawPuzzles(rand, level, 5, seen).map((e, k) => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-d${level}-${k}`, from: fromText(e), name: undefined })),
   })).filter(l => l.puzzles.length);
   if (!levels.length) return;
+  // coloured pictures of the games the puzzles come from
+  for (const p of libraryPacks()) if (p.theme?.pictures) await loadExtras(p);
   const pack: Pack = { format: 'momogram-pack', version: 1, id: 'daily', title: { en: t('daily') }, source: { game: 'MomoGram', platform: 'MomoGram' }, levels };
   packLevels(pack, home);
 }

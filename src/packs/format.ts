@@ -41,6 +41,8 @@ export interface PackTheme {
   palette?: { accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string; style?: 'dmg' | 'gbc' | 'default' };
   /** asset names per role; an SDAT asset also names the sequence ("sound.sdat#SEQ_NAME") */
   music?: Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', string>>;
+  /** the pack has coloured solved pictures (asset pictures.bin) */
+  pictures?: boolean;
   /** every in-game track the game offers (random music picks from these); defaults to play / play2 */
   tracks?: string[];
 }

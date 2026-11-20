@@ -141,10 +141,12 @@ export function openPackManager(pm: PM) {
  */
 export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
   const merged = new Map<string, Pack>();
-  // the first version of a game is the base of the merge; only its assets fit its puzzles (animation indices
-  // differ between regions), so assets of later versions are dropped
+  // a game added again is read fresh: the new import is the base of the merge (so everything newer versions of
+  // MomoGram read from a game, like icons, pictures or music, arrives), and names and region exclusives of the
+  // version already stored are merged in. Only the base's assets fit its puzzles (animation indices differ
+  // between regions), so assets of the other versions are dropped.
   const baseAssets = new Map<string, Pack['assets'] | null>();
-  for (const p of [...existing.filter(x => incoming.some(i => i.id === x.id)), ...incoming]) {
+  for (const p of [...incoming, ...existing.filter(x => incoming.some(i => i.id === x.id))]) {
     const m = merged.get(p.id);
     if (!baseAssets.has(p.id)) baseAssets.set(p.id, existing.includes(p) ? null : p.assets ?? null);
     merged.set(p.id, m ? mergePacks(m, p) : p);

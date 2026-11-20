@@ -4,7 +4,7 @@ import { registerImporter } from './index';
 import { readCtr, lz11, ctrEncrypted, SMDH_LANGS, u16, CtrFile } from '../../rom/ctr';
 import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFromBits, makeIcon } from '../format';
 import { accentFromColors } from '../theme';
-import { jtexPixels, dominantColors } from '../../rom/jtex';
+import { jtexPixels, dominantColors, jtexImage, packPictures } from '../../rom/jtex';
 import { isBcstm } from '../../audio/bcstm';
 
 interface Raw { file: string; w: number; h: number; cells: Uint8Array; title: string }
@@ -112,6 +112,21 @@ export function read3ds(data: Uint8Array): Pack[] {
   // (first 64 characters: ids from versions that read shorter titles stay the same)
   const key = (title.en ?? title.ja ?? t.productCode).slice(0, 64).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
   const { theme, assets } = music3ds(t.files);
+  // the coloured solved pictures: per puzzle file the illustration (_I), else the coloured picture (_PC / _C)
+  const byPath = new Map(t.files.map(f => [f.path, f]));
+  const pics: Array<{ key: string; w: number; h: number; rgba: Uint8Array }> = [];
+  for (const r of raws) {
+    const base = r.file.replace(/\.bprs2?$/i, '');
+    for (const suf of ['_I', '_PC', '_C']) {
+      const f = byPath.get(base + suf + '.jtex');
+      const img = f ? jtexImage(f.data) : null;
+      if (!img) continue;
+      // keyed by the puzzle's pattern, so the picture follows the puzzle into daily / random picks and merges
+      pics.push({ key: [...Array(r.h)].map((_, y) => [...r.cells.subarray(y * r.w, y * r.w + r.w)].map(c => (c ? '#' : '.')).join('')).join('/'), ...img });
+      break;
+    }
+  }
+  if (pics.length) { assets.push({ name: 'pictures.bin', data: packPictures(pics) }); theme.pictures = true; }
   const accent = accentFromColors(t.iconColors);
   const board = boardColors(t.files);
   if (accent || board) theme.palette = { accent: accent ?? board?.cursor ?? '#1f9be0', ...board };

@@ -6,6 +6,19 @@ import { bgr555, renderCell, Frame } from '../rom/dsgfx';
 
 export type PckGetter = (i: number) => Uint8Array | null;
 
+// coloured solved pictures read from the player's games, keyed by the puzzle's pattern
+const colourPics = new Map<string, HTMLCanvasElement>();
+export function addPictures(m: Map<string, { w: number; h: number; rgba: Uint8Array }>) {
+  for (const [k, p] of m) {
+    if (colourPics.has(k)) continue;
+    const c = document.createElement('canvas');
+    c.width = p.w; c.height = p.h;
+    c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(p.rgba.buffer.slice(p.rgba.byteOffset, p.rgba.byteOffset + p.rgba.byteLength) as ArrayBuffer), p.w, p.h), 0, 0);
+    colourPics.set(k, c);
+  }
+}
+const pictureOf = (p: PackPuzzle) => colourPics.get(p.rows.join('/')) ?? null;
+
 export class PictureAnimator {
   private frames: Frame[] = [];
   private durations: number[] = [];
@@ -48,8 +61,9 @@ export class PictureAnimator {
       drawFrame(ctx, f, x, y, size);
       return;
     }
-    if (!this.still) this.still = staticPicture(this.puzzle);
+    if (!this.still) this.still = pictureOf(this.puzzle) ?? staticPicture(this.puzzle);
     const s = Math.min(size / this.still.width, size / this.still.height);
+    ctx.imageSmoothingEnabled = this.still.width > 64; // large illustrations smooth, pixel pictures sharp
     ctx.drawImage(this.still, x + (size - this.still.width * s) / 2, y + (size - this.still.height * s) / 2, this.still.width * s, this.still.height * s);
   }
 }

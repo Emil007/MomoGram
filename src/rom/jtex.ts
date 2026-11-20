@@ -42,3 +42,62 @@ export function dominantColors(px: RGBA[], n = 4): Array<{ hex: string; rgb: [nu
   return [...buckets.values()].sort((a, b) => b.c - a.c).slice(0, n)
     .map(e => ({ hex: hex(e.r / e.c, e.g / e.c, e.b / e.c), rgb: [e.r / e.c, e.g / e.c, e.b / e.c] as [number, number, number], share: e.c / Math.max(1, total) }));
 }
+
+/**
+ * A jtex as a picture in image order (8×8 tiles, Z-order inside a tile). Pixel formats as confirmed by looking at
+ * the games: 2 RGBA8, 3 RGB8, 4 RGBA4444, 5 and 6 RGB565. Textures with the older 0x14-byte header are stored
+ * bottom-up.
+ */
+export function jtexImage(file: Uint8Array): { w: number; h: number; rgba: Uint8Array } | null {
+  let d: Uint8Array;
+  try { d = lz11(file); } catch { return null; }
+  const v = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const newHdr = v.getUint32(0, true) === 0x80, o4 = newHdr ? 4 : 0, off = newHdr ? 0x80 : 0x14;
+  const fmt = v.getUint32(o4, true), w = v.getUint32(o4 + 4, true), h = v.getUint32(o4 + 8, true), W = v.getUint32(o4 + 12, true), H = v.getUint32(o4 + 16, true);
+  const bpp = fmt === 2 ? 4 : fmt === 3 ? 3 : fmt === 4 || fmt === 5 || fmt === 6 ? 2 : 0;
+  if (!bpp || !w || !h || W % 8 || H % 8 || w > W || h > H || off + W * H * bpp > d.length) return null;
+  const out = new Uint8Array(w * h * 4);
+  for (let k = 0; k < W * H; k++) {
+    const t = k >> 6, i = k & 63;
+    const x = (t % (W / 8)) * 8 + ((i & 1) | ((i >> 1) & 2) | ((i >> 2) & 4));
+    let y = Math.floor(t / (W / 8)) * 8 + (((i >> 1) & 1) | ((i >> 2) & 2) | ((i >> 3) & 4));
+    if (!newHdr) y = H - 1 - y;
+    if (x >= w || y >= h) continue;
+    const o = off + k * bpp, p = (y * w + x) * 4;
+    if (fmt === 2) { out[p] = d[o + 3]; out[p + 1] = d[o + 2]; out[p + 2] = d[o + 1]; out[p + 3] = d[o]; }
+    else if (fmt === 3) { out[p] = d[o + 2]; out[p + 1] = d[o + 1]; out[p + 2] = d[o]; out[p + 3] = 255; }
+    else {
+      const c = d[o] | (d[o + 1] << 8);
+      if (fmt === 4) { out[p] = (c >> 12 & 15) * 17; out[p + 1] = (c >> 8 & 15) * 17; out[p + 2] = (c >> 4 & 15) * 17; out[p + 3] = (c & 15) * 17; }
+      else { out[p] = (c >> 11 & 31) * 255 / 31; out[p + 1] = (c >> 5 & 63) * 255 / 63; out[p + 2] = (c & 31) * 255 / 31; out[p + 3] = 255; }
+    }
+  }
+  return { w, h, rgba: out };
+}
+
+/** several pictures in one asset: u32 count, then per picture u16 key length, key (utf-8), u16 w, u16 h, RGBA */
+export function packPictures(list: Array<{ key: string; w: number; h: number; rgba: Uint8Array }>): Uint8Array {
+  const enc = new TextEncoder();
+  const keys = list.map(p => enc.encode(p.key));
+  const size = 4 + list.reduce((a, p, i) => a + 2 + keys[i].length + 4 + p.rgba.length, 0);
+  const out = new Uint8Array(size), v = new DataView(out.buffer);
+  v.setUint32(0, list.length, true);
+  let o = 4;
+  list.forEach((p, i) => {
+    v.setUint16(o, keys[i].length, true); out.set(keys[i], o + 2); o += 2 + keys[i].length;
+    v.setUint16(o, p.w, true); v.setUint16(o + 2, p.h, true); o += 4;
+    out.set(p.rgba, o); o += p.rgba.length;
+  });
+  return out;
+}
+export function unpackPictures(d: Uint8Array): Map<string, { w: number; h: number; rgba: Uint8Array }> {
+  const v = new DataView(d.buffer, d.byteOffset, d.byteLength), dec = new TextDecoder();
+  const m = new Map<string, { w: number; h: number; rgba: Uint8Array }>();
+  let o = 4;
+  for (let n = v.getUint32(0, true); n > 0 && o < d.length; n--) {
+    const kl = v.getUint16(o, true), key = dec.decode(d.subarray(o + 2, o + 2 + kl)); o += 2 + kl;
+    const w = v.getUint16(o, true), h = v.getUint16(o + 2, true); o += 4;
+    m.set(key, { w, h, rgba: d.slice(o, o + w * h * 4) }); o += w * h * 4;
+  }
+  return m;
+}
