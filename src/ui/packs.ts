@@ -47,46 +47,43 @@ export function openPackManager(pm: PM) {
     render();
   }
 
-  async function importPacks() {
-    const files = await pickFiles('.json,.zip', true);
-    const found: Pack[] = [];
-    for (const f of files) {
-      const d = new Uint8Array(await f.arrayBuffer());
-      const entries = /\.zip$/i.test(f.name) ? unzipAll(d) : [{ name: f.name, data: d }];
-      for (const e of entries) {
-        if (!/\.json$/i.test(e.name)) continue;
-        try {
-          const p = JSON.parse(new TextDecoder().decode(e.data));
-          if (!validatePack(p)) continue;
-          // music saved next to the pack: <pack>.assets/<name>
-          const dir = e.name.replace(/[^/]*$/, '') + assetDir(p);
-          const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => ({ name: x.name.slice(dir.length), data: x.data }));
-          if (assets.length && withMusic()) p.assets = assets;
-          found.push(p);
-        } catch { /* skip */ }
-      }
-    }
-    await addPacks(found);
-    status.textContent = `${found.length} ✓`;
-  }
-
-  async function createPacks() {
+  /** one button for everything: game files, archives of games, pack files (.json) and pack exports (.zip) */
+  async function addFiles() {
     const files = await pickFiles('*', true);
     if (!files.length) return;
     const results = h('ul', { class: 'results' });
     status.innerHTML = '';
     status.append(results);
     const made: Pack[] = [];
+    let fromPackFiles = 0;
     for (const f of files) {
       const li = h('li', {}, f.name + ' … ' + t('analyzing'));
       results.append(li);
-      // archives (.zip/.7z/.rar) may hold several games
+      // archives (.zip/.7z/.rar) may hold several games, or packs exported by MomoGram
       let entries: Array<{ name: string; data: Uint8Array }>;
-      try { entries = isArchive(f.name) ? await extractAll(f) : [{ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }]; }
-      catch (e: any) { li.textContent = f.name + ': ✕ ' + (e.message || e); continue; }
-      entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png)$/i.test(e.name));
+      try {
+        if (/\.zip$/i.test(f.name)) { const d = new Uint8Array(await f.arrayBuffer()); try { entries = unzipAll(d); } catch { entries = await extractAll(f); } }
+        else entries = isArchive(f.name) ? await extractAll(f) : [{ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }];
+      } catch (e: any) { li.textContent = f.name + ': ✕ ' + (e.message || e); continue; }
+      entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png|md)$/i.test(e.name) && !/(^|\/)(__MACOSX|\.)/.test(e.name));
       const msgs: string[] = [];
+      // MomoGram pack files, with their music next to them (<pack>.assets/<name>)
+      const assetDirs: string[] = [];
       for (const e of entries) {
+        if (!/\.json$/i.test(e.name)) continue;
+        let p: any;
+        try { p = JSON.parse(new TextDecoder().decode(e.data)); } catch { continue; }
+        if (!validatePack(p)) continue;
+        const dir = e.name.replace(/[^/]*$/, '') + assetDir(p);
+        assetDirs.push(dir, e.name);
+        const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => ({ name: x.name.slice(dir.length), data: x.data }));
+        if (assets.length && withMusic()) p.assets = assets;
+        made.push(p); fromPackFiles++;
+        msgs.push(`✓ ${pickAny(p.title, lang())} (${p.levels.reduce((a: number, l: any) => a + l.puzzles.length, 0)})`);
+      }
+      // everything else is read as a game
+      for (const e of entries) {
+        if (assetDirs.some(d => e.name === d || e.name.startsWith(d)) || /\.json$/i.test(e.name)) continue;
         const r = await importGameFile(e.name, e.data);
         if (r.ok) {
           for (const p of r.packs) { p.source.file = e.name; made.push(p); }
@@ -95,14 +92,14 @@ export function openPackManager(pm: PM) {
           msgs.push(`✕ ${e.name}: ${r.message === 'encrypted' ? t('encrypted') : r.message === 'unsupported' ? t('unsupported') : r.message}`);
         }
       }
-      li.textContent = f.name + ': ' + msgs.join(' · ');
+      li.textContent = f.name + ': ' + (msgs.join(' · ') || '✕ ' + t('unsupported'));
     }
     if (made.length) {
       await addPacks(made);
       const ids = new Set(made.map(p => p.id));
       const unique = pm.packs().filter(p => ids.has(p.id));
-      results.append(h('li', {}, `${unique.length} pack(s) from ${made.length} file(s)`));
-      results.append(h('li', {}, h('button', { class: 'btn primary', onClick: () => exportZip(unique, 'momogram-new-packs.zip') }, t('exportAll'))));
+      // offering an export only makes sense for packs made from games
+      if (made.length > fromPackFiles) results.append(h('li', {}, h('button', { class: 'btn primary', onClick: () => exportZip(unique, 'momogram-new-packs.zip') }, t('exportAll'))));
     }
   }
 
@@ -127,8 +124,7 @@ export function openPackManager(pm: PM) {
   render();
   pm.screen(pm.header(t('packs')), h('div', { class: 'packs' },
     h('div', { class: 'row wrap' },
-      h('button', { class: 'btn primary', onClick: createPacks }, '✚ ' + t('createPacks')),
-      h('button', { class: 'btn', onClick: importPacks }, '⤒ ' + t('importPacks')),
+      h('button', { class: 'btn primary', onClick: addFiles }, '✚ ' + t('addFiles')),
       h('button', { class: 'btn', onClick: () => exportZip(pm.packs()) }, '⤓ ' + t('exportAll'))),
     musicSwitch,
     h('p', { class: 'fine' }, t('createHelp')),
