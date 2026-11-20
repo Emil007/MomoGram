@@ -6,8 +6,8 @@ const LEVELS2: Pack['levels'] = [
  {
   "id": "tricky",
   "title": {
-   "en": "Tricky",
-   "de": "Knifflig"
+   "en": "Normal",
+   "de": "Normal"
   },
   "rules": "normal",
   "group": "",
@@ -225,8 +225,8 @@ const LEVELS2: Pack['levels'] = [
  {
   "id": "tough",
   "title": {
-   "en": "Tough",
-   "de": "Harte Nuss"
+   "en": "Hard",
+   "de": "Schwer"
   },
   "rules": "normal",
   "group": "",
@@ -487,7 +487,7 @@ export const STARTER: Pack = {
   format: 'momogram-pack', version: 1, id: 'momogram-starter',
   title: { en: 'MomoGram starter puzzles', de: 'MomoGram-Einstiegsrätsel' },
   source: { game: 'MomoGram', platform: 'MomoGram', developer: 'MomoGram contributors' },
-  levels: [{ id: 'starter', title: { en: 'Relaxed', de: 'Entspannt' }, rules: 'normal', puzzles: [
+  levels: [{ id: 'starter', title: { en: 'Easy', de: 'Leicht' }, rules: 'normal', puzzles: [
     {
       "id": "heart",
       "width": 10,

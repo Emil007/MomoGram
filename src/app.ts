@@ -184,8 +184,8 @@ export function home() {
 
   const quick = h('div', { class: 'menu' },
     qPack ? h('button', { class: 'btn primary big', onClick: () => resumeQuick() }, h('b', {}, '▶ ' + t('continue')), h('small', {}, pickAny(qPack.title, packLang()))) : null,
-    h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily')), h('small', {}, t('dailyHelp'))),
-    h('button', { class: 'btn big mode random', onClick: () => randomPuzzle() }, h('b', {}, t('random')), h('small', {}, t('randomHelp'))));
+    h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily'))),
+    h('button', { class: 'btn big mode random', onClick: () => randomPuzzle() }, h('b', {}, t('random'))));
 
   const lib = h('div', { class: 'library' });
   renderLibrary(lib, null);
