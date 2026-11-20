@@ -6,7 +6,7 @@ import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/fo
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { importGameFile } from './packs/importers/index';
 import './packs/importers/all';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager, storePacks } from './ui/packs';
@@ -424,6 +424,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     if (pr.best !== undefined) tile.append(h('em', {}, formatTime(pr.best)));
     tile.append(h('span', { class: 'num' }, String(i + 1)));
     if (p.exclusive) tile.append(h('span', { class: 'excl', title: t('exclusive', { r: p.exclusive }) }, p.exclusive));
+    if (getBoard(pack.id, lv.id, p.id)) tile.append(h('span', { class: 'inprogress', title: t('continue') }, '✎'));
     if (pr.medal) tile.append(medalEl(pr.medal));
     else if (pr.underLimit) tile.append(h('span', { class: 'star', title: '< 60:00' }, '★'));
     grid.append(tile);
@@ -448,6 +449,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
   const pck = pckOf(pack);
   const name = pr.cleared ? pickText(pz.name, packLang()) : '';
   const pic = pr.cleared ? thumbnail(pz, pck, 160) : h('div', { class: 'qbig', style: `aspect-ratio:${pz.width}/${pz.height}` }, '?');
+  const saved = getBoard(pack.id, lv.id, pz.id);
   const go = () => play(pack, lv, i, back);
   const nav = (d: number) => { const j = i + d; if (j >= 0 && j < lv.puzzles.length) puzzleStart(pack, lv, j, back); };
   const stat = (label: string, value: Node | string) => h('div', { class: 'stat' }, h('small', {}, label), h('b', {}, value));
@@ -466,7 +468,8 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     fastestRow(pack.id, pz.id),
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
-    h('button', { class: 'btn primary big start', onClick: go }, icon('play'), t('start'))));
+    h('button', { class: 'btn primary big start', onClick: go }, icon('play'), saved ? t('continue') + ' · ' + formatTime(saved.state.elapsedMs + saved.state.penaltyMs) : t('start')),
+    saved ? h('button', { class: 'btn ghost', onClick: () => { clearBoard(pack.id, lv.id, pz.id); play(pack, lv, i, back, undefined, true); } }, t('restart')) : null));
 }
 
 /** home: is this profile in sync with the server? tap to sync now */
@@ -728,8 +731,10 @@ function randomPuzzle() {
 
 // ---------------------------------------------------------------- play
 
-function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restore?: any) {
+function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restore?: any, fresh = false) {
   const pz = lv.puzzles[index];
+  // a board left earlier is picked up again
+  if (!restore && !fresh) restore = getBoard(pack.id, lv.id, pz.id)?.state;
   const rules = rulesFor(lv);
   const board = new Board(pz.rows, rules);
   if (restore) board.restore(restore); else board.crossEmptyLines();
@@ -879,7 +884,17 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     r: () => trialBtn && trialToggle(),
   });
 
+  /** keep the board as it is, to come back to (pause menu, or when the app is put away) */
+  function keepBoard() {
+    if (finished) return;
+    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints } as any,
+      puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title });
+  }
+  const onHide = () => { if (document.visibilityState === 'hidden' && board.elapsedMs > 0) keepBoard(); };
+  document.addEventListener('visibilitychange', onHide);
+
   function cleanup() {
+    document.removeEventListener('visibilitychange', onHide);
     finished = true;
     clearTimeout(timerId);
     ro.disconnect();
@@ -893,10 +908,9 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     running = false;
     await choose(t('menu'), [
       [t('resume'), () => {}],
-      [t('stopSave'), () => { setQuickSave({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints } as any,
-        puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title }); cleanup(); back(); }],
-      [t('restart'), () => { cleanup(); setQuickSave(null); play(pack, lv, index, back); }],
-      [t('quit'), () => { cleanup(); setQuickSave(null); back(); }],
+      [t('stopSave'), () => { keepBoard(); cleanup(); back(); }],
+      [t('restart'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }],
+      [t('quit'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); back(); }],
     ]);
     last = performance.now();
     running = true;
@@ -925,7 +939,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
     const newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal);
-    setQuickSave(null);
+    clearBoard(pack.id, lv.id, pz.id);
     cleanup();
     showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal);
   }

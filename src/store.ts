@@ -170,7 +170,7 @@ export function deleteProfile(id: string) {
   const all = loadProfiles().filter(p => p.id !== id);
   if (!all.length) return;
   storeProfiles(all);
-  for (const k of ['progress', 'quick', 'quicktime', 'packtimes', 'resets', 'account']) localStorage.removeItem(`momogram.${k}.${id}`);
+  for (const k of ['progress', 'quick', 'quicktime', 'boards', 'packtimes', 'resets', 'account']) localStorage.removeItem(`momogram.${k}.${id}`);
   if (localStorage.getItem('momogram.profile') === id) switchProfile(all[0].id);
 }
 
@@ -206,14 +206,64 @@ export interface QuickSave {
   /** the puzzle itself, for puzzles that aren't part of a stored pack (daily puzzles) */
   puzzle?: import('./packs/format').PackPuzzle; level?: { title: import('./packs/format').PackLevel['title']; rules: import('./packs/format').PackLevel['rules'] }; packTitle?: Pack['title'];
 }
-export function setQuickSave(q: QuickSave | null) {
-  const had = localStorage.getItem(pk('quick')) !== null;
-  if (q) localStorage.setItem(pk('quick'), JSON.stringify(q));
-  else localStorage.removeItem(pk('quick'));
-  if (q || had) { localStorage.setItem(pk('quicktime'), new Date().toISOString()); changed(); }
+// ---- boards in progress: every puzzle keeps its own, the latest one is "Continue" on the home screen ----
+// A finished or abandoned board stays as an empty entry for a while, so a sync can't bring an old copy back.
+export type Boards = Record<string, { q: QuickSave | null; saved: string }>;
+const bkey = (packId: string, levelId: string, puzzleId: string) => `${packId}|${levelId}|${puzzleId}`;
+const MAX_BOARDS = 60, KEEP_GONE = 45 * 86400000;
+export function loadBoards(): Boards {
+  let b: Boards = {};
+  try { b = JSON.parse(localStorage.getItem(pk('boards')) || '{}'); } catch { b = {}; }
+  // older versions: one quick save
+  const old = localStorage.getItem(pk('quick'));
+  if (old) {
+    try { const q: QuickSave = JSON.parse(old); if (q) b[bkey(q.packId, q.levelId, q.puzzleId)] = { q, saved: localStorage.getItem(pk('quicktime')) || new Date().toISOString() }; } catch { /* ignore */ }
+    localStorage.removeItem(pk('quick'));
+    storeBoards(b);
+  }
+  return b;
 }
-export function getQuickSave(): QuickSave | null {
-  try { return JSON.parse(localStorage.getItem(pk('quick')) || 'null'); } catch { return null; }
+function storeBoards(b: Boards) {
+  const now = Date.now();
+  const live = Object.entries(b).filter(([, v]) => v.q).sort((x, y) => y[1].saved.localeCompare(x[1].saved));
+  const out: Boards = {};
+  for (const [k, v] of live.slice(0, MAX_BOARDS)) out[k] = v;
+  for (const [k, v] of Object.entries(b)) if (!v.q && now - Date.parse(v.saved) < KEEP_GONE) out[k] = v;
+  localStorage.setItem(pk('boards'), JSON.stringify(out));
+}
+/** keep a board to come back to */
+export function saveBoard(q: QuickSave) {
+  const b = loadBoards();
+  b[bkey(q.packId, q.levelId, q.puzzleId)] = { q, saved: new Date().toISOString() };
+  storeBoards(b); changed();
+}
+/** the puzzle was solved, restarted or given up: its board is gone */
+export function clearBoard(packId: string, levelId: string, puzzleId: string) {
+  const b = loadBoards(), k = bkey(packId, levelId, puzzleId);
+  if (!b[k]?.q) return;
+  b[k] = { q: null, saved: new Date().toISOString() };
+  storeBoards(b); changed();
+}
+export function getBoard(packId: string, levelId: string, puzzleId: string): QuickSave | null {
+  return loadBoards()[bkey(packId, levelId, puzzleId)]?.q ?? null;
+}
+/** the board played last */
+export function getQuickSave(): QuickSave | null { return latestBoard(loadBoards())?.q ?? null; }
+function latestBoard(b: Boards) {
+  let best: Boards[string] | null = null;
+  for (const v of Object.values(b)) if (v.q && (!best || v.saved > best.saved)) best = v;
+  return best;
+}
+/** join boards from elsewhere: per puzzle, the newer one wins (an empty entry too) */
+function mergeBoards(remote: Boards): boolean {
+  const b = loadBoards();
+  let any = false;
+  for (const [k, v] of Object.entries(remote)) {
+    if (b[k] && b[k].saved >= v.saved) continue;
+    b[k] = v; any = true;
+  }
+  if (any) storeBoards(b);
+  return any;
 }
 
 // ---- save files: the active profile, every pack with its own timestamp ----
@@ -227,7 +277,8 @@ export interface SaveFile {
   packs: Record<string, { updated: string; progress: Record<string, PuzzleProgress>; reset?: string }>;
   quick: QuickSave | null;
   settings?: Partial<Settings>;
-  quickSaved?: string; // when the quick save was last set or cleared
+  quickSaved?: string; // when the quick save was last set or cleared (older versions)
+  boards?: Boards; // every board in progress
   settingsSaved?: string; // when a shared setting last changed
 }
 
@@ -245,8 +296,8 @@ function packsOf(p: ProgressMap): SaveFile['packs'] {
 export function makeSave(): SaveFile {
   const me = activeProfile();
   return {
-    format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: new Date().toISOString(), packs: packsOf(progress), quick: getQuickSave(),
-    settings: sharedSettings(), quickSaved: localStorage.getItem(pk('quicktime')) ?? undefined, settingsSaved: localStorage.getItem('momogram.settingstime') ?? undefined,
+    format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: new Date().toISOString(), packs: packsOf(progress), quick: getQuickSave(), boards: loadBoards(),
+    settings: sharedSettings(), quickSaved: latestBoard(loadBoards())?.saved, settingsSaved: localStorage.getItem('momogram.settingstime') ?? undefined,
   };
 }
 
@@ -279,12 +330,8 @@ export function mergeSave(s: SaveFile): boolean {
     any = true;
   }
   if (any) { localStorage.setItem(pk('resets'), JSON.stringify(resetTimes)); persist(); }
-  const qt = localStorage.getItem(pk('quicktime'));
-  if (s.quickSaved && (!qt || s.quickSaved > qt)) {
-    if (s.quick) localStorage.setItem(pk('quick'), JSON.stringify(s.quick)); else localStorage.removeItem(pk('quick'));
-    localStorage.setItem(pk('quicktime'), s.quickSaved);
-    any = true;
-  }
+  if (s.boards) any = mergeBoards(s.boards) || any;
+  else if (s.quick && s.quickSaved) any = mergeBoards({ [bkey(s.quick.packId, s.quick.levelId, s.quick.puzzleId)]: { q: s.quick, saved: s.quickSaved } }) || any;
   const st = localStorage.getItem('momogram.settingstime');
   if (s.settings && s.settingsSaved && (!st || s.settingsSaved > st)) {
     for (const [k, v] of Object.entries(s.settings)) if (!DEVICE_SETTINGS.includes(k as keyof Settings) && k in DEFAULTS) (settings as any)[k] = v;
@@ -313,7 +360,7 @@ function bestOf(a: PuzzleProgress | undefined, b: PuzzleProgress): PuzzleProgres
 /** give a local profile another id (to join it with an account's profile); its progress moves along */
 export function rekeyProfile(from: string, to: string, name?: string) {
   if (from === to) return;
-  for (const k of ['progress', 'quick', 'quicktime', 'packtimes', 'resets', 'account']) {
+  for (const k of ['progress', 'quick', 'quicktime', 'boards', 'packtimes', 'resets', 'account']) {
     const v = localStorage.getItem(`momogram.${k}.${from}`);
     if (v !== null) localStorage.setItem(`momogram.${k}.${to}`, v);
     localStorage.removeItem(`momogram.${k}.${from}`);
@@ -361,7 +408,8 @@ export function importSave(s: SaveFile): { profile: string; created: boolean; pa
     taken++;
   }
   persist();
-  if (!exists || !getQuickSave()) setQuickSave(s.quick ?? null);
+  if (s.boards) mergeBoards(s.boards);
+  else if (s.quick) mergeBoards({ [bkey(s.quick.packId, s.quick.levelId, s.quick.puzzleId)]: { q: s.quick, saved: s.quickSaved ?? s.saved } });
   if (!exists && s.settings) { Object.assign(settings, s.settings); saveSettings(); }
   return { profile: s.profile.name, created: !exists, packsTaken: taken, packsKept: kept };
 }
