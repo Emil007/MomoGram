@@ -15,6 +15,7 @@ import { unzipFirst, packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 import { STARTER } from './packs/starter';
 import { icon } from './ui/icons';
+import { editorHome } from './ui/editor';
 import { puzzleLevel } from './game/difficulty';
 
 const TIME_LIMIT = 60 * 60_000;
@@ -194,6 +195,7 @@ export function home() {
     h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, t('library')), arrange), lib,
     h('div', { class: 'menu small' },
       h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
+      h('button', { class: 'btn', onClick: () => editorScreen() }, '✎ ' + t('editor')),
       h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))),
     h('footer', { class: 'fine' }, t('noGameData'))));
 }
@@ -858,6 +860,18 @@ export function choose(title: string, options: Array<[string, () => void]>): Pro
 }
 
 // ---------------------------------------------------------------- packs
+
+function editorScreen() {
+  applyThemeCss(root(), null);
+  editorHome({
+    packs: () => ctx.packs,
+    setPacks: p => { ctx.packs = p.sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en'))); },
+    header: (title, back) => header(title, back),
+    screen, home, choose,
+    test: (pack, lv, i, back) => play(pack, lv, i, back),
+    author: activeProfile().name,
+  });
+}
 
 function packsScreen() {
   applyThemeCss(root(), null);
