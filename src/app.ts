@@ -16,6 +16,7 @@ import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 import { STARTER } from './packs/starter';
 import { icon } from './ui/icons';
 import { editorHome } from './ui/editor';
+import { textureInspector } from './ui/texinspect';
 import { puzzleLevel } from './game/difficulty';
 
 const TIME_LIMIT = 60 * 60_000;
@@ -976,6 +977,7 @@ function optionsScreen() {
     card(t('secAbout'),
       h('p', { class: 'fine left' }, t('controls')),
       h('p', { class: 'fine left' }, t('musicNote')),
+      /[?&]debug/.test(location.search) ? h('button', { class: 'btn', onClick: () => textureInspector(screen, header('3DS textures', optionsScreen)) }, '3DS textures (debug)') : null,
       h('p', { class: 'fine left' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · ' + t('noGameData')))));
 }
 
