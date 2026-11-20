@@ -11,6 +11,8 @@ const en: Dict = {
   addGames: 'Add games', addGamesHelp: 'DS, 3DS, Game Boy, Super Famicom …',
   daily: 'Daily nonogram', dailyHelp: '15 fresh puzzles every day, 5 per difficulty',
   random: 'Surprise me', randomHelp: 'A random puzzle from your library', randomFrom: 'Pick a difficulty',
+  arrange: 'Arrange', show: 'Show', hide: 'Hide', moveLeft: 'Move left', moveRight: 'Move right', groupBy: 'Folders by',
+  group_series: 'Series', group_system: 'System', group_none: 'No folders', gamesCount: '{n} games',
   continue: 'Continue', packs: 'Puzzle packs', options: 'Options', back: 'Back', play: 'Play',
   solvedCount: '{a} / {b} solved',
   // levels & puzzles
@@ -63,6 +65,8 @@ const de: Dict = {
   addGames: 'Spiele hinzufügen', addGamesHelp: 'DS, 3DS, Game Boy, Super Famicom …',
   daily: 'Nonogramm des Tages', dailyHelp: 'Jeden Tag 15 neue Rätsel, 5 pro Schwierigkeit',
   random: 'Überrasch mich', randomHelp: 'Ein zufälliges Rätsel aus deiner Sammlung', randomFrom: 'Wähle eine Schwierigkeit',
+  arrange: 'Anordnen', show: 'Zeigen', hide: 'Ausblenden', moveLeft: 'Nach links', moveRight: 'Nach rechts', groupBy: 'Ordner nach',
+  group_series: 'Serie', group_system: 'System', group_none: 'Keine Ordner', gamesCount: '{n} Spiele',
   continue: 'Weiterspielen', packs: 'Rätselpakete', options: 'Optionen', back: 'Zurück', play: 'Spielen',
   solvedCount: '{a} / {b} gelöst',
   puzzleNo: 'Rätsel', puzzles: 'Rätsel', level: 'Schwierigkeit', extra: 'Extra', locked: 'Gesperrt',

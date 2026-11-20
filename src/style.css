@@ -312,3 +312,20 @@ body { background: #fff; }
 .opt input[type=range] { width: 45%; accent-color: var(--accent); }
 .fine.left { text-align: left; }
 @media (max-width: 420px) { .opt { flex-wrap: wrap; } .seg.mini { width: 100%; } }
+
+/* ---------- library: folders, arranging ---------- */
+.mode.random { background: linear-gradient(#b48be0, var(--free) 50%, #6b37a6); }
+.section-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: .3rem; }
+.section-row .section-title { margin: 0 .2rem; }
+.arrange { padding: .25em .7em; font-size: .85rem; }
+.arrange.on { background: var(--lcd); border-color: var(--line); box-shadow: 0 2px 0 var(--line); }
+.lib-entry { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.lib-entry > .btn { flex: 1; }
+.lib-entry.hidden > .btn { opacity: .4; filter: grayscale(1); }
+.lib-tools { display: flex; align-items: center; justify-content: space-between; }
+.lib-tools .eye { padding: .2em .6em; font-size: .8rem; }
+.game.folder { background: linear-gradient(#ffffff, #f1f5f8); }
+.game.folder::before { background: repeating-linear-gradient(180deg, var(--accent) 0 10px, var(--accent2) 10px 20px); }
+.folder-tabs { display: flex; gap: 3px; padding-left: .2rem; }
+.folder-tabs i { width: 14px; height: 6px; border-radius: 3px; background: var(--game, var(--accent)); }
+.lib-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-weight: 800; padding-top: .3rem; }

@@ -184,26 +184,123 @@ export function home() {
 
   const quick = h('div', { class: 'menu' },
     qPack ? h('button', { class: 'btn primary big', onClick: () => resumeQuick() }, h('b', {}, '▶ ' + t('continue')), h('small', {}, pickAny(qPack.title, packLang()))) : null,
-    h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily')), h('small', {}, t('dailyHelp'))));
+    h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily')), h('small', {}, t('dailyHelp'))),
+    h('button', { class: 'btn big mode random', onClick: () => randomPuzzle() }, h('b', {}, t('random')), h('small', {}, t('randomHelp'))));
 
-  // one card per game: its own colour, platform and progress
   const lib = h('div', { class: 'library' });
-  for (const p of packs) {
-    const [a, b] = countPack(p);
-    const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
-    lib.append(h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: () => openPack(p, home) },
-      h('b', {}, pickAny(p.title, packLang())),
-      h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : '')),
-      h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
-      h('small', { class: 'count' }, t('solvedCount', { a, b }))));
-  }
+  renderLibrary(lib, null);
+  const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { libEdit = !libEdit; renderLibrary(lib, null); arrange.classList.toggle('on', libEdit); } }, t('arrange'));
 
   screen(h('div', { class: 'home' }, top, quick,
-    h('h2', { class: 'section-title' }, t('library')), lib,
+    h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, t('library')), arrange), lib,
     h('div', { class: 'menu small' },
       h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
       h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))),
     h('footer', { class: 'fine' }, t('noGameData'))));
+}
+
+// ---------------------------------------------------------------- library: folders, order, hidden games
+
+interface LibPrefs { order: string[]; hidden: string[]; group: 'series' | 'system' | 'none' }
+function libPrefs(): LibPrefs {
+  try { return { order: [], hidden: [], group: 'series', ...JSON.parse(localStorage.getItem('momogram.library') || '{}') }; } catch { return { order: [], hidden: [], group: 'series' }; }
+}
+function setLibPrefs(p: LibPrefs) { localStorage.setItem('momogram.library', JSON.stringify(p)); }
+let libEdit = false;
+
+/** series of a game, from its title (all Picross e games together, the Mario games, …) */
+function seriesOf(p: Pack): string {
+  const n = pickAny(p.title, 'en');
+  const rules: Array<[RegExp, string]> = [
+    [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
+    [/mario/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
+  ];
+  for (const [re, name] of rules) if (re.test(n)) return name;
+  return n;
+}
+const groupKey = (p: Pack, mode: LibPrefs['group']) => p.id === 'momogram-starter' ? '' : mode === 'system' ? p.source.platform : mode === 'series' ? seriesOf(p) : '';
+
+/** visible games in the player's order (hidden ones only while arranging) */
+function libraryPacks(includeHidden = false): Pack[] {
+  const pr = libPrefs();
+  const idx = (id: string) => { const i = pr.order.indexOf(id); return i < 0 ? 1e6 : i; };
+  return allPacks().filter(p => includeHidden || !pr.hidden.includes(p.id)).sort((a, b) => idx(a.id) - idx(b.id));
+}
+
+function gameCard(p: Pack, onOpen: () => void): HTMLElement {
+  const [a, b] = countPack(p);
+  const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
+  return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
+    h('b', {}, pickAny(p.title, packLang())),
+    h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : '')),
+    h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
+    h('small', { class: 'count' }, t('solvedCount', { a, b })));
+}
+
+/**
+ * The library grid: single games as cards, several games of a series (or system) as a folder. While arranging,
+ * every entry gets arrows to move it and an eye to hide it.
+ */
+function renderLibrary(el: HTMLElement, folder: string | null) {
+  const pr = libPrefs();
+  const packs = libraryPacks(libEdit);
+  const entries: Array<{ key: string; packs: Pack[] }> = [];
+  for (const p of packs) {
+    const k = folder !== null ? p.id : groupKey(p, pr.group) || p.id;
+    if (folder !== null && (groupKey(p, pr.group) || p.id) !== folder) continue;
+    const e = entries.find(x => x.key === k);
+    if (e) e.packs.push(p); else entries.push({ key: k, packs: [p] });
+  }
+  el.replaceChildren();
+  const move = (e: { packs: Pack[] }, d: number) => {
+    // order is kept per game; moving an entry moves all games in it past the neighbour entry
+    const flat = entries.flatMap(x => x.packs.map(p => p.id));
+    const i = entries.indexOf(e as any), j = i + d;
+    if (j < 0 || j >= entries.length) return;
+    [entries[i], entries[j]] = [entries[j], entries[i]];
+    const order = entries.flatMap(x => x.packs.map(p => p.id));
+    const rest = pr.order.filter(id => !flat.includes(id));
+    setLibPrefs({ ...pr, order: [...order, ...rest] });
+    renderLibrary(el, folder);
+  };
+  for (const e of entries) {
+    const hidden = e.packs.every(p => pr.hidden.includes(p.id));
+    const card = e.packs.length === 1
+      ? gameCard(e.packs[0], () => openPack(e.packs[0], folder !== null ? () => folderScreen(folder) : home))
+      : folderCard(e.key, e.packs);
+    const wrap = h('div', { class: 'lib-entry' + (hidden ? ' hidden' : '') }, card);
+    if (libEdit) {
+      card.setAttribute('tabindex', '-1');
+      wrap.append(h('div', { class: 'lib-tools' },
+        h('button', { class: 'rbtn ghost', 'aria-label': t('moveLeft'), onClick: () => move(e, -1) }, icon('prev')),
+        h('button', { class: 'btn eye', onClick: () => {
+          const ids = e.packs.map(p => p.id);
+          setLibPrefs({ ...pr, hidden: hidden ? pr.hidden.filter(id => !ids.includes(id)) : [...pr.hidden, ...ids] });
+          renderLibrary(el, folder);
+        } }, hidden ? t('show') : t('hide')),
+        h('button', { class: 'rbtn ghost', 'aria-label': t('moveRight'), onClick: () => move(e, 1) }, icon('next'))));
+    }
+    el.append(wrap);
+  }
+  if (libEdit && folder === null) el.append(h('div', { class: 'lib-group' }, h('span', {}, t('groupBy')),
+    ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))));
+}
+
+function folderCard(key: string, packs: Pack[]): HTMLElement {
+  let a = 0, b = 0;
+  for (const p of packs) { const [x, y] = countPack(p); a += x; b += y; }
+  return h('button', { class: 'btn game folder', onClick: () => folderScreen(key) },
+    h('b', {}, key), h('small', {}, t('gamesCount', { n: packs.length })),
+    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
+    h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
+    h('small', { class: 'count' }, t('solvedCount', { a, b })));
+}
+
+function folderScreen(key: string) {
+  applyThemeCss(root(), null);
+  const lib = h('div', { class: 'library' });
+  renderLibrary(lib, key);
+  screen(header(key, home), h('div', { class: 'home' }, lib));
 }
 
 function progressText(pack: Pack, levels: PackLevel[]) {
@@ -444,20 +541,55 @@ function menuMusic(pack: Pack | null = null, fresh = false) {
 
 // ---------------------------------------------------------------- daily nonogram
 
-/** five small puzzles a day, picked from all games in the library (the same for everyone with the same games) */
+/** seeded random numbers (the same daily selection all day) */
+function rng(seed: number) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; }; }
+
+/** every puzzle of the visible games, with where it comes from */
+function puzzlePool(): Array<{ pack: Pack; lv: PackLevel; i: number }> {
+  const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
+  for (const p of libraryPacks()) for (const lv of p.levels) lv.puzzles.forEach((z, i) => { if (z.rows.some(r => r.includes('#'))) out.push({ pack: p, lv, i }); });
+  return out;
+}
+
+/** n puzzles of a measured difficulty, drawn at random (difficulty is computed only for the ones looked at) */
+function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new Set<string>()) {
+  const pool = puzzlePool();
+  const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
+  for (let tries = 0; tries < 4000 && out.length < n && pool.length; tries++) {
+    const k = Math.floor(rand() * pool.length);
+    const e = pool[k]; pool.splice(k, 1);
+    const pz = e.lv.puzzles[e.i];
+    if (skip.has(pz.rows.join('/'))) continue;
+    if (puzzleLevel(pz) === level) { out.push(e); skip.add(pz.rows.join('/')); }
+  }
+  return out;
+}
+
+const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, packLang())} · ${pickAny(e.lv.title, packLang())}`;
+
+/** 15 puzzles a day, 5 per difficulty, from all visible games; solved ones are saved for the day */
 function daily() {
   const d = new Date();
   const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-  const pool: PackPuzzle[] = [];
-  for (const p of allPacks()) {
-    const extra = (p as Pack & { ds?: DsPackMeta }).ds?.daily7 ?? [];
-    for (const z of [...extra, ...p.levels.flatMap(l => l.puzzles)]) if (z.width * z.height <= 100 && z.rows.some(r => r.includes('#'))) pool.push(z);
-  }
-  if (!pool.length) return;
-  const puzzles = [0, 1, 2, 3, 4].map(k => ({ ...pool[(seed * 7919 + k * 104729) % pool.length], id: `daily-${seed}-${k}`, name: undefined }));
-  const lv: PackLevel = { id: 'daily-' + seed, title: { en: t('daily') }, rules: 'normal', puzzles };
-  const pack: Pack = { format: 'momogram-pack', version: 1, id: 'daily', title: { en: t('daily') }, source: { game: 'MomoGram', platform: 'MomoGram' }, levels: [lv] };
-  puzzleList(pack, lv, home);
+  const rand = rng(seed), seen = new Set<string>();
+  const levels: PackLevel[] = ([1, 2, 3] as const).map(level => ({
+    id: `daily-${seed}-d${level}`, title: { en: t('diff' + level) }, rules: 'normal' as const,
+    puzzles: drawPuzzles(rand, level, 5, seen).map((e, k) => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-d${level}-${k}`, from: fromText(e), name: undefined })),
+  })).filter(l => l.puzzles.length);
+  if (!levels.length) return;
+  const pack: Pack = { format: 'momogram-pack', version: 1, id: 'daily', title: { en: t('daily') }, source: { game: 'MomoGram', platform: 'MomoGram' }, levels };
+  packLevels(pack, home);
+}
+
+/** "Surprise me": pick a difficulty, then a random puzzle of it from the whole library */
+function randomPuzzle() {
+  const go = async (level: 1 | 2 | 3) => {
+    const [e] = drawPuzzles(Math.random, level, 1);
+    if (!e) return;
+    await loadExtras(e.pack);
+    puzzleStart(e.pack, e.lv, e.i, home);
+  };
+  choose(t('randomFrom'), [[t('diff1'), () => go(1)], [t('diff2'), () => go(2)], [t('diff3'), () => go(3)], [t('back'), () => {}]]);
 }
 
 // ---------------------------------------------------------------- play
