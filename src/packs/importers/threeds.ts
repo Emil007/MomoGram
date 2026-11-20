@@ -2,7 +2,7 @@
 // Needs decrypted files; puzzles are .bprs (title utf16[16], w, h, cells) or .bprs2 (".PRS" header, title, w, h, cells).
 import { registerImporter } from './index';
 import { readCtr, lz11, ctrEncrypted, SMDH_LANGS, u16, CtrFile } from '../../rom/ctr';
-import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFromBits } from '../format';
+import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFromBits, makeIcon } from '../format';
 import { accentFromColors } from '../theme';
 import { jtexPixels, dominantColors } from '../../rom/jtex';
 import { isBcstm } from '../../audio/bcstm';
@@ -116,6 +116,7 @@ export function read3ds(data: Uint8Array): Pack[] {
   const board = boardColors(t.files);
   if (accent || board) theme.palette = { accent: accent ?? board?.cursor ?? '#1f9be0', ...board };
   return [{
+    icon: t.icon ? makeIcon(48, 48, t.icon) : undefined,
     theme: theme.palette || theme.music ? theme : undefined,
     assets: assets.length ? assets : undefined,
     format: 'momogram-pack', version: 1,

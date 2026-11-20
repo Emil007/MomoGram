@@ -1,5 +1,5 @@
 // Pack creation: identify a game file the user owns and read its puzzles into a MomoGram pack.
-import { Pack } from '../format';
+import { Pack, makeIcon } from '../format';
 import { NdsRom } from '../../rom/nds';
 import { readPicrossDs, readPicrossDsDemo, dsToPack } from '../../rom/picrossds';
 
@@ -20,10 +20,12 @@ registerImporter({
   name: 'Picross DS',
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('AXP') || (NdsRom.looksLike(d) && new NdsRom(d).title.startsWith('PICROSS')),
   read: d => {
+    const px = new NdsRom(d).icon();
+    const icon = px ? makeIcon(32, 32, px) : undefined;
     let ds;
-    try { ds = readPicrossDs(d); } catch { return [readPicrossDsDemo(d)]; }
-    // puzzles, names, daily sets, solved-picture animations and music; the ROM itself is not kept
-    return [dsToPack(ds)];
+    try { ds = readPicrossDs(d); } catch { return [{ ...readPicrossDsDemo(d), icon }]; }
+    // puzzles, names, daily sets, solved-picture animations, music and icon; the ROM itself is not kept
+    return [{ ...dsToPack(ds), icon }];
   },
 });
 

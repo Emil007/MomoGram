@@ -331,3 +331,6 @@ body { background: #fff; }
 .lib-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-weight: 800; padding-top: .3rem; }
 .puzzle .excl { position: absolute; bottom: -2px; right: -2px; font-size: .55rem; font-weight: 900; color: #fff; background: var(--free); padding: 0 .3em; border-radius: 5px 0 5px 0; }
 .zipmusic { margin: 0; }
+.game.has-icon { padding-left: 4.3rem; }
+.game .game-icon { position: absolute; left: 14px; top: 12px; width: 48px; height: 48px; image-rendering: pixelated; border-radius: 8px; border: 2px solid var(--line); background: #fff; }
+.folder-tabs .game-icon { position: static; width: 22px; height: 22px; border-width: 1.5px; border-radius: 5px; }

@@ -164,11 +164,10 @@ function lastPack(): Pack | null {
   return allPacks().find(p => p.id === id) ?? null;
 }
 
-let homeTrack = '';
 export function home() {
   applyThemeCss(root(), null);
-  // back from a game: its music ends and the main menu picks a random track from all games
-  if (!homeTrack || Snd.current() !== homeTrack) { menuMusic(null, true); homeTrack = Snd.current(); }
+  // whatever plays keeps playing; only a silent start picks a random track from all games
+  if (!Snd.current()) menuMusic(null, true);
   const q = getQuickSave();
   const qPack = q ? allPacks().find(p => p.id === q.packId) : null;
   const packs = allPacks();
@@ -230,7 +229,8 @@ function libraryPacks(includeHidden = false): Pack[] {
 function gameCard(p: Pack, onOpen: () => void): HTMLElement {
   const [a, b] = countPack(p);
   const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
-  return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
+  return h('button', { class: 'btn game' + (p.icon ? ' has-icon' : ''), style: col ? `--game:${col}` : undefined, onClick: onOpen },
+    p.icon ? iconCanvas(p.icon) : null,
     h('b', {}, pickAny(p.title, packLang())),
     h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : '')),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
@@ -286,12 +286,21 @@ function renderLibrary(el: HTMLElement, folder: string | null) {
     ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))));
 }
 
+/** a game's own icon (read from the user's file), drawn pixel-sharp */
+function iconCanvas(ic: NonNullable<Pack['icon']>): HTMLCanvasElement {
+  const c = h('canvas', { class: 'game-icon', width: ic.w, height: ic.h, 'aria-hidden': 'true' });
+  const bin = atob(ic.rgba), px = new Uint8ClampedArray(bin.length);
+  for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
+  c.getContext('2d')!.putImageData(new ImageData(px, ic.w, ic.h), 0, 0);
+  return c;
+}
+
 function folderCard(key: string, packs: Pack[]): HTMLElement {
   let a = 0, b = 0;
   for (const p of packs) { const [x, y] = countPack(p); a += x; b += y; }
   return h('button', { class: 'btn game folder', onClick: () => folderScreen(key) },
     h('b', {}, key), h('small', {}, t('gamesCount', { n: packs.length })),
-    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
+    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => p.icon ? iconCanvas(p.icon) : h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })));
 }
@@ -312,7 +321,6 @@ function progressText(pack: Pack, levels: PackLevel[]) {
 // ---------------------------------------------------------------- a game: modes → levels → puzzles
 
 async function openPack(pack: Pack, back: () => void) {
-  homeTrack = '';
   await loadExtras(pack);
   localStorage.setItem('momogram.lastPack', pack.id);
   packLevels(pack, back);

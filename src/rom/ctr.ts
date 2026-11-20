@@ -6,7 +6,7 @@ const u32 = (d: Uint8Array, o: number) => (d[o] | (d[o + 1] << 8) | (d[o + 2] <<
 const ascii = (d: Uint8Array, o: number, n: number) => String.fromCharCode(...d.subarray(o, o + n)).replace(/\0+$/, '');
 
 export interface CtrFile { path: string; data: Uint8Array }
-export interface CtrTitle { productCode: string; titleId: string; names: string[]; files: CtrFile[]; /** large icon pixels as RGB (order not preserved: used for colour statistics only) */ iconColors: Array<[number, number, number]> }
+export interface CtrTitle { productCode: string; titleId: string; names: string[]; files: CtrFile[]; /** large icon pixels as RGB (order not preserved: used for colour statistics only) */ iconColors: Array<[number, number, number]>; /** 48×48 icon as RGBA, in image order */ icon: Uint8Array | null }
 
 function findNcch(d: Uint8Array): number {
   const magic = (o: number) => d[o] === 0x4e && d[o + 1] === 0x43 && d[o + 2] === 0x43;
@@ -35,6 +35,7 @@ export function readCtr(d: Uint8Array): CtrTitle {
   // ExeFS icon (SMDH) for the game's own title in each language
   const names: string[] = [];
   const iconColors: Array<[number, number, number]> = [];
+  let icon: Uint8Array | null = null;
   const exefs = b + u32(d, b + 0x1a0) * mu;
   for (let i = 0; i < 10; i++) {
     const e = exefs + i * 16;
@@ -45,6 +46,16 @@ export function readCtr(d: Uint8Array): CtrTitle {
         let s = '';
         for (let k = 0; k < 0x100; k += 2) { const c = u16(d, o + k); if (!c) break; s += String.fromCharCode(c); }
         names.push(s.replace(/\n/g, ' ').trim());
+      }
+      if (ascii(d, smdh, 4) === 'SMDH') {
+        // 8×8 tiles, pixels inside a tile in Z-order (Morton)
+        icon = new Uint8Array(48 * 48 * 4);
+        for (let k = 0; k < 48 * 48; k++) {
+          const tile = k >> 6, i = k & 63;
+          const x = (tile % 6) * 8 + ((i & 1) | ((i >> 1) & 2) | ((i >> 2) & 4)), y = Math.floor(tile / 6) * 8 + (((i >> 1) & 1) | ((i >> 2) & 2) | ((i >> 3) & 4));
+          const v = u16(d, smdh + 0x24c0 + k * 2), o = (y * 48 + x) * 4;
+          icon[o] = ((v >> 11) & 31) * 255 / 31; icon[o + 1] = ((v >> 5) & 63) * 255 / 63; icon[o + 2] = (v & 31) * 255 / 31; icon[o + 3] = 255;
+        }
       }
       if (ascii(d, smdh, 4) === 'SMDH') for (let k = 0; k < 48 * 48; k++) {
         const v = u16(d, smdh + 0x24c0 + k * 2);
@@ -71,7 +82,7 @@ export function readCtr(d: Uint8Array): CtrTitle {
     for (let c = child; c !== 0xffffffff; c = u32(f, dmo + c + 4)) dir(c, p);
   };
   dir(0, '');
-  return { productCode, titleId, names, files, iconColors };
+  return { productCode, titleId, names, files, iconColors, icon };
 }
 
 export function lz11(d: Uint8Array): Uint8Array {

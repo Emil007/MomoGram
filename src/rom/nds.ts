@@ -49,6 +49,21 @@ export class NdsRom {
   private fat: Array<[number, number]> = [];
   private names = new Map<string, number>();
 
+  /** the 32×32 icon from the banner, as RGBA (colour 0 is transparent) */
+  icon(): Uint8Array | null {
+    const d = this.data, b = u32(d, 0x68);
+    if (!b || b + 0x240 > d.length) return null;
+    const pal: number[][] = [];
+    for (let i = 0; i < 16; i++) { const v = d[b + 0x220 + i * 2] | (d[b + 0x221 + i * 2] << 8); pal.push([(v & 31) * 255 / 31, ((v >> 5) & 31) * 255 / 31, ((v >> 10) & 31) * 255 / 31]); }
+    const out = new Uint8Array(32 * 32 * 4);
+    for (let t = 0; t < 16; t++) for (let k = 0; k < 64; k++) {
+      const byte = d[b + 0x20 + t * 32 + (k >> 1)], c = k & 1 ? byte >> 4 : byte & 15;
+      const x = (t % 4) * 8 + (k & 7), y = (t >> 2) * 8 + (k >> 3), o = (y * 32 + x) * 4;
+      out[o] = pal[c][0]; out[o + 1] = pal[c][1]; out[o + 2] = pal[c][2]; out[o + 3] = c ? 255 : 0;
+    }
+    return out;
+  }
+
   constructor(data: Uint8Array) {
     this.data = data;
     const td = new TextDecoder('latin1');

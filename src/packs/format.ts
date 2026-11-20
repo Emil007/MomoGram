@@ -45,6 +45,15 @@ export interface PackTheme {
   tracks?: string[];
 }
 
+/** small picture of the game: width × height RGBA pixels, base64 */
+export interface PackIcon { w: number; h: number; rgba: string }
+
+export function makeIcon(w: number, h: number, px: Uint8Array): PackIcon {
+  let bin = '';
+  for (let i = 0; i < px.length; i++) bin += String.fromCharCode(px[i]);
+  return { w, h, rgba: btoa(bin) };
+}
+
 /** Binary file belonging to a pack (music), kept in IndexedDB and written next to the pack in zip exports. */
 export interface PackAsset { name: string; data: Uint8Array }
 
@@ -58,6 +67,8 @@ export interface Pack {
   levels: PackLevel[];
   createdBy?: string;
   theme?: PackTheme;
+  /** the game's own icon, read from the user's file (RGBA, base64) */
+  icon?: PackIcon;
   /** only while importing: assets the importer extracted (stored separately, stripped before saving) */
   assets?: PackAsset[];
 }
