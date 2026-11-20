@@ -120,6 +120,13 @@ export class Board {
 
   hasMarks(): boolean { return this.cells.includes(MARK); }
   clearMarks() { this.touch(); for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === MARK) this.cells[i] = EMPTY; this.version++; this.cache.clear(); }
+  /** turn every mark into a fill (as if each was filled by hand: wrong ones count as mistakes under the rules) */
+  fillMarks(): number {
+    let mistakes = 0;
+    for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === MARK) { this.cells[i] = EMPTY; if (this.set(i % this.w, Math.floor(i / this.w), FILL) === 'mistake') mistakes++; }
+    this.touch();
+    return mistakes;
+  }
   startTrial() { this.touch(); if (!this.trial) this.trial = new Uint8Array(this.w * this.h); }
   /** keep the trial marks */
   commitTrial() { this.touch();

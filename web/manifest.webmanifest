@@ -1,1 +1,26 @@
-{ "name": "MomoGram", "short_name": "MomoGram", "start_url": "./", "display": "standalone", "orientation": "any", "background_color": "#dfeaf6", "theme_color": "#2f5d93", "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }] }
+{
+  "name": "MomoGram",
+  "short_name": "MomoGram",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#dfeaf6",
+  "theme_color": "#2f5d93",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/x-momogram-pack": [
+          ".momopack"
+        ]
+      }
+    }
+  ]
+}

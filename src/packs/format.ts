@@ -71,6 +71,8 @@ export interface Pack {
   theme?: PackTheme;
   /** the game's own icon, read from the user's file (RGBA, base64) */
   icon?: PackIcon;
+  /** revision: when this version of the pack was made (ms since 1970); missing = 1, older pack files */
+  rev?: number;
   /** only while importing: assets the importer extracted (stored separately, stripped before saving) */
   assets?: PackAsset[];
 }

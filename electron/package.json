@@ -87,6 +87,13 @@
     },
     "fileAssociations": [
       {
+        "ext": "momopack",
+        "name": "MomoGram pack",
+        "description": "MomoGram puzzle pack",
+        "role": "Viewer",
+        "mimeType": "application/x-momogram-pack"
+      },
+      {
         "ext": "nds",
         "name": "Nintendo DS ROM",
         "role": "Viewer"

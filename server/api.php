@@ -11,12 +11,15 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Momo-Token');
 header('Access-Control-Max-Age: 86400');
 header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 $cfg = require __DIR__ . '/config.php';
 
 function out($data, int $code = 200): void {
   http_response_code($code);
+  // the server's clock: the app uses it, so devices with a wrong clock can't win every merge
+  if (is_array($data)) $data['now'] = gmdate('Y-m-d\TH:i:s\Z') ;
   header('Content-Type: application/json; charset=utf-8');
   echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   exit;
@@ -24,7 +27,8 @@ function out($data, int $code = 200): void {
 function fail(string $error, int $code = 400, array $extra = []): void { out(['error' => $error] + $extra, $code); }
 function body(): array { $b = json_decode((string)file_get_contents('php://input'), true); return is_array($b) ? $b : []; }
 
-set_exception_handler(function (Throwable $e) { error_log('momogram: ' . $e); fail('server', 500, ['message' => $e->getMessage()]); });
+// details go to the server's error log only, never to the app
+set_exception_handler(function (Throwable $e) { error_log('momogram: ' . $e); fail('server', 500); });
 
 // ---- database (tables are made on first use) ----
 // everything lives in a randomly named folder inside data_dir, so nothing can be fetched by guessing its address
@@ -124,6 +128,24 @@ switch ($a) {
     out(['ok' => true]);
   }
 
+  // ---- admin: the accounts, and a new password for someone who forgot theirs ----
+  case 'users': {
+    $u = user();
+    if (!$u['admin']) fail('owner', 403);
+    out(['users' => array_map(fn($r) => ['name' => $r['name'], 'admin' => (bool)$r['admin'], 'created' => $r['created']], q('SELECT name, admin, created FROM momo_users ORDER BY id')->fetchAll())]);
+  }
+  case 'set_password': {
+    $u = user(); $b = body();
+    if (!$u['admin']) fail('owner', 403);
+    if (strlen((string)($b['password'] ?? '')) < 6) fail('password');
+    $who = q('SELECT id FROM momo_users WHERE name = ?', [(string)($b['name'] ?? '')])->fetch();
+    if (!$who) fail('missing', 404);
+    q('UPDATE momo_users SET pass = ? WHERE id = ?', [password_hash((string)$b['password'], PASSWORD_DEFAULT), $who['id']]);
+    // logged out everywhere: the old password may be known to someone
+    q('DELETE FROM momo_tokens WHERE user_id = ?', [$who['id']]);
+    out(['ok' => true]);
+  }
+
   // ---- the save: one document per account, with a revision so two devices never overwrite each other ----
   case 'save': {
     $u = user();
@@ -145,22 +167,34 @@ switch ($a) {
   // ---- high scores, worked out from everyone's saves ----
   case 'scores': {
     user();
-    $users = []; $best = [];
+    $users = []; $best = []; $week = gmdate('Y-m-d\TH:i:s\Z', time() - 7 * 86400);
+    // a time counts with the rules it was played with: Hard (and Free) before Normal before Easy
+    $rank = ['hard' => 0, 'free' => 0, 'normal' => 1, 'easy' => 2];
     foreach (q('SELECT u.name, s.data FROM momo_saves s JOIN momo_users u ON u.id = s.user_id')->fetchAll() as $r) {
       $s = json_decode($r['data'], true);
-      $solved = 0; $medals = ['bronze' => 0, 'silver' => 0, 'gold' => 0, 'platinum' => 0]; $per = []; $time = 0;
+      $solved = 0; $weekN = 0; $medals = ['bronze' => 0, 'silver' => 0, 'gold' => 0, 'platinum' => 0]; $per = []; $time = 0;
       foreach (($s['packs'] ?? []) as $pid => $pk) {
         foreach (($pk['progress'] ?? []) as $pz => $v) {
           if (empty($v['cleared'])) continue;
           $solved++; $per[$pid] = ($per[$pid] ?? 0) + 1;
+          if (!empty($v['at']) && $v['at'] >= $week) $weekN++;
           if (!empty($v['medal']) && isset($medals[$v['medal']])) $medals[$v['medal']]++;
-          if (isset($v['best']) && is_numeric($v['best'])) { $best["$pid/$pz"][] = [$r['name'], (int)$v['best']]; $time += (int)$v['best']; }
+          // the best time under the strictest rules it was played with
+          $pick = null;
+          foreach (($v['times'] ?? []) as $rules => $ms) if (is_numeric($ms) && isset($rank[$rules]) && ($pick === null || [$rank[$rules], $ms] < [$rank[$pick[1]], $pick[0]])) $pick = [(int)$ms, $rules];
+          if ($pick === null && isset($v['best']) && is_numeric($v['best'])) $pick = [(int)$v['best'], ''];
+          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1]]; $time += $pick[0]; }
         }
       }
-      $users[] = ['name' => $r['name'], 'solved' => $solved, 'medals' => $medals, 'packs' => (object)$per, 'time' => $time];
+      $users[] = ['name' => $r['name'], 'solved' => $solved, 'week' => $weekN, 'medals' => $medals, 'packs' => (object)$per, 'time' => $time, 'records' => 0];
     }
+    $rk = fn($e) => [$rank[$e[2]] ?? 3, $e[1]];
+    foreach ($best as &$l) usort($l, fn($a, $b) => $rk($a) <=> $rk($b));
+    unset($l);
+    // records: puzzles where someone has the best time (only counted when two or more played it)
+    foreach ($best as $l) if (count($l) > 1) foreach ($users as &$u) if ($u['name'] === $l[0][0]) $u['records']++;
+    unset($u);
     usort($users, fn($a, $b) => [$b['solved'], $b['medals']['platinum'], $b['medals']['gold'], $b['medals']['silver'], $a['time']] <=> [$a['solved'], $a['medals']['platinum'], $a['medals']['gold'], $a['medals']['silver'], $b['time']]);
-    foreach ($best as &$l) usort($l, fn($a, $b) => $a[1] <=> $b[1]);
     out(['users' => $users, 'best' => (object)$best]);
   }
 
@@ -190,7 +224,13 @@ switch ($a) {
     $u = user(); $b = body();
     $id = (string)($b['id'] ?? '');
     if ($id === '' || strlen($id) > 190) fail('id');
+    // uploads given up more than a day ago: their entry and their half-written file
+    foreach (q('SELECT id FROM momo_uploads WHERE created < ?', [gmdate('Y-m-d\TH:i:s\Z', time() - 86400)])->fetchAll() as $old) @unlink("$dataDir/packs/{$old['id']}.part");
     q('DELETE FROM momo_uploads WHERE created < ?', [gmdate('Y-m-d\TH:i:s\Z', time() - 86400)]);
+    // the server keeps only the newest version of a pack: an older or the same one isn't sent at all
+    $rev = (int)($b['meta']['rev'] ?? 1);
+    $have = q('SELECT meta FROM momo_packs WHERE pack_id = ?', [$id])->fetch();
+    if ($have && (int)(json_decode($have['meta'], true)['rev'] ?? 1) >= $rev) fail('have', 409, ['rev' => (int)(json_decode($have['meta'], true)['rev'] ?? 1)]);
     $up = bin2hex(random_bytes(16));
     q('INSERT INTO momo_uploads (id, pack_id, meta, user_id, parts, created) VALUES (?, ?, ?, ?, 0, ?)', [$up, $id, json_encode($b['meta'] ?? new stdClass, JSON_UNESCAPED_UNICODE), $u['id'], $now]);
     // parts must fit the host's post_max_size
@@ -219,6 +259,11 @@ switch ($a) {
     $part = $up ? "$dataDir/packs/{$up['id']}.part" : '';
     if (!$up || !is_file($part)) fail('upload', 404);
     if (fread(fopen($part, 'rb'), 2) !== 'PK') { unlink($part); fail('zip'); }
+    $meta = json_decode($up['meta'], true);
+    $have = q('SELECT meta FROM momo_packs WHERE pack_id = ?', [$up['pack_id']])->fetch();
+    if ($have && (int)(json_decode($have['meta'], true)['rev'] ?? 1) >= (int)($meta['rev'] ?? 1)) {
+      unlink($part); q('DELETE FROM momo_uploads WHERE id = ?', [$up['id']]); fail('have', 409);
+    }
     $file = $up['id'] . '.zip';
     rename($part, "$dataDir/packs/$file");
     $old = q('SELECT file FROM momo_packs WHERE pack_id = ?', [$up['pack_id']])->fetch();

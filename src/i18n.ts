@@ -26,7 +26,7 @@ const en: Dict = {
   rulesNormal: 'Normal rules: mistakes are caught but cost time (2, 4, then 8 minutes). Earns silver.',
   rulesHard: 'Hard rules: no hint roulette, no safety net. Earns gold, or platinum without logic hints.',
   // playing
-  mark: 'Mark', clearMarks: 'Clear marks', musicOff: 'Music off', musicOn: 'Music on',
+  mark: 'Mark', clearMarks: 'Clear marks', fillMarks: 'Fill the marks', quitAsk: 'Quit and throw this board away?', quitYes: 'Quit without saving', musicOff: 'Music off', musicOn: 'Music on',
   fill: 'Fill', cross: 'Cross out', zoom: 'Zoom', undo: 'Undo', menu: 'Menu', logic: 'Hints', logicHints: 'Logic hints (blue numbers)',
   tryIt: 'Try it', keep: 'Keep', discard: 'Discard',
   quit: 'Quit', stopSave: 'Pause & save', resume: 'Keep playing', restart: 'Start over',
@@ -48,7 +48,11 @@ const en: Dict = {
   'err.slow': 'Too many attempts. Try again in a few minutes.', 'err.noserver': 'Enter the server address first.', 'err.login': 'Please log in again.',
   'err.server': 'The server reported an error.', 'err.other': 'Error: {code}',
   syncedNow: 'synced', syncedAgo: 'synced {n} ago',
+  thisWeek: '+{n} this week', recordsN: '🏆 {n} fastest times',
+  version: 'Version', titlesOnly: 'game titles only', loggedOutChip: 'logged out', loggedOutMsg: 'The server logged "{name}" out (e.g. after a new password). Please log in again.',
+  accounts: 'Accounts', newPassword: 'new password', newPasswordFor: 'New password for {name} (at least 6 characters):', passwordSet: '{name} has a new password and is logged out everywhere.',
   scores: 'High scores', fastest: 'Fastest', perGame: 'Per game', noScores: 'Nobody has solved a puzzle yet.', scoresOffline: 'Showing the last known scores.',
+  imported: 'Added: {list}', downloadAll: 'Download all', updateAll: 'Update all', update: 'Update', updateAvailable: 'newer version on the server', newerHere: 'newer here', older: 'older',
   onServer: 'On the server', serverEmpty: 'No packs on the server yet.', upload: 'Upload', uploadPacks: 'Upload packs',
   uploadedBy: 'by {name}', serverLogin: 'Log in under Options → Server to share packs between your devices.', installed: 'installed',
   // options
@@ -68,7 +72,7 @@ const en: Dict = {
   saveHelp: 'Saves belong to the active profile. Importing your own save from another device only takes over the games you played there more recently.',
   saveNewProfile: 'Welcome, {name}! The profile was added and is now active.', saveMerged: '{name}: {a} game(s) updated from the save, {b} kept because they\'re newer here.',
   // packs
-  zipMusic: 'Include music in .zip imports and exports', exclusive: 'only in {r}',
+  exclusive: 'only in {r}',
   editor: 'Editor', edHelp: 'Draw your own puzzles or turn a picture into one. MomoGram checks that each has exactly one solution and suggests the smallest fix when it doesn\'t.',
   edNewPack: 'New pack', edNoPacks: 'No packs of your own yet.', edPackName: 'Name of the pack', edMyPuzzles: 'My puzzles', edLevel: 'Level', edLevelName: 'Name of the level',
   edNewLevel: 'New level', edRename: 'Rename', edNewPuzzle: 'New puzzle', edPuzzleName: 'Name (shown once solved)',
@@ -77,7 +81,7 @@ const en: Dict = {
   edSuggest: 'Suggest a fix', edFixFound: 'Changing {n} highlighted cell(s) gives exactly one solution.', edApply: 'Apply', edNoFix: 'No small fix found: try simplifying the picture.',
   edTest: 'Try it', edSave: 'Save', edExportHelp: 'Your packs show up in your library and can be exported under Puzzle packs like any other.',
   importPacks: 'Import packs', addFiles: 'Add games or packs', exportAll: 'Export all as .zip', createPacks: 'Add games',
-  createHelp: 'Pick game files you own (Game Boy, Super Famicom, DS, decrypted 3DS; loose, zipped, 7z or rar). MomoGram reads the puzzles once and turns every game into a pack: keep the pack files and you never need the games again. Exported packs (.json or .zip) go through the same button.',
+  createHelp: 'Pick game files you own (Game Boy, Super Famicom, DS, decrypted 3DS; loose, zipped, 7z or rar). MomoGram reads the puzzles once and turns every game into a pack: keep the pack files and you never need the games again. Packs (.momopack, or older .json and .zip files) go through the same button.',
   noPacks: 'No games yet. Add one and the fun begins.', delete: 'Delete', download: 'Download',
   unsupported: 'not a supported game', encrypted: 'encrypted 3DS file, please use a decrypted copy',
   done: 'Done', analyzing: 'Reading…',
@@ -103,7 +107,7 @@ const de: Dict = {
   rulesEasy: 'Leichte Regeln: Fehler werden erkannt und kosten keine Zeit. Gibt Bronze.',
   rulesNormal: 'Normale Regeln: Fehler werden erkannt, kosten aber Zeit (2, 4, dann 8 Minuten). Gibt Silber.',
   rulesHard: 'Schwere Regeln: kein Tipp-Roulette, kein Sicherheitsnetz. Gibt Gold, ohne Logik-Tipps sogar Platin.',
-  mark: 'Markieren', clearMarks: 'Markierungen löschen', musicOff: 'Musik aus', musicOn: 'Musik an',
+  mark: 'Markieren', clearMarks: 'Markierungen löschen', fillMarks: 'Markierungen füllen', quitAsk: 'Beenden und dieses Brett verwerfen?', quitYes: 'Beenden ohne Speichern', musicOff: 'Musik aus', musicOn: 'Musik an',
   fill: 'Füllen', cross: 'Ankreuzen', zoom: 'Zoom', undo: 'Zurück', menu: 'Menü', logic: 'Tipps', logicHints: 'Logik-Tipps (blaue Zahlen)',
   // server
   secServer: 'Server', serverUrl: 'Serveradresse', serverConnect: 'Verbinden',
@@ -118,7 +122,11 @@ const de: Dict = {
   'err.slow': 'Zu viele Versuche. Probier es in ein paar Minuten noch einmal.', 'err.noserver': 'Gib zuerst die Serveradresse ein.', 'err.login': 'Bitte melde dich noch einmal an.',
   'err.server': 'Der Server meldet einen Fehler.', 'err.other': 'Fehler: {code}',
   syncedNow: 'abgeglichen', syncedAgo: 'vor {n} abgeglichen',
+  thisWeek: '+{n} diese Woche', recordsN: '🏆 {n} Bestzeiten',
+  version: 'Version', titlesOnly: 'nur Spieltitel', loggedOutChip: 'abgemeldet', loggedOutMsg: 'Der Server hat "{name}" abgemeldet (z. B. nach einem neuen Passwort). Bitte melde dich wieder an.',
+  accounts: 'Konten', newPassword: 'neues Passwort', newPasswordFor: 'Neues Passwort für {name} (mindestens 6 Zeichen):', passwordSet: '{name} hat ein neues Passwort und ist überall abgemeldet.',
   scores: 'Bestenliste', fastest: 'Am schnellsten', perGame: 'Pro Spiel', noScores: 'Noch niemand hat ein Rätsel gelöst.', scoresOffline: 'Zuletzt bekannter Stand.',
+  imported: 'Hinzugefügt: {list}', downloadAll: 'Alle herunterladen', updateAll: 'Alle aktualisieren', update: 'Aktualisieren', updateAvailable: 'neuere Version am Server', newerHere: 'hier neuer', older: 'älter',
   onServer: 'Auf dem Server', serverEmpty: 'Noch keine Pakete auf dem Server.', upload: 'Hochladen', uploadPacks: 'Pakete hochladen',
   uploadedBy: 'von {name}', serverLogin: 'Melde dich unter Optionen → Server an, um Pakete zwischen deinen Geräten zu teilen.', installed: 'installiert',
   tryIt: 'Probieren', keep: 'Behalten', discard: 'Verwerfen',
@@ -142,7 +150,7 @@ const de: Dict = {
   saveWaiting: 'der Fortschritt für {n} Spiel(e), die hier noch fehlen, wird für später aufgehoben', notASave: 'Das ist kein MomoGram-Spielstand.',
   saveHelp: 'Spielstände gehören zum aktiven Profil. Dein eigener Spielstand von einem anderen Gerät übernimmt nur die Spiele, die du dort zuletzt gespielt hast.',
   saveNewProfile: 'Willkommen, {name}! Das Profil wurde hinzugefügt und ist jetzt aktiv.', saveMerged: '{name}: {a} Spiel(e) aus dem Spielstand übernommen, {b} behalten, weil sie hier neuer sind.',
-  zipMusic: 'Musik bei .zip-Import und -Export mitnehmen', exclusive: 'nur in {r}',
+  exclusive: 'nur in {r}',
   editor: 'Editor', edHelp: 'Zeichne eigene Rätsel oder mach aus einem Bild eins. MomoGram prüft, dass jedes genau eine Lösung hat, und schlägt sonst die kleinste Korrektur vor.',
   edNewPack: 'Neues Paket', edNoPacks: 'Noch keine eigenen Pakete.', edPackName: 'Name des Pakets', edMyPuzzles: 'Meine Rätsel', edLevel: 'Level', edLevelName: 'Name des Levels',
   edNewLevel: 'Neues Level', edRename: 'Umbenennen', edNewPuzzle: 'Neues Rätsel', edPuzzleName: 'Name (erscheint nach dem Lösen)',
@@ -151,7 +159,7 @@ const de: Dict = {
   edSuggest: 'Korrektur vorschlagen', edFixFound: 'Ändere {n} markierte(s) Feld(er), dann gibt es genau eine Lösung.', edApply: 'Übernehmen', edNoFix: 'Keine kleine Korrektur gefunden: vereinfache das Bild.',
   edTest: 'Ausprobieren', edSave: 'Speichern', edExportHelp: 'Deine Pakete erscheinen in deiner Sammlung und lassen sich unter Rätselpakete wie alle anderen exportieren.',
   importPacks: 'Pakete importieren', addFiles: 'Spiele oder Pakete hinzufügen', exportAll: 'Alle als .zip exportieren', createPacks: 'Spiele hinzufügen',
-  createHelp: 'Wähle Spieldateien, die dir gehören (Game Boy, Super Famicom, DS, entschlüsselte 3DS; einzeln, gezippt, 7z oder rar). MomoGram liest die Rätsel einmal aus und macht aus jedem Spiel ein Paket: Heb die Pakete auf, dann brauchst du die Spiele nie wieder. Exportierte Pakete (.json oder .zip) kommen über denselben Knopf.',
+  createHelp: 'Wähle Spieldateien, die dir gehören (Game Boy, Super Famicom, DS, entschlüsselte 3DS; einzeln, gezippt, 7z oder rar). MomoGram liest die Rätsel einmal aus und macht aus jedem Spiel ein Paket: Heb die Pakete auf, dann brauchst du die Spiele nie wieder. Pakete (.momopack oder ältere .json- und .zip-Dateien) kommen über denselben Knopf.',
   noPacks: 'Noch keine Spiele. Füge eins hinzu, dann geht\'s los.', delete: 'Löschen', download: 'Herunterladen',
   unsupported: 'kein unterstütztes Spiel', encrypted: 'verschlüsselte 3DS-Datei, bitte eine entschlüsselte Kopie verwenden',
   done: 'Fertig', analyzing: 'Lese…',
@@ -167,5 +175,8 @@ export function t(key: string, vars: Record<string, string | number> = {}): stri
   for (const [k, v] of Object.entries(vars)) s = s.replace('{' + k + '}', String(v));
   return s;
 }
+
+/** the languages with all of MomoGram's own texts */
+export const hasTexts = (l: Lang) => !!tables[l];
 
 export const LANG_NAMES: Record<Lang, string> = { en: 'English', de: 'Deutsch', fr: 'Français', it: 'Italiano', es: 'Español', ja: '日本語', ko: '한국어' };

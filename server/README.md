@@ -23,10 +23,11 @@ It's a single PHP file. You need PHP 7.4 or newer and a MySQL/MariaDB database, 
 4. **Turn on HTTPS.** Use **SSL/TLS Certificates → Let's Encrypt**. The web version of MomoGram can only connect over HTTPS.
 5. **Connect the app.** In MomoGram, go to **Options → Server**, enter the address (e.g. `https://example.com/momogram`) and tap **Connect**. Then create an account with the invite code. On your other devices, log in with the same name and password.
 
-The first account created is the admin. The admin can delete any pack on the server; everyone else can delete only their own.
+The first account created is the admin. The admin can delete any pack on the server (everyone else only their own) and, under Options → Server → Accounts, set a new password for someone who forgot theirs. That logs the account out on all devices.
 
 ## Good to know
 
+- **Pack versions:** every pack carries a hidden version (when it was made). The server keeps only the newest version of each pack. The app shows which packs have a newer version on the server and can update them all at once.
 - **Big packs:** they're uploaded in parts that fit the host's `post_max_size`, so big ones with music work too.
 - **Playing offline:** progress is joined puzzle by puzzle. The best time and best medal from either device count, so playing offline on two devices loses nothing.
 - **Backups:** back up the database and the `data` folder. Uploaded packs are files in `data/<random name>/packs/`.

@@ -103,7 +103,8 @@ jobs:
             dist/desktop/*.dmg
 
   android:
-    # the web version wrapped with Capacitor; debug-signed so it installs directly (sideloading)
+    # the web version wrapped with Capacitor, signed with MomoGram's own key (secrets ANDROID_KEYSTORE, base64, and
+    # ANDROID_KEY_PASSWORD), so every release installs over the previous one. Without the secrets: debug-signed.
     needs: version
     runs-on: ubuntu-latest
     steps:
@@ -116,6 +117,9 @@ jobs:
       - run: npm run build
       - name: Build APK
         shell: bash
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           V=${{ needs.version.outputs.version }}
           mkdir -p out android-app
@@ -130,8 +134,21 @@ jobs:
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
           cd android
           sed -i "s/versionName \".*\"/versionName \"$V\"/" app/build.gradle
+          # Android only installs updates with a higher versionCode: 1.2.3 -> 10203
+          IFS=. read -r MA MI PA <<< "${V%%-*}"
+          sed -i "s/versionCode [0-9]*/versionCode $((MA * 10000 + MI * 100 + PA))/" app/build.gradle
           ./gradlew assembleDebug --no-daemon -q
-          cp app/build/outputs/apk/debug/app-debug.apk ../../out/MomoGram-$V-Android.apk
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          if [[ -n "$ANDROID_KEYSTORE" ]]; then
+            echo "$ANDROID_KEYSTORE" | base64 -d > release.jks
+            BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+            "$ANDROID_HOME/build-tools/$BT/apksigner" sign --ks release.jks --ks-key-alias momogram --ks-pass env:ANDROID_KEY_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD --out signed.apk "$APK"
+            "$ANDROID_HOME/build-tools/$BT/apksigner" verify signed.apk
+            APK=signed.apk; rm release.jks
+          else
+            echo "::warning::ANDROID_KEYSTORE secret missing: the APK is debug-signed and won't install over earlier versions"
+          fi
+          cp "$APK" ../../out/MomoGram-$V-Android.apk
       - uses: actions/upload-artifact@v4
         with: { name: android, path: out/* }
 

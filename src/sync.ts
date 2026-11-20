@@ -1,9 +1,9 @@
 // Connection to a MomoGram server (server/api.php): accounts, the synced save and the shared pack shelf.
 // The server address is set per device; every profile can log in to its own account.
-import { activeProfile, makeSave, mergeSave, onLocalChange, isSaveFile, profiles, switchProfile, createProfile, rekeyProfile, SaveFile } from './store';
+import { activeProfile, makeSave, mergeSave, onLocalChange, isSaveFile, profiles, switchProfile, createProfile, rekeyProfile, SaveFile, setServerTime } from './store';
 
 export interface Account { name: string; token: string; admin: boolean; rev: number; synced?: string }
-export interface ServerPack { id: string; size: number; updated: string; by: string | null; meta: { title?: any; puzzles?: number; platform?: string; icon?: any } }
+export interface ServerPack { id: string; size: number; updated: string; by: string | null; meta: { title?: any; puzzles?: number; platform?: string; icon?: any; rev?: number } }
 
 const SKEY = 'momogram.server';
 const akey = (id = activeProfile().id) => `momogram.account.${id}`;
@@ -14,6 +14,8 @@ export function setServerUrl(u: string) {
   if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
   if (u) localStorage.setItem(SKEY, u); else localStorage.removeItem(SKEY);
 }
+/** the account name of a login the server dropped (shown until the player logs in again) */
+export function loggedOut(): string | null { return localStorage.getItem('momogram.loggedout.' + activeProfile().id); }
 export function account(): Account | null { try { return JSON.parse(localStorage.getItem(akey()) || 'null'); } catch { return null; } }
 function storeAccount(a: Account | null, id?: string) { if (a) localStorage.setItem(akey(id), JSON.stringify(a)); else localStorage.removeItem(akey(id)); }
 
@@ -48,8 +50,10 @@ async function readResponse(r: Response, raw?: boolean): Promise<any> {
   if (opts.raw && r.ok) return new Uint8Array(await r.arrayBuffer());
   let data: any = null;
   try { data = await r.json(); } catch { throw new ServerError(r.ok ? 'notmomogram' : 'http' + r.status, r.status); }
+  if (data?.now) setServerTime(data.now);
   if (!r.ok) {
-    if (r.status === 401) { storeAccount(null); emit(); }
+    // the server doesn't know this login any more: say so instead of quietly stopping to sync
+    if (r.status === 401) { const a = account(); if (a) localStorage.setItem('momogram.loggedout.' + activeProfile().id, a.name); storeAccount(null); emit(); }
     throw new ServerError(data?.error || 'http' + r.status, r.status, data);
   }
   return data;
@@ -84,14 +88,16 @@ export async function signIn(name: string, password: string, invite?: string, as
     else createProfile(profiles().some(p => p.name === remote.profile.name) ? d.user.name : remote.profile.name, remote.profile.id);
   }
   storeAccount({ name: d.user.name, admin: !!d.user.admin, token: tok, rev: 0 });
+  localStorage.removeItem('momogram.loggedout.' + activeProfile().id);
   await sync();
 }
 
 export async function signOut() {
+  localStorage.removeItem('momogram.loggedout.' + activeProfile().id);
   const a = account();
   if (a) call('logout', { method: 'POST', token: a.token }).catch(() => {});
   storeAccount(null);
-  scoresCache = null; localStorage.removeItem('momogram.scores');
+  scoresCache = null; localStorage.removeItem('momogram.scores.' + activeProfile().id);
   emit();
 }
 
@@ -106,7 +112,7 @@ export function sync(): Promise<boolean> {
         again = false;
         changedHere = (await syncOnce()) || changedHere;
       } while (again);
-      lastError = ''; state = 'idle';
+      lastError = ''; state = 'idle'; dirty = false;
       await refreshScores().catch(() => {});
     } catch (e: any) {
       lastError = e instanceof ServerError ? e.code : String(e?.message || e); state = 'error';
@@ -124,8 +130,11 @@ async function syncOnce(): Promise<boolean> {
   let changed = false;
   for (let tries = 0; tries < 4; tries++) {
     const got = await call('save');
+    // another profile became active meanwhile: its data must not go to this account
+    if (activeProfile().id !== profileId) return changed;
     if (isSaveFile(got.data) && got.data.profile.id === profileId) changed = mergeSave(got.data) || changed;
     const mine = makeSave();
+    if (mine.profile.id !== profileId) return changed;
     // nothing new here: don't write the same thing back
     if (got.rev && isSaveFile(got.data) && sameContent(got.data, mine)) { storeAccount({ ...a, rev: got.rev, synced: new Date().toISOString() }, profileId); return changed; }
     try {
@@ -146,12 +155,13 @@ function sameContent(a: SaveFile, b: SaveFile): boolean {
 }
 
 // sync a few seconds after something changed, when the app goes to the background and when it starts
-let timer = 0;
+let timer = 0, dirty = false;
 export function startAutoSync(onRemoteChange: () => void) {
-  const run = () => { if (account()) sync().then(c => { if (c) onRemoteChange(); }); };
-  onLocalChange(() => { if (!account()) return; clearTimeout(timer); timer = window.setTimeout(run, 4000); });
+  const run = () => { timer = 0; if (account()) sync().then(c => { if (c) onRemoteChange(); }); };
+  onLocalChange(() => { if (!account()) return; dirty = true; clearTimeout(timer); timer = window.setTimeout(run, 4000); });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') { if (timer) { clearTimeout(timer); timer = 0; flush(); } }
+    // put away: send what changed since the last sync (only then)
+    if (document.visibilityState === 'hidden') { clearTimeout(timer); timer = 0; if (dirty) flush(); }
     else run();
   });
   window.addEventListener('online', run);
@@ -169,26 +179,48 @@ function flush() {
 }
 
 // ---- high scores of everyone on the server (kept for offline use) ----
-export interface Scores { users: Array<{ name: string; solved: number; medals: Record<string, number>; packs: Record<string, number>; time: number }>; best: Record<string, Array<[string, number]>> }
-let scoresCache: Scores | null = null;
+export interface Scores { users: Array<{ name: string; solved: number; week?: number; records?: number; medals: Record<string, number>; packs: Record<string, number>; time: number }>; best: Record<string, Array<[string, number, string?]>> }
+let scoresCache: Scores | null = null, scoresOf = '';
 export function scores(): Scores | null {
   if (!account()) return null;
-  if (!scoresCache) try { scoresCache = JSON.parse(localStorage.getItem('momogram.scores') || 'null'); } catch { /* ignore */ }
+  if (scoresOf !== activeProfile().id) { scoresCache = null; scoresOf = activeProfile().id; }
+  if (!scoresCache) try { scoresCache = JSON.parse(localStorage.getItem('momogram.scores.' + activeProfile().id) || 'null'); } catch { /* ignore */ }
   return scoresCache;
 }
 export async function refreshScores(): Promise<Scores | null> {
   if (!account()) return null;
-  scoresCache = await call('scores');
-  try { localStorage.setItem('momogram.scores', JSON.stringify(scoresCache)); } catch { /* full */ }
+  scoresCache = await call('scores'); scoresOf = activeProfile().id;
+  try { localStorage.setItem('momogram.scores.' + activeProfile().id, JSON.stringify(scoresCache)); } catch { /* full */ }
   return scoresCache;
 }
 
+// ---- admin ----
+export async function serverUsers(): Promise<Array<{ name: string; admin: boolean }>> { return (await call('users')).users; }
+export async function setPassword(name: string, password: string) { await call('set_password', { json: { name, password } }); }
+
 // ---- packs on the server ----
-export async function serverPacks(): Promise<ServerPack[]> { return (await call('packs')).packs; }
+export async function serverPacks(): Promise<ServerPack[]> {
+  const list: ServerPack[] = (await call('packs')).packs;
+  // remembered (per profile) for the "newer version on the server" badges in the library
+  try { localStorage.setItem('momogram.serverpacks.' + activeProfile().id, JSON.stringify(list.map(s => ({ id: s.id, rev: s.meta?.rev ?? 1 })))); } catch { /* full */ }
+  return list;
+}
+/** the server's pack revisions as last seen (no request) */
+export function knownServerRevs(): Map<string, number> {
+  if (!account()) return new Map();
+  try { return new Map((JSON.parse(localStorage.getItem('momogram.serverpacks.' + activeProfile().id) || '[]') as Array<{ id: string; rev: number }>).map(x => [x.id, x.rev])); }
+  catch { return new Map(); }
+}
 export async function downloadPack(id: string): Promise<Uint8Array> { return call('pack', { args: { id }, raw: true }); }
 export async function deleteServerPack(id: string) { await call('pack_delete', { method: 'POST', args: { id } }); }
 export async function uploadPack(id: string, meta: ServerPack['meta'], zip: Uint8Array, progress?: (done: number) => void) {
-  const b = await call('upload_begin', { json: { id, meta } });
+  let b: any;
+  try { b = await call('upload_begin', { json: { id, meta } }); }
+  catch (e) {
+    // the server already has this version or a newer one: nothing to send
+    if (e instanceof ServerError && e.code === 'have') { progress?.(1); return; }
+    throw e;
+  }
   const part: number = b.part || 4 << 20;
   const parts = Math.max(1, Math.ceil(zip.length / part));
   for (let i = 0; i < parts; i++) {

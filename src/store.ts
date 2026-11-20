@@ -50,7 +50,25 @@ export const storage = {
 
 export type Medal = 'bronze' | 'silver' | 'gold' | 'platinum';
 export const MEDALS: Medal[] = ['bronze', 'silver', 'gold', 'platinum'];
-export interface PuzzleProgress { best?: number; cleared?: boolean; underLimit?: boolean; medal?: Medal }
+export type Rules = 'easy' | 'normal' | 'hard' | 'free';
+export interface PuzzleProgress {
+  best?: number; cleared?: boolean; underLimit?: boolean; medal?: Medal;
+  /** best time per rules (times under different rules can't be compared) */
+  times?: Partial<Record<Rules, number>>;
+  /** first solved (for "this week" in the high scores) */
+  at?: string;
+}
+
+// ---- time: a MomoGram server's clock, when there is one (a device with a wrong clock must not win every merge) ----
+let clockOffset = Number(localStorage.getItem('momogram.clockOffset') || 0) || 0;
+export function nowIso(): string { return new Date(Date.now() + clockOffset).toISOString(); }
+export function setServerTime(serverNow: string) {
+  const d = Date.parse(serverNow) - Date.now();
+  if (!Number.isFinite(d)) return;
+  // the server answers with whole seconds: only follow differences above two seconds
+  clockOffset = Math.abs(d) > 2000 ? d : 0;
+  localStorage.setItem('momogram.clockOffset', String(clockOffset));
+}
 export interface Settings {
   lang: string;
   music: boolean;
@@ -90,7 +108,7 @@ export function saveSettings() {
   try {
     const was = old ? JSON.parse(old) : {};
     if (Object.keys(settings).some(k => !DEVICE_SETTINGS.includes(k as keyof Settings) && JSON.stringify(was[k]) !== JSON.stringify((settings as any)[k]))) {
-      localStorage.setItem('momogram.settingstime', new Date().toISOString());
+      localStorage.setItem('momogram.settingstime', nowIso());
       changed();
     }
   } catch { /* ignore */ }
@@ -119,7 +137,7 @@ const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toStrin
   // the first version had one unnamed save: it becomes the first profile
   if (loadProfiles().length) return;
   const id = newId();
-  storeProfiles([{ id, name: localStorage.getItem('momogram.saveName') || 'Player', created: new Date().toISOString() }]);
+  storeProfiles([{ id, name: localStorage.getItem('momogram.saveName') || 'Player', created: nowIso() }]);
   localStorage.setItem('momogram.profile', id);
   for (const k of ['progress', 'quick']) {
     const v = localStorage.getItem('momogram.' + k);
@@ -148,7 +166,7 @@ loadActive();
 // keep this tab's copy current when another tab (or the installed web app) saves
 window.addEventListener('storage', e => { if (e.key?.startsWith('momogram.progress.') || e.key?.startsWith('momogram.packtimes.')) loadActive(); });
 function persist(touched?: string[]) {
-  const now = new Date().toISOString();
+  const now = nowIso();
   for (const id of touched ?? []) packTimes[id] = now;
   localStorage.setItem(pk('progress'), JSON.stringify(progress));
   localStorage.setItem(pk('packtimes'), JSON.stringify(packTimes));
@@ -157,7 +175,7 @@ function persist(touched?: string[]) {
 
 export function switchProfile(id: string) { if (loadProfiles().some(p => p.id === id)) { localStorage.setItem('momogram.profile', id); loadActive(); } }
 export function createProfile(name: string, id = newId()): Profile {
-  const p: Profile = { id, name: name.trim().slice(0, 40) || 'Player', created: new Date().toISOString() };
+  const p: Profile = { id, name: name.trim().slice(0, 40) || 'Player', created: nowIso() };
   storeProfiles([...loadProfiles(), p]);
   switchProfile(p.id);
   return p;
@@ -179,11 +197,13 @@ export function getProgress(packId: string, puzzleId: string): PuzzleProgress {
 }
 
 /** returns true when the medal is better than the one the puzzle had */
-export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal): boolean {
+export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal, rules?: Rules): boolean {
   loadActive(); // another tab / the installed app may have saved meanwhile: never write back an old copy
   const k = packId + '/' + puzzleId;
   const p = progress[k] ?? {};
+  if (!p.cleared) p.at = nowIso();
   p.cleared = true;
+  if (rules) { p.times ??= {}; if (p.times[rules] === undefined || totalMs < p.times[rules]!) p.times[rules] = totalMs; }
   const better = !!medal && (!p.medal || MEDALS.indexOf(medal) > MEDALS.indexOf(p.medal));
   if (better) p.medal = medal;
   if (underLimit) p.underLimit = true;
@@ -196,7 +216,7 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
 export function resetProgress(packId: string) {
   loadActive();
   for (const k of Object.keys(progress)) if (k.startsWith(packId + '/')) delete progress[k];
-  resetTimes[packId] = new Date().toISOString();
+  resetTimes[packId] = nowIso();
   localStorage.setItem(pk('resets'), JSON.stringify(resetTimes));
   persist([packId]);
 }
@@ -217,7 +237,7 @@ export function loadBoards(): Boards {
   // older versions: one quick save
   const old = localStorage.getItem(pk('quick'));
   if (old) {
-    try { const q: QuickSave = JSON.parse(old); if (q) b[bkey(q.packId, q.levelId, q.puzzleId)] = { q, saved: localStorage.getItem(pk('quicktime')) || new Date().toISOString() }; } catch { /* ignore */ }
+    try { const q: QuickSave = JSON.parse(old); if (q) b[bkey(q.packId, q.levelId, q.puzzleId)] = { q, saved: localStorage.getItem(pk('quicktime')) || nowIso() }; } catch { /* ignore */ }
     localStorage.removeItem(pk('quick'));
     storeBoards(b);
   }
@@ -234,14 +254,14 @@ function storeBoards(b: Boards) {
 /** keep a board to come back to */
 export function saveBoard(q: QuickSave) {
   const b = loadBoards();
-  b[bkey(q.packId, q.levelId, q.puzzleId)] = { q, saved: new Date().toISOString() };
+  b[bkey(q.packId, q.levelId, q.puzzleId)] = { q, saved: nowIso() };
   storeBoards(b); changed();
 }
 /** the puzzle was solved, restarted or given up: its board is gone */
 export function clearBoard(packId: string, levelId: string, puzzleId: string) {
   const b = loadBoards(), k = bkey(packId, levelId, puzzleId);
   if (!b[k]?.q) return;
-  b[k] = { q: null, saved: new Date().toISOString() };
+  b[k] = { q: null, saved: nowIso() };
   storeBoards(b); changed();
 }
 export function getBoard(packId: string, levelId: string, puzzleId: string): QuickSave | null {
@@ -296,7 +316,7 @@ function packsOf(p: ProgressMap): SaveFile['packs'] {
 export function makeSave(): SaveFile {
   const me = activeProfile();
   return {
-    format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: new Date().toISOString(), packs: packsOf(progress), quick: getQuickSave(), boards: loadBoards(),
+    format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: nowIso(), packs: packsOf(progress), quick: getQuickSave(), boards: loadBoards(),
     settings: sharedSettings(), quickSaved: latestBoard(loadBoards())?.saved, settingsSaved: localStorage.getItem('momogram.settingstime') ?? undefined,
   };
 }
@@ -326,7 +346,7 @@ export function mergeSave(s: SaveFile): boolean {
     for (const k of Object.keys(mine)) delete progress[id + '/' + k];
     for (const [pz, v] of Object.entries(merged)) progress[id + '/' + pz] = { ...v };
     // the result is what the server has: take its time; something new from both sides: it's new for everyone
-    packTimes[id] = same(rp.progress) ? rp.updated : new Date().toISOString();
+    packTimes[id] = same(rp.progress) ? rp.updated : nowIso();
     any = true;
   }
   if (any) { localStorage.setItem(pk('resets'), JSON.stringify(resetTimes)); persist(); }
@@ -354,6 +374,12 @@ function bestOf(a: PuzzleProgress | undefined, b: PuzzleProgress): PuzzleProgres
   if (a.underLimit || b.underLimit) out.underLimit = true;
   if (medal) out.medal = medal; else delete out.medal;
   if (best !== undefined) out.best = best; else delete out.best;
+  // per rules: the better time of the two; first solved: the earlier date
+  if (a.times || b.times) {
+    out.times = { ...a.times };
+    for (const [r, ms] of Object.entries(b.times ?? {})) if (out.times[r as Rules] === undefined || ms! < out.times[r as Rules]!) out.times[r as Rules] = ms;
+  }
+  if (a.at && b.at) out.at = a.at < b.at ? a.at : b.at;
   return out;
 }
 
@@ -371,12 +397,14 @@ export function rekeyProfile(from: string, to: string, name?: string) {
 }
 
 /** the active profile's numbers as the server's high scores count them (this device may be newer than the server) */
-export function localStats(): { solved: number; medals: Record<Medal, number>; packs: Record<string, number>; time: number } {
-  const out = { solved: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0 };
+export function localStats(): { solved: number; week: number; medals: Record<Medal, number>; packs: Record<string, number>; time: number } {
+  const out = { solved: 0, week: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0 };
+  const week = new Date(Date.parse(nowIso()) - 7 * 86400000).toISOString();
   for (const [k, v] of Object.entries(progress)) {
     if (!v.cleared) continue;
     const id = k.slice(0, k.lastIndexOf('/'));
     out.solved++; out.packs[id] = (out.packs[id] ?? 0) + 1;
+    if (v.at && v.at >= week) out.week++;
     if (v.medal) out.medals[v.medal]++;
     if (v.best !== undefined) out.time += v.best;
   }

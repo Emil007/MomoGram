@@ -23,6 +23,7 @@ const isMine = (p: Pack) => p.id.startsWith('my-');
 const newId = (pre: string) => pre + Math.random().toString(36).slice(2, 9);
 
 async function save(ed: ED, pack: Pack) {
+  pack.rev = Date.now(); // every change is a new version (shared packs then offer an update)
   await storage.savePack(pack);
   ed.setPacks([...ed.packs().filter(p => p.id !== pack.id), pack]);
 }

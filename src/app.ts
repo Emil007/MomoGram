@@ -4,15 +4,14 @@ import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
 import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
-import { importGameFile } from './packs/importers/index';
-import './packs/importers/all';
+import { readEntries, packRev } from './packs/io';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
-import { t, setLang, lang, LANG_NAMES } from './i18n';
+import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
 import { Gamepads } from './input';
-import { openPackManager, storePacks } from './ui/packs';
+import { openPackManager, storePacks, filesToEntries } from './ui/packs';
 import * as Sync from './sync';
 import { Audio as Snd } from './audio';
-import { unzipFirst, packSave, unpackSave, download } from './util/files';
+import { packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 import { STARTER } from './packs/starter';
 import { unpackPictures } from './rom/jtex';
@@ -97,31 +96,42 @@ export async function boot() {
   if (new URLSearchParams(location.search).has('rom')) {
     try {
       const r = await fetch('/__rom');
-      if (r.ok) await addGameFiles([{ name: r.headers.get('content-type')?.includes('zip') ? 'game.zip' : 'game.nds', data: new Uint8Array(await r.arrayBuffer()) }]);
+      const name = decodeURIComponent(r.headers.get('x-file-name') || '') || (r.headers.get('content-type')?.includes('zip') ? 'game.zip' : 'game.nds');
+      if (r.ok) setTimeout(async () => openedFiles([{ name, data: new Uint8Array(await r.arrayBuffer()) }]), 0);
     } catch (e) { console.warn('game from command line', e); }
   }
   home();
+  // installed web app: .momopack files opened with it (File Handling API, Chromium)
+  (window as any).launchQueue?.setConsumer(async (p: { files?: Array<{ getFile(): Promise<File> }> }) => {
+    const files = [];
+    for (const h of p.files ?? []) { const f = await h.getFile(); files.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }); }
+    if (files.length) openedFiles(files);
+  });
   // a MomoGram server keeps the profile the same on every device: when it brings news, show them
   Sync.startAutoSync(() => { if (document.querySelector('.home')) home(); });
+  // which packs have a newer version on the server (badges in the library)
+  if (Sync.account()) Sync.serverPacks().then(() => { if (document.querySelector('.home')) home(); }).catch(() => {});
 }
 
 const DS_GROUPS: Record<string, Pack['title']> = {
   easy: { en: 'Easy', de: 'Leicht', ja: 'かんたん' }, normal: { en: 'Normal', de: 'Normal', ja: 'ノーマル' }, free: { en: 'Free', de: 'Frei', ja: 'フリー' },
 };
 
-/** import game files without the pack screen (command line, old storage) */
-async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>) {
+/** import games or packs without the pack screen (opened from outside the app, old storage); returns what came in */
+async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>): Promise<Pack[]> {
   const found: Pack[] = [];
-  for (let { name, data } of files) {
-    if (/\.zip$/i.test(name) || (data[0] === 0x50 && data[1] === 0x4b)) {
-      const inner = await unzipFirst(data, /\.(nds|gbc?|sfc|smc|bs|3ds|cia|cxi)$/i);
-      if (!inner) continue;
-      data = inner as Uint8Array<ArrayBuffer>;
-    }
-    const r = await importGameFile(name, data);
-    if (r.ok) found.push(...r.packs);
+  for (const f of files) {
+    try { found.push(...(await readEntries(await filesToEntries(f), lang(), t)).made); }
+    catch (e) { console.warn('import', f.name, e); }
   }
   if (found.length) ctx.packs = await storePacks(ctx.packs, found);
+  return found;
+}
+
+/** files opened with MomoGram (desktop: double click / command line; installed web app: file handler) */
+async function openedFiles(files: Array<{ name: string; data: Uint8Array }>) {
+  const made = await addGameFiles(files);
+  if (made.length) { alert(t('imported', { list: made.map(p => pickAny(p.title, packLang())).join(', ') })); home(); }
 }
 
 /** extras a pack needs before its lists are shown (Picross DS: the solved-picture animations) */
@@ -248,7 +258,8 @@ function gameCard(p: Pack, onOpen: () => void): HTMLElement {
     h('b', {}, pickAny(p.title, packLang())),
     h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : '')),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
-    h('small', { class: 'count' }, t('solvedCount', { a, b })));
+    h('small', { class: 'count' }, t('solvedCount', { a, b })),
+    (Sync.knownServerRevs().get(p.id) ?? 0) > packRev(p) ? h('span', { class: 'update-badge', title: t('updateAvailable') }, '⬆') : null);
 }
 
 /**
@@ -489,11 +500,18 @@ function toolSwitchArt(): Element {
 
 /** home: is this profile in sync with the server? tap to sync now */
 function syncChip(): HTMLElement | null {
+  const gone = Sync.loggedOut();
+  if (!Sync.account() && gone) return h('button', { class: 'btn sync-chip bad', onClick: () => optionsScreen() }, '⚠ ' + t('loggedOutChip'));
   if (!Sync.account()) return null;
   const b = h('button', { class: 'btn sync-chip', onClick: () => Sync.sync() });
   const draw = () => {
     const a = Sync.account(), s = Sync.syncState();
-    if (!a) { b.remove(); return; }
+    if (!a) {
+      // the server logged this profile out: say so (tap → Options)
+      if (Sync.loggedOut()) { b.className = 'btn sync-chip bad'; b.textContent = '⚠ ' + t('loggedOutChip'); b.onclick = () => optionsScreen(); }
+      else b.remove();
+      return;
+    }
     const ago = a.synced ? Math.round((Date.now() - Date.parse(a.synced)) / 60000) : -1;
     b.className = 'btn sync-chip' + (s.state === 'error' ? ' bad' : '');
     b.textContent = s.state === 'syncing' ? '☁ ' + t('syncing') : s.state === 'error' ? '⚠ ' + serverError(new Sync.ServerError(s.error, 0)) : '☁ ' + (ago < 0 ? '–' : ago < 1 ? t('syncedNow') : t('syncedAgo', { n: ago < 60 ? ago + ' min' : Math.round(ago / 60) + ' h' }));
@@ -509,12 +527,21 @@ function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
   const sc = Sync.scores(), me = Sync.account();
   if (!sc || !me) return null;
   const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name);
-  const mine = getProgress(packId, puzzleId).best;
-  if (mine !== undefined) list.push([me.name, mine]);
+  const mine = strictestTime(getProgress(packId, puzzleId));
+  if (mine) list.push([me.name, mine[0], mine[1]]);
   if (!list.length) return null;
-  list.sort((a, b) => a[1] - b[1]);
+  // times under stricter rules come first: a fast Easy time doesn't beat a Hard one
+  list.sort((a, b) => (RULE_RANK[a[2] ?? ''] ?? 3) - (RULE_RANK[b[2] ?? ''] ?? 3) || a[1] - b[1]);
   return h('p', { class: 'fastest' }, '🏆 ' + t('fastest') + ': ',
-    ...list.slice(0, 3).map(([n, ms], k) => h('span', { class: n === me.name ? 'me' : '' }, `${k + 1}. ${n} ${formatTime(ms)}`)));
+    ...list.slice(0, 3).map(([n, ms, r], k) => h('span', { class: n === me.name ? 'me' : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
+      r ? h('i', { class: 'rule-tag r-' + r, title: rulesName(r as PlayRules) }, rulesName(r as PlayRules).slice(0, 1)) : null)));
+}
+const RULE_RANK: Record<string, number> = { free: 0, hard: 0, normal: 1, easy: 2 };
+/** a puzzle's best time under the strictest rules it was solved with (older progress: its best time, rules unknown) */
+function strictestTime(p: { best?: number; times?: Partial<Record<string, number>> }): [number, string] | null {
+  let pick: [number, string] | null = null;
+  for (const [r, ms] of Object.entries(p.times ?? {})) if (ms !== undefined && (!pick || (RULE_RANK[r] ?? 3) < (RULE_RANK[pick[1]] ?? 3) || ((RULE_RANK[r] ?? 3) === (RULE_RANK[pick[1]] ?? 3) && ms < pick[0]))) pick = [ms, r];
+  return pick ?? (p.best !== undefined ? [p.best, ''] : null);
 }
 
 /** everyone on the server: puzzles solved, medals, and per game */
@@ -527,7 +554,7 @@ async function scoresScreen() {
     const me = Sync.account()?.name;
     // this profile's own numbers come from this device: they may be newer than the server's
     if (sc && me) {
-      const users = [...sc.users.filter(u => u.name !== me), { name: me, ...localStats() }];
+      const users = [...sc.users.filter(u => u.name !== me), { ...sc.users.find(u => u.name === me), name: me, ...localStats() }];
       const key = (u: typeof users[0]) => [u.solved, u.medals.platinum ?? 0, u.medals.gold ?? 0, u.medals.silver ?? 0, -u.time];
       users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
       sc = { ...sc, users };
@@ -536,7 +563,9 @@ async function scoresScreen() {
     const medal = (m: string, n: number) => n ? h('span', { class: 'mcount' }, medalEl(m as Medal, false), '×' + n) : null;
     body.append(h('ol', { class: 'ranking' }, ...sc.users.map((u, k) => h('li', { class: u.name === me ? 'me' : '' },
       h('span', { class: 'rank' }, String(k + 1)),
-      h('div', { class: 'who' }, h('b', {}, u.name), h('small', {}, medal('platinum', u.medals.platinum), medal('gold', u.medals.gold), medal('silver', u.medals.silver), medal('bronze', u.medals.bronze))),
+      h('div', { class: 'who' }, h('b', {}, u.name),
+        h('small', {}, medal('platinum', u.medals.platinum), medal('gold', u.medals.gold), medal('silver', u.medals.silver), medal('bronze', u.medals.bronze)),
+        h('small', { class: 'extra' }, [u.week ? t('thisWeek', { n: u.week }) : '', u.records ? t('recordsN', { n: u.records }) : ''].filter(Boolean).join(' · '))),
       h('b', { class: 'num' }, String(u.solved))))));
     // per game: the installed packs anyone has played
     const packs = allPacks().filter(p => sc!.users.some(u => u.packs[p.id]));
@@ -695,15 +724,17 @@ function menuMusic(pack: Pack | null = null, fresh = false) {
 function rng(seed: number) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; }; }
 
 /** every puzzle of the visible games, with where it comes from */
-function puzzlePool(): Array<{ pack: Pack; lv: PackLevel; i: number }> {
+function puzzlePool(stable = false): Array<{ pack: Pack; lv: PackLevel; i: number }> {
   const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
-  for (const p of libraryPacks()) for (const lv of p.levels) lv.puzzles.forEach((z, i) => { if (z.rows.some(r => r.includes('#'))) out.push({ pack: p, lv, i }); });
+  // the daily puzzles must not change when the library is arranged differently: then the packs go by id
+  const packs = stable ? libraryPacks().sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : libraryPacks();
+  for (const p of packs) for (const lv of p.levels) lv.puzzles.forEach((z, i) => { if (z.rows.some(r => r.includes('#'))) out.push({ pack: p, lv, i }); });
   return out;
 }
 
 /** n puzzles of a measured difficulty, drawn at random (difficulty is computed only for the ones looked at) */
-function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new Set<string>()) {
-  const pool = puzzlePool();
+function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new Set<string>(), stable = false) {
+  const pool = puzzlePool(stable);
   const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
   for (let tries = 0; tries < 4000 && out.length < n && pool.length; tries++) {
     const k = Math.floor(rand() * pool.length);
@@ -715,6 +746,13 @@ function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new
   return out;
 }
 
+/** a short id for a puzzle's pattern (FNV-1a, 2 × 32 bit) */
+function patternId(rows: string[]): string {
+  let a = 0x811c9dc5, b = 0x01000193 ^ rows.length;
+  for (const ch of rows.join('/')) { const c = ch.charCodeAt(0); a = Math.imul(a ^ c, 0x01000193) >>> 0; b = Math.imul(b ^ c, 0x5bd1e995) >>> 0; }
+  return a.toString(36) + b.toString(36);
+}
+
 const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, packLang())} · ${pickAny(e.lv.title, packLang())}`;
 
 /** 15 puzzles a day, 5 per difficulty, from all visible games; solved ones are saved for the day */
@@ -724,7 +762,9 @@ async function daily() {
   const rand = rng(seed), seen = new Set<string>();
   const levels: PackLevel[] = ([1, 2, 3] as const).map(level => ({
     id: `daily-${seed}-d${level}`, title: { en: t('diff' + level) }, rules: 'normal' as const,
-    puzzles: drawPuzzles(rand, level, 5, seen).map((e, k) => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-d${level}-${k}`, from: fromText(e), name: undefined })),
+    // a daily puzzle is known by its pattern: the same puzzle has the same id on every device and for everyone
+    // (each device draws from its own games, so the lists can differ)
+    puzzles: drawPuzzles(rand, level, 5, seen, true).map(e => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-${patternId(e.lv.puzzles[e.i].rows)}`, from: fromText(e), name: undefined })),
   })).filter(l => l.puzzles.length);
   if (!levels.length) return;
   // coloured pictures of the games the puzzles come from
@@ -917,10 +957,13 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
       puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title });
   }
   const onHide = () => { if (document.visibilityState === 'hidden' && board.elapsedMs > 0) keepBoard(); };
+  const onLeave = () => { if (board.elapsedMs > 0) keepBoard(); };
   document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('pagehide', onLeave);
 
   function cleanup() {
     document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('pagehide', onLeave);
     finished = true;
     clearTimeout(timerId);
     ro.disconnect();
@@ -934,11 +977,17 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     running = false;
     await choose(t('menu'), [
       [t('resume'), () => {}],
-      ...(board.hasMarks() ? [[t('clearMarks'), () => { board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }] as [string, () => void]] : []),
+      ...(board.hasMarks() ? [
+        [t('fillMarks'), () => { board.pushUndo(); if (board.fillMarks()) Snd.sfx('mistake'); view.invalidate(); updateInfo(); if (board.checkSolved()) solved(); }],
+        [t('clearMarks'), () => { board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }]] as Array<[string, () => void]> : []),
       [settings.music ? '♪ ' + t('musicOff') : '♪ ' + t('musicOn'), () => { settings.music = !settings.music; saveSettings(); if (settings.music) playMusicFor(pack); else Snd.stop(); }],
       [t('stopSave'), () => { keepBoard(); cleanup(); back(); }],
       [t('restart'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }],
-      [t('quit'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); back(); }],
+      [t('quit'), async () => {
+        // giving up throws the board away: ask first (a saved board is easy to lose by a mis-tap)
+        if (board.elapsedMs > 5000 && !(await confirmChoice(t('quitAsk'), t('quitYes')))) return;
+        cleanup(); clearBoard(pack.id, lv.id, pz.id); back();
+      }],
     ]);
     last = performance.now();
     running = true;
@@ -966,7 +1015,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
-    const newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal);
+    const newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rules);
     clearBoard(pack.id, lv.id, pz.id);
     cleanup();
     showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal);
@@ -1014,6 +1063,11 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
 }
 
 // ---------------------------------------------------------------- dialogs
+
+/** yes / no */
+function confirmChoice(question: string, yes: string): Promise<boolean> {
+  return new Promise(res => { let v = false; choose(question, [[yes, () => { v = true; }], [t('back'), () => {}]]).then(() => res(v)); });
+}
 
 export function choose(title: string, options: Array<[string, () => void]>): Promise<void> {
   return new Promise(res => {
@@ -1127,8 +1181,10 @@ function serverSection(): HTMLElement {
           h('button', { class: 'btn primary', onClick: async () => { say(t('syncing')); const c = await Sync.sync(); const s = Sync.syncState(); say(s.error ? serverError(new Sync.ServerError(s.error, 0)) : t('syncedAt', { when: new Date().toLocaleString() }), !!s.error); if (c) optionsScreen(); else draw(); } }, '⟳ ' + t('syncNow')),
           h('button', { class: 'btn', onClick: async () => { await Sync.signOut(); draw(); } }, t('logout'))));
       if (st.error) say(serverError(new Sync.ServerError(st.error, 0)), true);
+      if (a.admin) box.append(h('button', { class: 'btn ghost', onClick: () => accountsDialog() }, '👥 ' + t('accounts')));
     } else if (Sync.serverUrl()) {
-      const name = h('input', { type: 'text', class: 'text', autocomplete: 'username', value: activeProfile().name, 'aria-label': t('accName') }) as HTMLInputElement;
+      if (Sync.loggedOut()) say(t('loggedOutMsg', { name: Sync.loggedOut()! }), true);
+      const name = h('input', { type: 'text', class: 'text', autocomplete: 'username', value: Sync.loggedOut() ?? activeProfile().name, 'aria-label': t('accName') }) as HTMLInputElement;
       const pass = h('input', { type: 'password', class: 'text', autocomplete: 'current-password', 'aria-label': t('accPassword') }) as HTMLInputElement;
       const invite = h('input', { type: 'text', class: 'text', placeholder: t('accInviteNote'), autocapitalize: 'off', 'aria-label': t('accInvite') }) as HTMLInputElement;
       const ask = (q: { local: string; remote: string }) => new Promise<'merge' | 'separate'>(res =>
@@ -1153,6 +1209,17 @@ function serverSection(): HTMLElement {
   };
   draw();
   return box;
+}
+
+/** admin: the server's accounts; set a new password for someone who forgot theirs */
+async function accountsDialog() {
+  let users: Array<{ name: string; admin: boolean }> = [];
+  try { users = await Sync.serverUsers(); } catch (e) { alert(serverError(e)); return; }
+  choose(t('accounts'), [...users.map(u => [(u.admin ? '★ ' : '') + u.name + ' · ' + t('newPassword'), async () => {
+    const pw = prompt(t('newPasswordFor', { name: u.name }), '');
+    if (!pw) return;
+    try { await Sync.setPassword(u.name, pw); alert(t('passwordSet', { name: u.name })); } catch (e) { alert(serverError(e)); }
+  }] as [string, () => void]), [t('back'), () => {}]]);
 }
 
 /** switch, create, rename or delete profiles */
@@ -1181,7 +1248,9 @@ function optionsScreen() {
   const vol = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: settings.musicVolume, 'aria-label': t('volume'),
     onInput: (e: Event) => { settings.musicVolume = +(e.target as HTMLInputElement).value; saveSettings(); Snd.setVolume(settings.musicVolume); } });
   const langSel = h('select', { 'aria-label': t('language'), onChange: (e: Event) => { settings.lang = (e.target as HTMLSelectElement).value as any; saveSettings(); setLang((settings.lang || navigator.language.slice(0, 2)) as Lang); redraw(); } },
-    ...[['', 'Auto'], ...(Object.entries(LANG_NAMES) as Array<[string, string]>)].map(([v, l]) => h('option', { value: v, selected: (settings.lang ?? '') === v ? true : undefined }, l)));
+    ...[['', 'Auto'], ...(Object.entries(LANG_NAMES) as Array<[string, string]>)].map(([v, l]) => h('option', { value: v, selected: (settings.lang ?? '') === v ? true : undefined },
+      // only English and German have all texts; the others change the games' titles and names
+      v && !hasTexts(v as Lang) ? `${l} (${t('titlesOnly')})` : l)));
   const row = (label: string, ctl: Node, note?: string) => h('div', { class: 'opt' }, h('div', { class: 'opt-label' }, h('span', {}, label), note ? h('small', {}, note) : null), ctl);
   const card = (title: string, ...rows: Array<Node | null>) => h('section', { class: 'opt-card' }, h('h2', {}, title), ...rows);
   screen(header(t('options'), home), h('div', { class: 'options' },
@@ -1201,6 +1270,7 @@ function optionsScreen() {
     card(t('secSave'), saveSection()),
     card(t('secServer'), serverSection()),
     card(t('secAbout'),
+      row(t('version'), h('b', { class: 'version' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION)),
       h('p', { class: 'fine left' }, t('controls')),
       h('p', { class: 'fine left' }, t('musicNote')),
       /[?&]debug/.test(location.search) ? h('button', { class: 'btn', onClick: () => textureInspector(screen, header('3DS textures', optionsScreen)) }, '3DS textures (debug)') : null,
