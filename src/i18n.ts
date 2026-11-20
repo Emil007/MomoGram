@@ -26,6 +26,7 @@ const en: Dict = {
   rulesNormal: 'Normal rules: mistakes are caught but cost time (2, 4, then 8 minutes). Earns silver.',
   rulesHard: 'Hard rules: no hint roulette, no safety net. Earns gold, or platinum without logic hints.',
   // playing
+  mark: 'Mark', clearMarks: 'Clear marks', musicOff: 'Music off', musicOn: 'Music on',
   fill: 'Fill', cross: 'Cross out', zoom: 'Zoom', undo: 'Undo', menu: 'Menu', logic: 'Hints', logicHints: 'Logic hints (blue numbers)',
   tryIt: 'Try it', keep: 'Keep', discard: 'Discard',
   quit: 'Quit', stopSave: 'Pause & save', resume: 'Keep playing', restart: 'Start over',
@@ -102,6 +103,7 @@ const de: Dict = {
   rulesEasy: 'Leichte Regeln: Fehler werden erkannt und kosten keine Zeit. Gibt Bronze.',
   rulesNormal: 'Normale Regeln: Fehler werden erkannt, kosten aber Zeit (2, 4, dann 8 Minuten). Gibt Silber.',
   rulesHard: 'Schwere Regeln: kein Tipp-Roulette, kein Sicherheitsnetz. Gibt Gold, ohne Logik-Tipps sogar Platin.',
+  mark: 'Markieren', clearMarks: 'Markierungen löschen', musicOff: 'Musik aus', musicOn: 'Musik an',
   fill: 'Füllen', cross: 'Ankreuzen', zoom: 'Zoom', undo: 'Zurück', menu: 'Menü', logic: 'Tipps', logicHints: 'Logik-Tipps (blaue Zahlen)',
   // server
   secServer: 'Server', serverUrl: 'Serveradresse', serverConnect: 'Verbinden',

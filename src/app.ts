@@ -752,8 +752,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     h('div', { class: 'lcd' }, timeEl));
   const canvas = h('canvas', { class: 'board' });
   // bottom bar: one tool button that switches between filling and crossing out, zoom, then hints / undo / try it
-  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'fill' ? 'cross' : 'fill') },
-    h('span', { class: 'face fill-face' }, icon('fill')), h('span', { class: 'face cross-face' }, icon('cross')));
+  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'mark' ? lastTool : view.tool === 'fill' ? 'cross' : 'fill') },
+    h('span', { class: 'swap' }, icon('swap')), h('span', { class: 'face fill-face' }, icon('fill')), h('span', { class: 'face cross-face' }, icon('cross')));
   const lensBtn = h('button', { class: 'rbtn', title: t('zoom'), 'aria-label': t('zoom'), onClick: () => { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } }, icon('zoom'));
   const boardWrap = h('section', { class: 'boardwrap' }, canvas);
   const tbtn = (ico: string, label: string, fn: () => void) => h('button', { class: 'rbtn small', title: label, 'aria-label': label, onClick: fn }, icon(ico), h('small', {}, label));
@@ -767,7 +767,9 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   logicBtn.classList.toggle('on', settings.logicHints);
   logicBtn.setAttribute('aria-pressed', String(settings.logicHints));
   const menuBtn = h('button', { class: 'rbtn hud-menu', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, icon('menu'));
-  const tools = h('nav', { class: 'tools' }, h('div', { class: 'tool-main' }, toolBtn, lensBtn), h('span', { class: 'gap' }), h('div', { class: 'tool-side' }, logicBtn, undoBtn, trialBtn));
+  // third tool: the player's own marks, which stay while the rest is filled and crossed
+  const markBtn = h('button', { class: 'rbtn mark-tool', title: t('mark'), 'aria-label': t('mark'), 'aria-pressed': 'false', onClick: () => toggleMark() }, icon('mark'));
+  const tools = h('nav', { class: 'tools' }, h('div', { class: 'tool-main' }, toolBtn, markBtn, lensBtn), h('span', { class: 'gap' }), h('div', { class: 'tool-side' }, logicBtn, undoBtn, trialBtn));
 
   top.append(menuBtn);
   screen(h('div', { class: 'play side-bottom' + (settings.toolsRight ? ' tools-right' : '') }, top, boardWrap, tools));
@@ -795,12 +797,17 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     updateInfo();
   };
 
-  function setTool(tool: 'fill' | 'cross') {
+  let lastTool: 'fill' | 'cross' = 'fill';
+  function setTool(tool: 'fill' | 'cross' | 'mark') {
     view.tool = tool;
-    toolBtn.classList.toggle('crossing', tool === 'cross');
-    const l = tool === 'fill' ? t('fill') : t('cross');
+    if (tool !== 'mark') lastTool = tool;
+    markBtn.classList.toggle('on', tool === 'mark'); markBtn.setAttribute('aria-pressed', String(tool === 'mark'));
+    toolBtn.classList.toggle('idle', tool === 'mark');
+    toolBtn.classList.toggle('crossing', lastTool === 'cross');
+    const l = lastTool === 'fill' ? t('fill') : t('cross');
     toolBtn.title = l; toolBtn.setAttribute('aria-label', l);
   }
+  function toggleMark() { setTool(view.tool === 'mark' ? lastTool : 'mark'); }
 
   function trialToggle() {
     if (!board.trial) { board.startTrial(); trialLabel.textContent = t('keep') + '?'; trialBtn?.classList.add('on'); }
@@ -865,23 +872,24 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     const k = e.key;
     const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
     if (dirs[k]) { e.preventDefault(); view.moveCursor(dirs[k][0], dirs[k][1], held as any); return; }
-    if ((k === 'z' || k === ' ' || k === 'Enter') && !e.repeat) { held = view.pressAtCursor('fill'); }
+    if ((k === 'z' || k === ' ' || k === 'Enter') && !e.repeat) { held = view.pressAtCursor(view.tool === 'mark' ? 'mark' : 'fill'); }
+    else if (k === 'v' && !e.repeat) { held = view.pressAtCursor('mark'); }
     else if ((k === 'x' || k === 'Shift') && !e.repeat) { held = view.pressAtCursor('cross'); }
     else if (k === 'c') view.toggleZoom();
     else if (k === 'Escape') pauseMenu();
     else if ((k === 'u' || (k === 'z' && (e.ctrlKey || e.metaKey)))) { if (board.undo()) view.invalidate(); }
   };
-  const keyUp = (e: KeyboardEvent) => { if (['z', 'x', ' ', 'Enter', 'Shift'].includes(e.key)) held = null; };
+  const keyUp = (e: KeyboardEvent) => { if (['z', 'x', 'v', ' ', 'Enter', 'Shift'].includes(e.key)) held = null; };
   window.addEventListener('keydown', key);
   window.addEventListener('keyup', keyUp);
   const gp = Gamepads.onPlay({
     move: (dx, dy) => view.moveCursor(dx, dy, held as any),
-    a: down => { held = down ? view.pressAtCursor('fill') : null; },
+    a: down => { held = down ? view.pressAtCursor(view.tool === 'mark' ? 'mark' : 'fill') : null; },
     b: down => { held = down ? view.pressAtCursor('cross') : null; },
     y: () => view.toggleZoom(),
     start: () => pauseMenu(),
     l: () => { if (board.undo()) view.invalidate(); },
-    r: () => trialBtn && trialToggle(),
+    r: () => trialBtn ? trialToggle() : toggleMark(),
   });
 
   /** keep the board as it is, to come back to (pause menu, or when the app is put away) */
@@ -908,6 +916,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     running = false;
     await choose(t('menu'), [
       [t('resume'), () => {}],
+      ...(board.hasMarks() ? [[t('clearMarks'), () => { board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }] as [string, () => void]] : []),
+      [settings.music ? '♪ ' + t('musicOff') : '♪ ' + t('musicOn'), () => { settings.music = !settings.music; saveSettings(); if (settings.music) playMusicFor(pack); else Snd.stop(); }],
       [t('stopSave'), () => { keepBoard(); cleanup(); back(); }],
       [t('restart'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }],
       [t('quit'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); back(); }],

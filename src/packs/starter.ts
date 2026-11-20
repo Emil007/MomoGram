@@ -294,7 +294,7 @@ const LEVELS2: Pack['levels'] = [
     }
    },
    {
-    "id": "sailboat",
+    "id": "tough-sailboat",
     "width": 20,
     "height": 20,
     "rows": [
@@ -356,7 +356,7 @@ const LEVELS2: Pack['levels'] = [
     }
    },
    {
-    "id": "tree",
+    "id": "tough-tree",
     "width": 20,
     "height": 20,
     "rows": [
@@ -387,7 +387,7 @@ const LEVELS2: Pack['levels'] = [
     }
    },
    {
-    "id": "umbrella",
+    "id": "tough-umbrella",
     "width": 20,
     "height": 20,
     "rows": [

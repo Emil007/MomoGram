@@ -1,7 +1,7 @@
 // Canvas view of a puzzle: clues pinned to the edges, zoom/pan for large grids, mouse/touch/keyboard/gamepad input.
-import { Board, CROSS, EMPTY, FILL, Cell } from './board';
+import { Board, CROSS, EMPTY, FILL, MARK, Cell, blank } from './board';
 
-export type Tool = 'fill' | 'cross';
+export type Tool = 'fill' | 'cross' | 'mark';
 
 export interface ViewEvents {
   onChange(result: 'ok' | 'mistake'): void;
@@ -9,7 +9,7 @@ export interface ViewEvents {
 }
 
 export interface Theme {
-  bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; trialFill: string; cross: string; mistake: string;
+  bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; trialFill: string; cross: string; mistake: string; mark?: string;
   clueBg: string; clueBgAlt: string; clue: string; clueOutline: string; clueDone: string; hl: string; cursor: string; hint: string; roulette: string; outline: string;
 }
 
@@ -257,9 +257,8 @@ export class BoardView {
     this.showCursor = false;
     const tool: Tool = e.button === 2 ? (this.tool === 'fill' ? 'cross' : 'fill') : this.tool;
     const cur = this.board.at(c.x, c.y);
-    const want: Cell = tool === 'fill' ? FILL : CROSS;
-    // tapping a cell that already has this mark erases (and the stroke keeps erasing)
-    const value: Cell = cur === want ? EMPTY : cur === EMPTY ? want : cur === FILL && tool === 'cross' ? EMPTY : want;
+    const value = valueFor(tool, cur);
+    if (value === null) return;
     this.board.pushUndo();
     this.stroke = { x0: c.x, y0: c.y, axis: 0, value, erase: cur, pointer: e.pointerId };
     this.cursorX = c.x; this.cursorY = c.y;
@@ -336,7 +335,8 @@ export class BoardView {
     const cur = this.board.at(x, y);
     // a stroke only changes cells that are empty (when marking) or carry the same mark (when erasing)
     if (s) {
-      if (s.value !== EMPTY && cur !== EMPTY) return;
+      // fills and crosses go over marks; marks only onto empty cells
+      if (s.value === MARK ? cur !== EMPTY : s.value !== EMPTY && !blank(cur)) return;
       if (s.value === EMPTY && cur !== s.erase) return;
     }
     const r = this.board.set(x, y, s ? s.value : FILL);
@@ -365,8 +365,8 @@ export class BoardView {
     if (this.spin) return EMPTY;
     this.showCursor = true;
     const cur = this.board.at(this.cursorX, this.cursorY);
-    const want: Cell = tool === 'fill' ? FILL : CROSS;
-    const value: Cell = cur === want ? EMPTY : cur === EMPTY ? want : want === CROSS && cur === FILL ? EMPTY : want;
+    const value = valueFor(tool, cur);
+    if (value === null) return EMPTY;
     this.board.pushUndo();
     this.applyAtCursor(value, false);
     return value;
@@ -374,7 +374,7 @@ export class BoardView {
 
   private applyAtCursor(value: Cell, continuing: boolean) {
     const cur = this.board.at(this.cursorX, this.cursorY);
-    if (continuing && value !== EMPTY && cur !== EMPTY) return;
+    if (continuing && (value === MARK ? cur !== EMPTY : value !== EMPTY && !blank(cur))) return;
     if (continuing && value === EMPTY && cur === EMPTY) return;
     const r = this.board.set(this.cursorX, this.cursorY, value);
     if (r === 'mistake') this.mistakeFlash.set(this.cursorY * this.board.w + this.cursorX, performance.now());
@@ -445,6 +445,11 @@ export class BoardView {
       if (v === FILL) {
         ctx.fillStyle = trial ? trialPat : fillPat;
         ctx.fillRect(px, py, cs, cs);
+      } else if (v === MARK) {
+        // the player's own note: a soft dot that the picture can't be mistaken for
+        const m = cs * 0.27;
+        ctx.fillStyle = T.mark ?? '#a874d8';
+        ctx.beginPath(); ctx.roundRect(px + m, py + m, cs - 2 * m, cs - 2 * m, cs * 0.12); ctx.fill();
       } else if (v === CROSS) {
         const t = this.mistakeFlash.get(i);
         let col = trial ? T.trialFill : T.cross;
@@ -534,4 +539,12 @@ export class BoardView {
       ctx.fillStyle = T.outline; ctx.fillText(String(this.dragLen), bx, by + 1);
     }
   }
+}
+
+/** what a tap with a tool does to a cell: set it, erase it, or nothing (null) */
+function valueFor(tool: Tool, cur: Cell): Cell | null {
+  if (tool === 'mark') return cur === MARK ? EMPTY : cur === EMPTY ? MARK : null;
+  const want: Cell = tool === 'fill' ? FILL : CROSS;
+  // tapping a cell that already has this mark erases (and the stroke keeps erasing); marks are written over
+  return cur === want ? EMPTY : blank(cur) ? want : cur === FILL && tool === 'cross' ? EMPTY : want;
 }

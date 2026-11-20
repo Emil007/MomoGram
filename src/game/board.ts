@@ -1,7 +1,11 @@
 // Puzzle state and Picross DS rules (Normal: mistakes are caught and cost time; Free: no checks, "Try it out").
 
 export const EMPTY = 0, FILL = 1, CROSS = 2;
-export type Cell = 0 | 1 | 2;
+/** a note of the player's own: counts as empty for everything, stays while the rest of the board is played */
+export const MARK = 3;
+/** empty or only marked */
+export const blank = (v: number) => v === EMPTY || v === MARK;
+export type Cell = 0 | 1 | 2 | 3;
 
 export function lineClues(line: ArrayLike<boolean | number>): number[] {
   const out: number[] = [];
@@ -88,8 +92,15 @@ export class Board {
   private set0(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
     if (this.solved || x < 0 || y < 0 || x >= this.w || y >= this.h) return 'nochange';
     const i = y * this.w + x;
+    // marks belong to the board itself, also while trying something out
+    if (value === MARK || (value === EMPTY && this.cells[i] === MARK && !this.trial?.[i])) {
+      if (value === MARK && this.cells[i] !== EMPTY) return 'nochange';
+      if (this.cells[i] === value) return 'nochange';
+      this.cells[i] = value;
+      return 'ok';
+    }
     if (this.trial) {
-      if (this.cells[i] !== EMPTY) return 'nochange';
+      if (!blank(this.cells[i])) return 'nochange';
       if (this.trial[i] === value) return 'nochange';
       this.trial[i] = value;
       return 'ok';
@@ -107,6 +118,8 @@ export class Board {
     return 'ok';
   }
 
+  hasMarks(): boolean { return this.cells.includes(MARK); }
+  clearMarks() { this.touch(); for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === MARK) this.cells[i] = EMPTY; this.version++; this.cache.clear(); }
   startTrial() { this.touch(); if (!this.trial) this.trial = new Uint8Array(this.w * this.h); }
   /** keep the trial marks */
   commitTrial() { this.touch();
@@ -145,8 +158,8 @@ export class Board {
   /** Cross out every row and column whose clue is 0 (done for the player at the start, no undo step). */
   crossEmptyLines() {
     const zero = (c: number[]) => c.length === 0 || (c.length === 1 && c[0] === 0);
-    for (let y = 0; y < this.h; y++) if (zero(this.rowClues[y])) for (let x = 0; x < this.w; x++) if (this.at(x, y) === EMPTY) this.cells[y * this.w + x] = CROSS;
-    for (let x = 0; x < this.w; x++) if (zero(this.colClues[x])) for (let y = 0; y < this.h; y++) if (this.at(x, y) === EMPTY) this.cells[y * this.w + x] = CROSS;
+    for (let y = 0; y < this.h; y++) if (zero(this.rowClues[y])) for (let x = 0; x < this.w; x++) if (blank(this.at(x, y))) this.cells[y * this.w + x] = CROSS;
+    for (let x = 0; x < this.w; x++) if (zero(this.colClues[x])) for (let y = 0; y < this.h; y++) if (blank(this.at(x, y))) this.cells[y * this.w + x] = CROSS;
     this.touch();
   }
 
@@ -246,7 +259,7 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
   if (K === 0) {
     // "0": done when nothing is filled; progress while cells are still open
     let open = false;
-    for (let i = 0; i < n; i++) if (cells[i] === EMPTY) open = true;
+    for (let i = 0; i < n; i++) if (blank(cells[i])) open = true;
     return { feasible, done: [true], progress: open };
   }
   const canFill = new Uint8Array(n), canEmpty = new Uint8Array(n);
@@ -270,6 +283,6 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
     for (let k = 0; k <= K && !canEmpty[i]; k++) if (F[k][i] && B[k][i + 1]) canEmpty[i] = 1;
   }
   let progress = false;
-  for (let i = 0; i < n && !progress; i++) if (cells[i] === EMPTY && (!canFill[i] || !canEmpty[i])) progress = true;
+  for (let i = 0; i < n && !progress; i++) if (blank(cells[i]) && (!canFill[i] || !canEmpty[i])) progress = true;
   return { feasible, done, progress, canFill, canEmpty };
 }
