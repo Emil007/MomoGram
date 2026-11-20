@@ -198,6 +198,8 @@ export interface LineInfo {
   done: boolean[];
   /** some empty cell is forced (filled or crossed) by this line's clue and marks alone */
   progress: boolean;
+  /** per cell: some placement fills it / leaves it empty (only when feasible and clues given) */
+  canFill?: Uint8Array; canEmpty?: Uint8Array;
 }
 
 /**
@@ -269,5 +271,5 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
   }
   let progress = false;
   for (let i = 0; i < n && !progress; i++) if (cells[i] === EMPTY && (!canFill[i] || !canEmpty[i])) progress = true;
-  return { feasible, done, progress };
+  return { feasible, done, progress, canFill, canEmpty };
 }

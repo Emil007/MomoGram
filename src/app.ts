@@ -14,6 +14,8 @@ import { Audio as Snd } from './audio';
 import { unzipFirst, packSave, unpackSave, download } from './util/files';
 import { themeColors, applyThemeCss, ThemeColors } from './packs/theme';
 import { STARTER } from './packs/starter';
+import { icon } from './ui/icons';
+import { puzzleLevel } from './game/difficulty';
 
 const TIME_LIMIT = 60 * 60_000;
 
@@ -294,7 +296,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
   showLevel();
   lv.puzzles.forEach((p, i) => {
     const pr = getProgress(pack.id, p.id);
-    const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => play(pack, lv, i, () => puzzleList(pack, lv, back)),
+    const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => puzzleStart(pack, lv, i, () => puzzleList(pack, lv, back)),
       onMouseenter: () => showPuzzle(p, i), onFocus: () => showPuzzle(p, i), onMouseleave: () => showLevel(),
       'aria-label': `${t('puzzleNo')} ${i + 1}` });
     if (pr.cleared) tile.append(thumbnail(p, pck, 64));
@@ -316,6 +318,34 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
   screen(header(pickAny(lv.title, packLang()), back), tabs, info, grid,
     difficultyPicker(lv, () => puzzleList(pack, lv, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))));
+}
+
+/** between the list and the board: the puzzle, its source, your results, the difficulty, Start */
+function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
+  usePack(pack, 'menu');
+  const pz = lv.puzzles[i];
+  const pr = getProgress(pack.id, pz.id);
+  const pck = pckOf(pack);
+  const name = pr.cleared ? pickText(pz.name, packLang()) : '';
+  const pic = pr.cleared ? thumbnail(pz, pck, 160) : h('div', { class: 'qbig', style: `aspect-ratio:${pz.width}/${pz.height}` }, '?');
+  const go = () => play(pack, lv, i, back);
+  const nav = (d: number) => { const j = i + d; if (j >= 0 && j < lv.puzzles.length) puzzleStart(pack, lv, j, back); };
+  const stat = (label: string, value: Node | string) => h('div', { class: 'stat' }, h('small', {}, label), h('b', {}, value));
+  screen(header(pickAny(lv.title, packLang()), back), h('div', { class: 'pstart' },
+    h('div', { class: 'pstart-pic' },
+      h('button', { class: 'rbtn ghost', disabled: i === 0 ? true : undefined, 'aria-label': t('prev'), onClick: () => nav(-1) }, icon('prev')),
+      h('div', { class: 'pic-frame' }, pic),
+      h('button', { class: 'rbtn ghost', disabled: i + 1 >= lv.puzzles.length ? true : undefined, 'aria-label': t('nextPuzzle'), onClick: () => nav(1) }, icon('next'))),
+    h('h2', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
+    h('p', { class: 'pstart-from' }, pz.from ?? `${pickAny(pack.title, packLang())} · ${pickAny(lv.title, packLang())}`),
+    h('div', { class: 'stats' },
+      stat(t('size'), `${pz.width}×${pz.height}`),
+      stat(t('level'), h('span', { class: 'diff d' + puzzleLevel(pz) }, t('diff' + puzzleLevel(pz)))),
+      stat(t('best'), pr.best !== undefined ? formatTime(pr.best) : '–'),
+      stat(t('medal'), pr.medal ? medalEl(pr.medal, true) : '–')),
+    difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
+    h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
+    h('button', { class: 'btn primary big start', onClick: go }, icon('play'), t('start'))));
 }
 
 async function resumeQuick() {
@@ -447,27 +477,26 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     h('div', { class: 'hud-pic' }, preview),
     h('div', { class: 'hud-info' },
       h('div', { class: 'hud-lvl' }, h('span', { class: 'badge ' + rules }, rulesName(rules).slice(0, 1)), h('b', {}, pickAny(lv.title, packLang()) + ' · ' + levelLetter(index))),
-      h('div', { class: 'hud-size' }, `${pz.width}×${pz.height}`, mistakesEl)),
+      h('div', { class: 'hud-size' }, `${pz.width}×${pz.height} · ${pz.from ?? pickAny(pack.title, packLang())}`, mistakesEl)),
     h('div', { class: 'lcd' }, timeEl));
   const canvas = h('canvas', { class: 'board' });
-  // tool pad in the clue corner, like the stylus icons on the DS
-  const penBtn = h('button', { class: 'pad on', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool('fill') }, h('i', { class: 'ico pen' }));
-  const xBtn = h('button', { class: 'pad', title: t('cross'), 'aria-label': t('cross'), onClick: () => setTool('cross') }, h('i', { class: 'ico cross' }));
-  const lensBtn = h('button', { class: 'pad', title: t('zoom'), 'aria-label': t('zoom'), onClick: () => { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } }, h('i', { class: 'ico lens' }));
-  const toolPad = h('div', { class: 'toolpad' }, penBtn, xBtn, lensBtn);
-  toolPad.setAttribute('role', 'toolbar');
+  // bottom bar: one tool button that switches between filling and crossing out, zoom, then hints / undo / try it
+  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'fill' ? 'cross' : 'fill') },
+    h('span', { class: 'face fill-face' }, icon('fill')), h('span', { class: 'face cross-face' }, icon('cross')));
+  const lensBtn = h('button', { class: 'rbtn', title: t('zoom'), 'aria-label': t('zoom'), onClick: () => { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } }, icon('zoom'));
   const boardWrap = h('section', { class: 'boardwrap' }, canvas);
-
-  const undoBtn = h('button', { class: 'btn tool icon', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) { view.invalidate(); updateInfo(); } } }, h('span', { class: 'big-ico' }, '↶'), h('small', {}, t('undo')));
-  const trialLabel = h('small', {}, t('tryIt'));
-  const trialBtn = rules === 'free' ? h('button', { class: 'btn tool icon', title: t('tryIt'), onClick: () => trialToggle() }, h('span', { class: 'big-ico' }, '✎'), trialLabel) : null;
-  const logicBtn = h('button', { class: 'btn tool icon' + (settings.logicHints ? ' on' : ''), title: t('logicHints'), 'aria-label': t('logicHints'), 'aria-pressed': String(settings.logicHints),
-    onClick: () => { settings.logicHints = !settings.logicHints; saveSettings(); view.logicHints = settings.logicHints; if (settings.logicHints) usedHints = true; view.invalidate(); logicBtn.classList.toggle('on', settings.logicHints); logicBtn.setAttribute('aria-pressed', String(settings.logicHints)); } },
-    h('span', { class: 'big-ico' }, '💡'), h('small', {}, t('logic')));
-  const menuBtn = h('button', { class: 'btn hud-menu', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, '☰');
-  // tools within thumb reach at the bottom: pen / cross / zoom as a segmented pad, then undo, try-it and menu
-  const tools = h('nav', { class: 'tools' }, toolPad, h('span', { class: 'gap' }), logicBtn, undoBtn, trialBtn);
-  const fillBtn = penBtn, crossBtn = xBtn;
+  const tbtn = (ico: string, label: string, fn: () => void) => h('button', { class: 'rbtn small', title: label, 'aria-label': label, onClick: fn }, icon(ico), h('small', {}, label));
+  const undoBtn = tbtn('undo', t('undo'), () => { if (board.undo()) { view.invalidate(); updateInfo(); } });
+  const trialBtn = rules === 'free' ? tbtn('trial', t('tryIt'), () => trialToggle()) : null;
+  const trialLabel = trialBtn?.querySelector('small') ?? h('small');
+  const logicBtn = tbtn('hint', t('logic'), () => {
+    settings.logicHints = !settings.logicHints; saveSettings(); view.logicHints = settings.logicHints; if (settings.logicHints) usedHints = true;
+    view.invalidate(); logicBtn.classList.toggle('on', settings.logicHints); logicBtn.setAttribute('aria-pressed', String(settings.logicHints));
+  });
+  logicBtn.classList.toggle('on', settings.logicHints);
+  logicBtn.setAttribute('aria-pressed', String(settings.logicHints));
+  const menuBtn = h('button', { class: 'rbtn hud-menu', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, icon('menu'));
+  const tools = h('nav', { class: 'tools' }, h('div', { class: 'tool-main' }, toolBtn, lensBtn), h('span', { class: 'gap' }), h('div', { class: 'tool-side' }, logicBtn, undoBtn, trialBtn));
 
   top.append(menuBtn);
   screen(h('div', { class: 'play side-bottom' + (settings.toolsRight ? ' tools-right' : '') }, top, boardWrap, tools));
@@ -497,15 +526,16 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
 
   function setTool(tool: 'fill' | 'cross') {
     view.tool = tool;
-    fillBtn.classList.toggle('on', tool === 'fill');
-    crossBtn.classList.toggle('on', tool === 'cross');
+    toolBtn.classList.toggle('crossing', tool === 'cross');
+    const l = tool === 'fill' ? t('fill') : t('cross');
+    toolBtn.title = l; toolBtn.setAttribute('aria-label', l);
   }
 
   function trialToggle() {
-    if (!board.trial) { board.startTrial(); trialLabel.textContent = t('keep') + '?'; trialBtn!.classList.add('on'); }
+    if (!board.trial) { board.startTrial(); trialLabel.textContent = t('keep') + '?'; trialBtn?.classList.add('on'); }
     else {
       choose(t('tryIt'), [[t('keep'), () => board.commitTrial()], [t('discard'), () => board.discardTrial()], [t('back'), () => { /* stay */ }]]).then(() => {
-        if (!board.trial) { trialLabel.textContent = t('tryIt'); trialBtn!.classList.remove('on'); }
+        if (!board.trial) { trialLabel.textContent = t('tryIt'); trialBtn?.classList.remove('on'); }
         view.invalidate();
         if (board.checkSolved()) solved();
       });
@@ -758,32 +788,40 @@ function profileDialog(after: () => void) {
 // ---------------------------------------------------------------- options
 
 function optionsScreen() {
-  const sel = (key: keyof typeof settings, opts: Array<[string, string]>) => {
-    const s = h('select', { onChange: (e: Event) => { (settings as any)[key] = (e.target as HTMLSelectElement).value; saveSettings(); if (key === 'lang') setLang(settings.lang as Lang); if (key === 'lang' || key === 'musicMode') optionsScreen(); } });
-    for (const [v, l] of opts) s.append(h('option', { value: v, selected: String(settings[key]) === v ? true : undefined }, l));
-    return s;
+  const redraw = () => optionsScreen();
+  // switch, segmented choice and slider in one consistent style
+  const toggle = (key: keyof typeof settings, after?: () => void) => {
+    const b = h('button', { class: 'switch' + (settings[key] ? ' on' : ''), role: 'switch', 'aria-checked': String(!!settings[key]),
+      onClick: () => { (settings as any)[key] = !settings[key]; saveSettings(); b.classList.toggle('on', !!settings[key]); b.setAttribute('aria-checked', String(!!settings[key])); after?.(); } }, h('i'));
+    return b;
   };
-  const chk = (key: keyof typeof settings, after?: () => void) => {
-    const c = h('input', { type: 'checkbox', checked: settings[key] ? true : undefined, onChange: (e: Event) => { (settings as any)[key] = (e.target as HTMLInputElement).checked; saveSettings(); after?.(); } });
-    return c;
-  };
-  const vol = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: settings.musicVolume, onInput: (e: Event) => { settings.musicVolume = +(e.target as HTMLInputElement).value; saveSettings(); Snd.setVolume(settings.musicVolume); } });
-  const row = (label: string, ctl: Node) => h('label', { class: 'opt' }, h('span', {}, label), ctl);
+  const seg = (key: keyof typeof settings, opts: Array<[string, string]>, after?: () => void) => h('div', { class: 'seg mini' }, ...opts.map(([v, l]) =>
+    h('button', { class: 'segbtn' + (String(settings[key]) === v ? ' on' : ''), onClick: () => { (settings as any)[key] = v; saveSettings(); after?.(); redraw(); } }, l)));
+  const vol = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: settings.musicVolume, 'aria-label': t('volume'),
+    onInput: (e: Event) => { settings.musicVolume = +(e.target as HTMLInputElement).value; saveSettings(); Snd.setVolume(settings.musicVolume); } });
+  const langSel = h('select', { 'aria-label': t('language'), onChange: (e: Event) => { settings.lang = (e.target as HTMLSelectElement).value as any; saveSettings(); setLang((settings.lang || navigator.language.slice(0, 2)) as Lang); redraw(); } },
+    ...[['', 'Auto'], ...(Object.entries(LANG_NAMES) as Array<[string, string]>)].map(([v, l]) => h('option', { value: v, selected: (settings.lang ?? '') === v ? true : undefined }, l)));
+  const row = (label: string, ctl: Node, note?: string) => h('div', { class: 'opt' }, h('div', { class: 'opt-label' }, h('span', {}, label), note ? h('small', {}, note) : null), ctl);
+  const card = (title: string, ...rows: Array<Node | null>) => h('section', { class: 'opt-card' }, h('h2', {}, title), ...rows);
   screen(header(t('options'), home), h('div', { class: 'options' },
-    row(t('language'), sel('lang', [['', 'Auto'], ...(Object.entries(LANG_NAMES) as Array<[string, string]>)])),
-    row(t('music'), chk('music', () => settings.music ? menuMusic() : Snd.stop())),
-    row(t('volume'), vol),
-    row(t('sfx'), chk('sfx')),
-    row(t('musicMode'), sel('musicMode', [['random-pack', t('musicRandomPack')], ['random-all', t('musicRandomAll')], ['fixed', t('musicFixed')]])),
-    row(t('packMusic'), chk('packMusic')),
-    row(t('packColors'), chk('packColors')),
-    row(t('toolsRight'), chk('toolsRight')),
-    row(t('hints'), sel('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
-    row(t('unlockAll'), chk('unlockAll')),
-    h('h2', { class: 'opt-head' }, t('saveData')),
-    saveSection(),
-    h('p', { class: 'fine' }, t('controls')),
-    h('p', { class: 'fine' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · No game data included.')));
+    card(t('secSound'),
+      row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
+      settings.music ? row(t('volume'), vol) : null,
+      settings.music ? row(t('musicMode'), seg('musicMode', [['random-pack', t('musicRandomPack')], ['random-all', t('musicRandomAll')], ['fixed', t('musicFixed')]])) : null,
+      row(t('sfx'), toggle('sfx'))),
+    card(t('secPlay'),
+      row(t('hints'), seg('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
+      row(t('logicDefault'), toggle('logicHints')),
+      row(t('unlockAll'), toggle('unlockAll'))),
+    card(t('secLook'),
+      row(t('packColors'), toggle('packColors')),
+      row(t('toolsRight'), toggle('toolsRight')),
+      row(t('language'), langSel)),
+    card(t('secSave'), saveSection()),
+    card(t('secAbout'),
+      h('p', { class: 'fine left' }, t('controls')),
+      h('p', { class: 'fine left' }, t('musicNote')),
+      h('p', { class: 'fine left' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · ' + t('noGameData')))));
 }
 
 export { ctx, CROSS };

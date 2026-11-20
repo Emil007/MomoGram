@@ -6,6 +6,8 @@ export type Text = Partial<Record<Lang, string>>;
 export type Rules = 'normal' | 'free';
 
 export interface PackPuzzle {
+  /** where a puzzle comes from when it is shown outside its game (daily, random) */
+  from?: string;
   /** stable id within the pack, e.g. "n01-03" */
   id: string;
   width: number;
