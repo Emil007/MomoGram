@@ -34,9 +34,17 @@ async function call(a: string, opts: { method?: string; json?: unknown; body?: B
   let body = opts.body;
   if (opts.json !== undefined) { body = JSON.stringify(opts.json); headers['Content-Type'] = 'application/json'; }
   else if (body) headers['Content-Type'] = 'application/octet-stream';
+  // a request that never answers (phone put away mid-request) must not block all later syncs
+  const ctl = new AbortController();
+  const timeout = window.setTimeout(() => ctl.abort(), opts.raw || a === 'upload_part' ? 300000 : 30000);
   let r: Response;
-  try { r = await fetch(endpoint(a, opts.args), { method: opts.method ?? (body ? 'POST' : 'GET'), headers, body, keepalive: opts.keepalive }); }
-  catch { throw new ServerError('offline', 0); }
+  try { r = await fetch(endpoint(a, opts.args), { method: opts.method ?? (body ? 'POST' : 'GET'), headers, body, keepalive: opts.keepalive, signal: ctl.signal }); }
+  catch { window.clearTimeout(timeout); throw new ServerError('offline', 0); }
+  try { return await readResponse(r, opts.raw); } finally { window.clearTimeout(timeout); }
+}
+
+async function readResponse(r: Response, raw?: boolean): Promise<any> {
+  const opts = { raw };
   if (opts.raw && r.ok) return new Uint8Array(await r.arrayBuffer());
   let data: any = null;
   try { data = await r.json(); } catch { throw new ServerError(r.ok ? 'notmomogram' : 'http' + r.status, r.status); }
@@ -72,7 +80,8 @@ export async function signIn(name: string, password: string, invite?: string, as
     // the account already has a profile: use it here, or join this device's current profile with it
     if (profiles().some(p => p.id === remote.profile.id)) switchProfile(remote.profile.id);
     else if (ask && (await ask({ local: me.name, remote: remote.profile.name })) === 'merge') rekeyProfile(me.id, remote.profile.id, remote.profile.name);
-    else createProfile(remote.profile.name, remote.profile.id);
+    // kept apart: name it after the account, so two profiles called "Player" can't be mixed up
+    else createProfile(profiles().some(p => p.name === remote.profile.name) ? d.user.name : remote.profile.name, remote.profile.id);
   }
   storeAccount({ name: d.user.name, admin: !!d.user.admin, token: tok, rev: 0 });
   await sync();

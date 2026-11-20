@@ -201,7 +201,11 @@ export function resetProgress(packId: string) {
   persist([packId]);
 }
 
-export interface QuickSave { packId: string; levelId: string; puzzleId: string; state: BoardSnapshot }
+export interface QuickSave {
+  packId: string; levelId: string; puzzleId: string; state: BoardSnapshot;
+  /** the puzzle itself, for puzzles that aren't part of a stored pack (daily puzzles) */
+  puzzle?: import('./packs/format').PackPuzzle; level?: { title: import('./packs/format').PackLevel['title']; rules: import('./packs/format').PackLevel['rules'] }; packTitle?: Pack['title'];
+}
 export function setQuickSave(q: QuickSave | null) {
   const had = localStorage.getItem(pk('quick')) !== null;
   if (q) localStorage.setItem(pk('quick'), JSON.stringify(q));
@@ -317,6 +321,19 @@ export function rekeyProfile(from: string, to: string, name?: string) {
   storeProfiles(loadProfiles().map(p => p.id === from ? { ...p, id: to, name: name ?? p.name } : p));
   if (localStorage.getItem('momogram.profile') === from) localStorage.setItem('momogram.profile', to);
   loadActive();
+}
+
+/** the active profile's numbers as the server's high scores count them (this device may be newer than the server) */
+export function localStats(): { solved: number; medals: Record<Medal, number>; packs: Record<string, number>; time: number } {
+  const out = { solved: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0 };
+  for (const [k, v] of Object.entries(progress)) {
+    if (!v.cleared) continue;
+    const id = k.slice(0, k.lastIndexOf('/'));
+    out.solved++; out.packs[id] = (out.packs[id] ?? 0) + 1;
+    if (v.medal) out.medals[v.medal]++;
+    if (v.best !== undefined) out.time += v.best;
+  }
+  return out;
 }
 
 /** solved puzzles per pack id (of the active profile, or of a save) */

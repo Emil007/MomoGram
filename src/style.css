@@ -406,3 +406,7 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .score-table tbody th { text-align: left; font-weight: 800; white-space: normal; }
 .score-table td.top { font-weight: 900; color: var(--easy); }
 .mcount .medal { width: 1rem; height: 1rem; }
+.home-top .chips { display: flex; justify-content: flex-end; gap: .4rem; flex-wrap: wrap; margin-bottom: -.4rem; position: relative; z-index: 1; }
+.home-top .chips .profile-chip { margin-bottom: 0; }
+.sync-chip { padding: .25em .7em; font-size: .8rem; border-radius: 999px; color: var(--muted); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-chip.bad { color: var(--hard); }

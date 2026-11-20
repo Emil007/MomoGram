@@ -6,7 +6,7 @@ import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/fo
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { importGameFile } from './packs/importers/index';
 import './packs/importers/all';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, setQuickSave, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
 import { t, setLang, lang, LANG_NAMES } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager, storePacks } from './ui/packs';
@@ -179,13 +179,15 @@ export function home() {
   // whatever plays keeps playing; only a silent start picks a random track from all games
   if (!Snd.current()) menuMusic(null, true);
   const q = getQuickSave();
-  const qPack = q ? allPacks().find(p => p.id === q.packId) : null;
+  const qPack = q ? quickTarget(q)?.pack : null;
   const packs = allPacks();
   let solved = 0, total = 0;
   for (const p of packs) { const [a, b] = countPack(p); solved += a; total += b; }
 
   const top = h('section', { class: 'home-top' },
-    h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
+    h('div', { class: 'chips' },
+      h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
+      syncChip()),
     logo(),
     h('div', { class: 'home-progress' },
       h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (solved / total) * 100 : 0}%` })),
@@ -467,6 +469,23 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     h('button', { class: 'btn primary big start', onClick: go }, icon('play'), t('start'))));
 }
 
+/** home: is this profile in sync with the server? tap to sync now */
+function syncChip(): HTMLElement | null {
+  if (!Sync.account()) return null;
+  const b = h('button', { class: 'btn sync-chip', onClick: () => Sync.sync() });
+  const draw = () => {
+    const a = Sync.account(), s = Sync.syncState();
+    if (!a) { b.remove(); return; }
+    const ago = a.synced ? Math.round((Date.now() - Date.parse(a.synced)) / 60000) : -1;
+    b.className = 'btn sync-chip' + (s.state === 'error' ? ' bad' : '');
+    b.textContent = s.state === 'syncing' ? '☁ ' + t('syncing') : s.state === 'error' ? '⚠ ' + serverError(new Sync.ServerError(s.error, 0)) : '☁ ' + (ago < 0 ? '–' : ago < 1 ? t('syncedNow') : t('syncedAgo', { n: ago < 60 ? ago + ' min' : Math.round(ago / 60) + ' h' }));
+    b.title = t('loggedIn', { name: a.name });
+  };
+  draw();
+  Sync.onSyncChange(() => { if (b.isConnected) draw(); });
+  return b;
+}
+
 /** the best times of everyone on the server for one puzzle (this profile's own time from here, it may be newer) */
 function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
   const sc = Sync.scores(), me = Sync.account();
@@ -487,8 +506,15 @@ async function scoresScreen() {
   let sc = Sync.scores(), note = '';
   const draw = () => {
     body.innerHTML = '';
-    if (!sc || !sc.users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); return; }
     const me = Sync.account()?.name;
+    // this profile's own numbers come from this device: they may be newer than the server's
+    if (sc && me) {
+      const users = [...sc.users.filter(u => u.name !== me), { name: me, ...localStats() }];
+      const key = (u: typeof users[0]) => [u.solved, u.medals.platinum ?? 0, u.medals.gold ?? 0, u.medals.silver ?? 0, -u.time];
+      users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
+      sc = { ...sc, users };
+    }
+    if (!sc || !sc.users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); return; }
     const medal = (m: string, n: number) => n ? h('span', { class: 'mcount' }, medalEl(m as Medal, false), '×' + n) : null;
     body.append(h('ol', { class: 'ranking' }, ...sc.users.map((u, k) => h('li', { class: u.name === me ? 'me' : '' },
       h('span', { class: 'rank' }, String(k + 1)),
@@ -513,15 +539,25 @@ async function scoresScreen() {
   if (body.isConnected) draw();
 }
 
-async function resumeQuick() {
-  const q = getQuickSave();
-  if (!q) return home();
+/** where a paused puzzle lives: its pack, or (daily puzzles) a pack made of the puzzle stored with the save */
+function quickTarget(q: QuickSave): { pack: Pack; lv: PackLevel; i: number; lone: boolean } | null {
   const pack = allPacks().find(p => p.id === q.packId);
   const lv = pack?.levels.find(l => l.id === q.levelId);
   const i = lv?.puzzles.findIndex(p => p.id === q.puzzleId) ?? -1;
-  if (!pack || !lv || i < 0) { setQuickSave(null); return home(); }
-  await loadExtras(pack);
-  play(pack, lv, i, home, q.state);
+  if (pack && lv && i >= 0) return { pack, lv, i, lone: false };
+  if (!q.puzzle) return null;
+  const one: PackLevel = { id: q.levelId, title: q.level?.title ?? { en: '' }, rules: q.level?.rules ?? 'normal', puzzles: [q.puzzle] };
+  return { pack: { format: 'momogram-pack', version: 1, id: q.packId, title: q.packTitle ?? { en: t('daily') }, source: { game: 'MomoGram', platform: 'MomoGram' }, levels: [one] }, lv: one, i: 0, lone: true };
+}
+
+async function resumeQuick() {
+  const q = getQuickSave();
+  if (!q) return home();
+  const tg = quickTarget(q);
+  // the game isn't on this device (yet): keep the save for when it is
+  if (!tg) return home();
+  await loadExtras(tg.pack);
+  play(tg.pack, tg.lv, tg.i, tg.lone ? home : () => openPack(tg.pack, home), q.state);
 }
 
 /** puzzles within a level are lettered A, B, C … (numbers past Z) */
@@ -857,7 +893,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     running = false;
     await choose(t('menu'), [
       [t('resume'), () => {}],
-      [t('stopSave'), () => { setQuickSave({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints } as any }); cleanup(); back(); }],
+      [t('stopSave'), () => { setQuickSave({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints } as any,
+        puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title }); cleanup(); back(); }],
       [t('restart'), () => { cleanup(); setQuickSave(null); play(pack, lv, index, back); }],
       [t('quit'), () => { cleanup(); setQuickSave(null); back(); }],
     ]);
