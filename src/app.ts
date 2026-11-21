@@ -189,6 +189,15 @@ function logo(): HTMLElement {
 }
 
 /** points for puzzles solved before points existed (from their medal and times); a little at a time */
+/** the profile button: the name, and below it the PixElo of the mode being played (provisional: fewer than 15 rated solves) */
+function profileChip(): HTMLElement {
+  const st = localStats(curMode());
+  const prov = st.rated < 15;
+  return h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') + (st.rated ? ' · ' + `${st.points} ${t('pointsShort')}` : '') },
+    h('span', {}, '👤 ' + activeProfile().name),
+    h('small', { class: 'elo-line' + (prov ? ' prov' : ''), title: prov ? t('provisional') : '' }, 'PixElo ' + (st.rated ? st.elo + (prov ? '?' : '') : '–')));
+}
+
 async function backfillPoints() {
   const todo = unpointed();
   if (!todo.length) return;
@@ -245,7 +254,7 @@ export function home() {
     h('div', { class: 'chips' },
       megaSwitch(),
       h('span', { class: 'gap' }),
-      h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
+      profileChip(),
       syncChip()),
     logo(),
     h('div', { class: 'home-progress' },

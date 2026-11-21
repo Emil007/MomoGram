@@ -42,9 +42,7 @@ Nonograms do that too.
 
 - **All your nonogram games in one library.** Each game you add becomes a card with its own modes and levels, puzzle names (shown once a puzzle is solved), solved pictures, music and colours. Games of a series form a folder (all Picross e games, Picross NP, Illust Logic, …); sort them by series or system, rearrange and hide them.
 - **Mega mode:** one switch on the home screen turns the whole game into *Mega MomoGram*. Mega numbers span two rows or columns and count a connected group of cells that reaches into both. PICROSS e6–e9 and the Switch games bring their own Mega puzzles (PICROSS S+ adds them for every e game, and the Mega-only puzzles come along); for every other game MomoGram chooses the pairs itself, checks that each puzzle still has exactly one solution, and makes the same choice on every device, so times and medals stay comparable. Mega puzzles keep their own progress and scores.
-- **Points and PixElo**, apart for normal and Mega puzzles (two games, each with its own progress, medals and high scores):
-  - *Points* only go up: every puzzle is worth its best result once, by size and difficulty (measured by the solver), times the medal (platinum 4×, gold 3×, silver 2×, bronze 1×), plus up to 50 % for speed against the puzzle's par time. A better result later pays the difference. Puzzles solved before points existed are counted from their medals and times.
-  - *PixElo* is a chess-style rating with each puzzle as the opponent: the puzzle's rating and par time come from the solver and its size. The first solve of a puzzle under each rule set is rated; Easy counts your time ×1.5, logic hints ×1.2, each roulette spin +30 s. Replays are unrated, and leaving a puzzle costs nothing. Everyone starts at 1000; ratings are provisional until 15 rated solves. The formulas and constants are in `src/game/rating.ts`.
+- **Points and PixElo**, apart for normal and Mega puzzles: points count everything you have solved, PixElo is a chess-style rating of how good you are. Your PixElo is shown under your name on the home screen, both are in the high scores. How they work: [Points and PixElo](#points-and-pixelo).
 - **A daily nonogram:** 15 puzzles a day, five per difficulty, drawn from all your games. Solving one counts in its own game too. And a **Random** button for one puzzle from anywhere.
 - **Every puzzle on every difficulty**, with medals:
 
@@ -61,7 +59,7 @@ Nonograms do that too.
 - **Your progress is never lost:** every puzzle you start is kept and continues where you left it, best times per difficulty, medals, profiles with their own saves.
 - **The games' own music:** every song of each game, a sound test to retag or switch songs off, a music bar at the bottom of the home screen shows what plays and skips to the next song; the same song from several games counts once.
 - **An editor** for your own puzzles and packs.
-- **Your own server (optional):** sync progress, settings and paused puzzles between your devices, share packs within your family or friends, and see each other's high scores (puzzles solved, medals, fastest times).
+- **Your own server (optional):** sync progress, settings and paused puzzles between your devices, share packs within your family or friends, and see each other's high scores (points, PixElo, puzzles solved, medals, fastest times).
 - Offline after the first start; English and German, with the games' puzzle names in every language they have.
 
 ## Supported games
@@ -152,6 +150,44 @@ puzzles (one solution, a recognisable picture), but even that part is far too la
 pattern by chance. The same pattern in two games is the same puzzle, which happens when a game reuses puzzles of
 an earlier one (Picross S+ and the 3DS Picross e games, for example).
 
+## Points and PixElo
+
+MomoGram keeps two numbers for every player, and keeps them **twice**: once for normal puzzles and once for Mega puzzles (Mega is a game of its own, with its own progress, medals and high scores). The home screen shows the PixElo of the mode you're in under your name; the high scores have a tab for each. Everything below is computed from your saved progress, so all your devices (and the server) arrive at the same numbers.
+
+Both start from what the solver knows about a puzzle (`src/game/difficulty.ts`): its **work**, the number of cells times the square root of the passes the line-by-line solver needs (at least 25), and whether it can be solved line by line at all. From the work come the puzzle's **rating** and its **par time**, the same on every device:
+
+| | Rating | Par time |
+|---|---|---|
+| Formula | 500 + 220 · ln(work / 25), +250 if not solvable line by line, +120 for Mega | 10 s + 0.35 s · work, ×1.25 for Mega |
+| typical 5×5 | about 650 | about 30 s |
+| typical 10×10 | about 950 | about 1:20 |
+| typical 15×15 | about 1200 | about 3:40 |
+| typical 25×20 | about 1340 | about 6:40 |
+
+### Points: everything you've solved
+
+Points only go up. Every puzzle is worth **its best result, once**:
+
+- **Base:** 5 · (1 + ln(work / 25)), +5 if it can't be solved line by line. A 5×5 gives about 8, a 15×15 about 21.
+- **× medal**, only the best one counts: 🥉 bronze ×1 (Easy), 🥈 silver ×2 (Normal), 🥇 gold ×3 (Hard), 💠 platinum ×4 (Hard without logic hints). Platinum is worth more than gold because it's harder.
+- **+ speed bonus:** up to +50 % for a time under par (none at par or slower).
+- **× 1.25** for Mega puzzles.
+
+When you do better later (a better medal, a faster time), you get only the difference, so replaying a puzzle on every difficulty doesn't add up: a 15×15 gold at par gives about 63, a platinum in half the par time about 104, and the platinum replaces the gold instead of adding to it. Puzzles solved before points existed are counted from their stored medals and times.
+
+### PixElo: how good you are
+
+PixElo is a rating like in chess, where every puzzle is an opponent with its own rating. Everyone starts at **1000**; a 1000 player is about even with a typical 10×10.
+
+1. **Which solves count:** the **first solve of a puzzle under each rule set** (Easy, Normal, Hard), so one puzzle can be rated up to three times. Replays are unrated (the solved screen says so), and leaving a puzzle costs nothing, since puzzles are always kept and can be continued.
+2. **Your score for a solve,** between 0 and 1, from your time against the par time: score = 1 / (1 + (time / par)^1.5). At par you score 0.5, in half the time about 0.74, in double the time about 0.26. Help makes the time count longer: Easy (mistakes are caught for you) ×1.5, logic hints ×1.2, each spin of the hint roulette +30 s.
+3. **What was expected** of you against that puzzle: expected = 1 / (1 + 10^((puzzle − you) / 400)). Against a puzzle rated 200 above you, you're expected to score 0.24; 200 below you, 0.76.
+4. **The change:** K · (score − expected), rounded. K is 40 for your first 15 rated solves (so you find your level fast) and 20 after that. Until then your PixElo is *provisional* (shown with a "?"). It never drops below 100.
+
+Examples for a player at 1000: a 15×15 (rating ~1200) solved at par: +10; in half the par time: +20; in double the par time: +1. A 5×5 (rating ~650) at double par: −25, because a 1000 player should be much faster there.
+
+The highest PixElo you've reached is kept as your peak. Your PixElo isn't stored but recalculated from your rated solves in the order you made them, so a device that syncs later gets the same value. All constants are in `src/game/rating.ts` (`RATING`).
+
 ## Platforms
 
 Every push that changes the version builds a release on GitHub, for all of these:
@@ -176,7 +212,7 @@ A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a
 
 ## Your own server
 
-If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there and shows high scores (puzzles solved, medals, fastest times). Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
+If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there (each file stored once, music optional when downloading; a download that's interrupted, for example when the phone goes to sleep, continues where it stopped) and shows high scores (points, PixElo, puzzles solved, medals, fastest times). Up to 10 accounts. Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
 
 ## Controls
 
