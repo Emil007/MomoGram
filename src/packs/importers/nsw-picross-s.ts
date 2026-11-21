@@ -24,7 +24,7 @@
 //            TextAssets (S2), one per puzzle; PICROSS S: resources.assets (TextAssets). A puzzle is ".PRS"
 //            (normal) or ".DPC" (Mega Picross, the same pictures; not imported): utf16 magic, u16 version,
 //            u16 title length, title (utf16, Japanese), a few bytes, width, height, one byte per cell.
-//            Clip (.CLP) and colour (.IPC) puzzles are not imported yet.
+//            Colour puzzles (.IPC, Color Picross) are read for Colour mode (parseIpc); clip puzzles (.CLP) not yet.
 //   tables   StreamingAssets/AssetBundles/idxresdata/* (PICROSS S: resources.assets), "IdxRes2" tables:
 //            IdxRes_PuzzleList_Picross (play order), IdxRes_Text_PuzzleTitle / IdxRes_PuzzleList_Title (names in
 //            up to ten languages), IdxRes_SoundDef (which song plays where).
@@ -141,7 +141,7 @@ function switchPalette(t: Map<string, number[][]> | null, g: string): NonNullabl
 }
 
 // ---- puzzles ----
-interface Raw { key: string; w: number; h: number; cells: Uint8Array; title: string; mega?: { rows: number[]; cols: number[] } }
+interface Raw { key: string; w: number; h: number; cells: Uint8Array; title: string; mega?: { rows: number[]; cols: number[] }; colors?: string[]; colorCells?: Uint8Array }
 const td16 = new TextDecoder('utf-16le');
 function parsePuzzle(key: string, d: Uint8Array): Raw | null {
   if (td16.decode(d.subarray(0, 8)) !== '.PRS') return null;
@@ -156,6 +156,29 @@ function parsePuzzle(key: string, d: Uint8Array): Raw | null {
   }
   return null;
 }
+/**
+ * A colour puzzle (".IPC", Color Picross, S3 and later): utf16 magic, u16 version, u16 title length, title (utf16),
+ * u16, u8 0, u8 colour count n, 12 bytes (a hash), the n colours (RGB), a few colours of the board (cursor, grid;
+ * 9 bytes in S3, more in later games), width, height, one byte per cell (0xff = empty, else the colour), the clues.
+ */
+function parseIpc(key: string, d: Uint8Array): Raw | null {
+  if (td16.decode(d.subarray(0, 8)) !== '.IPC') return null;
+  const n = d[10] | (d[11] << 8), p = 12 + n * 2, k = d[p + 3];
+  if (!k || k > 16) return null;
+  const c0 = p + 16;
+  const m = key.match(/(\d+)x(\d+)/);
+  // width and height follow the board's colours, whose length differs between the games
+  for (let at = c0 + 3 * k; at < c0 + 3 * k + 48 && at + 2 < d.length; at++) {
+    const w = d[at], h = d[at + 1];
+    if (!w || !h || (m ? w !== +m[1] || h !== +m[2] : w < 5 || h < 5 || w > 50 || h > 50) || at + 2 + w * h > d.length) continue;
+    const raw = d.subarray(at + 2, at + 2 + w * h);
+    if (!raw.every(v => v === 0xff || v < k) || raw.every(v => v === 0xff)) continue;
+    const colors = [...Array(k)].map((_, i) => '#' + [0, 1, 2].map(j => d[c0 + i * 3 + j].toString(16).padStart(2, '0')).join(''));
+    return { key, w, h, cells: raw.map(v => (v === 0xff ? 0 : 1)), colorCells: raw.map(v => (v === 0xff ? 0 : v + 1)), colors, title: td16.decode(d.subarray(12, p)).replace(/\0.*$/, '').trim() };
+  }
+  return null;
+}
+
 /** the product name Unity keeps in globalgamemanagers (aligned string after the company name) */
 function productName(d: Uint8Array): string | null {
   const company = new TextEncoder().encode('Jupiter Corporation');
@@ -176,7 +199,8 @@ function gameOf(key: string, hasTutorialKeys: boolean, product: string | null): 
   const prefix = key.match(/^([A-Z]+\d?)_/i)?.[1].toUpperCase();
   if (fromProduct && (/^prs_/i.test(key) || (prefix && !GAMES[prefix]))) return fromProduct;
   if (/^prs_\d+x\d+_\d+$/i.test(key)) return hasTutorialKeys ? 'S2' : 'S1';
-  const m = key.match(/^([A-Z]+\d?)_\d+x\d+_\d+$/i);
+  // normal puzzles S3_15x15_001, colour puzzles S3_Ipc_15x15_002
+  const m = key.match(/^([A-Z]+\d?)_(?:Ipc_)?\d+x\d+_\d+$/i);
   return m && GAMES[m[1].toUpperCase()] ? m[1].toUpperCase() : null;
 }
 
@@ -185,7 +209,7 @@ const AB = 'StreamingAssets/AssetBundles/';
 
 registerSetImporter({
   name: 'Picross S (Switch)',
-  version: 4, // raise when the importer reads more or reads differently
+  version: 6, // raise when the importer reads more or reads differently
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {
@@ -261,6 +285,9 @@ registerSetImporter({
       if (r && r.w === dpc.w && r.h === dpc.h && r.cells.every((c, i) => c === dpc.cells[i])) r.mega = { rows: dpc.rows, cols: dpc.cols };
       else if (!r) raws.set(key, { key, w: dpc.w, h: dpc.h, cells: dpc.cells, title: dpc.title.replace(/\0.*$/, '').trim(), mega: { rows: dpc.rows, cols: dpc.cols }, megaOnly: true } as Raw);
     }
+    // Color Picross (S3 and later): puzzles of their own, shown in Colour mode
+    const ipcs: Raw[] = [];
+    for (const b of blobs) { const r = parseIpc(b.name, b.bytes); if (r && !ipcs.some(x => x.key === r.key)) ipcs.push(r); }
     const tutorials = [...raws.keys()].some(k => /_T\d+_/i.test(k)) || blobs.some(b => /^prs_T\d/i.test(b.name));
     // names: Text_PuzzleTitle (S2 and later) or PuzzleList_Title (PICROSS S), by puzzle key
     const names = new Map<string, Text>();
@@ -288,7 +315,7 @@ registerSetImporter({
 
     // per game (PICROSS S+ holds several)
     const byGame = new Map<string, Raw[]>();
-    for (const r of raws.values()) {
+    for (const r of [...raws.values(), ...ipcs]) {
       if (/_T\d+_/i.test(r.key)) continue; // tutorials
       const g = gameOf(r.key, tutorials, product);
       if (g) (byGame.get(g) ?? byGame.set(g, []).get(g)!).push(r);
@@ -303,7 +330,8 @@ registerSetImporter({
         if (!seen.has(k)) seen.set(k, r);
       }
       const list = [...seen.values()];
-      const levels = sizeLevels(list, order, names, game.id.startsWith('ctr-') ? 'free' : 'normal');
+      const rules = game.id.startsWith('ctr-') ? 'free' : 'normal';
+      const levels = [...sizeLevels(list.filter(r => !r.colors), order, names, rules), ...sizeLevels(list.filter(r => r.colors), order, names, rules, true)];
       const music = await gameMusic(g, sound, audio, files, clipFiles);
       const colors = blobs.find(x => x.name.toLowerCase() === 'idxres_puzzlecolordef');
       const palette = switchPalette(colors ? colorTable(colors.bytes) : null, g);
@@ -318,7 +346,7 @@ registerSetImporter({
 });
 
 /** levels by size like the 3DS games (15 puzzles each), in the game's order; ids from the puzzle keys */
-function sizeLevels(list: Raw[], order: Map<string, number>, names: Map<string, Text>, rules: 'free' | 'normal'): PackLevel[] {
+function sizeLevels(list: Raw[], order: Map<string, number>, names: Map<string, Text>, rules: 'free' | 'normal', color = false): PackLevel[] {
   const bySize = new Map<string, Raw[]>();
   for (const r of list) { const k = `${r.w}x${r.h}`; (bySize.get(k) ?? bySize.set(k, []).get(k)!).push(r); }
   const sizes = [...bySize.keys()].sort((a, b) => { const [aw, ah] = a.split('x').map(Number), [bw, bh] = b.split('x').map(Number); return aw * ah - bw * bh; });
@@ -330,13 +358,17 @@ function sizeLevels(list: Raw[], order: Map<string, number>, names: Map<string, 
       const own = r.title && !/^[\x00-\x7f]*$/.test(r.title) ? { ja: r.title } : undefined;
       const name = { ...own, ...names.get(r.key.toLowerCase()) };
       const rest = r.key.replace(/^.*?\d+x\d+_/i, '').replace(/^0(?=\d\d(\D|$))/, '').toLowerCase().replace(/_/g, '-');
-      return { id: `${s}-${rest}`, width: r.w, height: r.h, rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1), name: Object.keys(name).length ? name : undefined,
-        ...(r.mega ? { mega: r.mega } : {}), ...((r as any).megaOnly ? { megaOnly: true } : {}) };
+      const cc = r.colorCells;
+      return { id: `${color ? 'c' : ''}${s}-${rest}`, width: r.w, height: r.h, rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1), name: Object.keys(name).length ? name : undefined,
+        ...(r.mega ? { mega: r.mega } : {}), ...((r as any).megaOnly ? { megaOnly: true } : {}),
+        ...(cc && r.colors ? { colorGame: true, colorOnly: true, color: { palette: r.colors, rows: [...Array(r.h)].map((_, y) => [...cc.subarray(y * r.w, y * r.w + r.w)].map(v => (v ? (v - 1).toString(36) : '.')).join('')) } } : {}) };
     });
     const label = s.replace('x', '×');
     for (let i = 0; i < puzzles.length; i += 15) {
       const k = i / 15 + 1, many = puzzles.length > 15;
-      levels.push({ id: `s${s}-${k}`, title: { en: many ? `${label} ${k}` : label }, rules, group: s, groupTitle: { en: label }, puzzles: puzzles.slice(i, i + 15) });
+      levels.push(color
+        ? { id: `c${s}-${k}`, title: { en: many ? `Color ${label} ${k}` : `Color ${label}`, ja: `カラー ${label}` }, rules, group: 'color', groupTitle: { en: 'Color Picross', ja: 'カラーピクロス' }, puzzles: puzzles.slice(i, i + 15) }
+        : { id: `s${s}-${k}`, title: { en: many ? `${label} ${k}` : label }, rules, group: s, groupTitle: { en: label }, puzzles: puzzles.slice(i, i + 15) });
     }
   }
   return levels;

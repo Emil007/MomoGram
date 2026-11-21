@@ -1,5 +1,6 @@
 {
  "_name": "Deutsch",
+ "_textOrder": "de,en,ja",
  "tutorialColor": "Farb-Tutorial",
  "tutAskMega": "Das ist der Mega-Modus: manche Zahlen gehören zu zwei Linien. Willst du sehen, wie er geht?",
  "tutAskColor": "Das ist der Farbmodus: jeder Block hat eine Farbe. Willst du sehen, wie er geht?",

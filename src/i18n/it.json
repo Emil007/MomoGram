@@ -1,5 +1,6 @@
 {
  "_name": "Italiano",
+ "_textOrder": "it,en,ja",
  "tutorialColor": "Tutorial colore",
  "tutAskMega": "Questa è la modalità Mega: alcuni numeri coprono due linee. Vuoi vedere come si gioca?",
  "tutAskColor": "Questa è la modalità Colore: ogni blocco ha un colore. Vuoi vedere come si gioca?",

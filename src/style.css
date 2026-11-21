@@ -654,3 +654,15 @@ body.dark .player-card { border-color: #4a5563; }
 .swatch.on { transform: translateY(-3px) scale(1.08); outline: 3px solid var(--accent2); outline-offset: 2px; }
 .swatch.done { opacity: .55; }
 .swatch span { pointer-events: none; text-shadow: none; }
+
+/* the mode switch: one button, each tap the next mode; three dots show where you are */
+.mode-switch { font: inherit; font-weight: 900; font-size: .8rem; display: inline-flex; align-items: center; gap: .45rem; padding: .28em .7em .28em .85em;
+  border: 2px solid var(--line); border-radius: 999px; cursor: pointer; color: #fff; background: var(--ink); box-shadow: 0 2px 0 var(--line);
+  transition: background .2s, transform .08s; min-width: 6.4rem; justify-content: space-between; }
+.mode-switch:active { transform: translateY(2px); box-shadow: none; }
+.mode-switch.ms-normal { background: linear-gradient(#3a4552, #1d242c); }
+.mode-switch.ms-mega { background: linear-gradient(#ffa53a, #ff7a00); letter-spacing: .05em; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+.mode-switch.ms-color { background: linear-gradient(90deg, #e8433a, #f39a2c, #e8c21a, #3cb557, #1f9be0, #8a52c8); text-shadow: 0 1px 0 rgba(0,0,0,.45); }
+.ms-dots { display: inline-flex; gap: 3px; }
+.ms-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); }
+.ms-dots i.on { background: #fff; }

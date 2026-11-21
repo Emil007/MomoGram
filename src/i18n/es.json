@@ -1,5 +1,6 @@
 {
  "_name": "Español",
+ "_textOrder": "es,en,ja",
  "tutorialColor": "Tutorial de color",
  "tutAskMega": "Este es el modo Mega: algunos números abarcan dos líneas. ¿Quieres ver cómo se juega?",
  "tutAskColor": "Este es el modo Color: cada bloque tiene un color. ¿Quieres ver cómo se juega?",

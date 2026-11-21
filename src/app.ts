@@ -273,13 +273,15 @@ async function backfillPoints() {
   setPoints(out);
 }
 
-/** the switch between plain, Mega and Colour puzzles for the whole game */
+/** one switch for the whole game: each tap goes on to the next mode (normal → Mega → Colour → normal) */
+const MODES: Mode[] = ['normal', 'mega', 'color'];
 function megaSwitch(): HTMLElement {
-  const m = curMode();
-  const opt = (v: Mode, label: string) => h('button', { class: 'ms-opt ms-' + v + (m === v ? ' cur' : ''), role: 'radio', 'aria-checked': String(m === v),
-    onClick: () => { if (m !== v) { setMode(v); home(); if (v !== 'normal') offerTutorial(v); } } }, label);
-  return h('div', { class: 'mega-switch three', role: 'radiogroup', title: t('megaHelp') },
-    opt('normal', t('megaOff')), opt('mega', t('megaOn')), opt('color', t('colorOn')));
+  const m = curMode(), next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
+  const label = (v: Mode) => (v === 'mega' ? t('megaOn') : v === 'color' ? t('colorOn') : t('megaOff'));
+  return h('button', { class: 'mode-switch ms-' + m, title: t('megaHelp') + ' → ' + label(next), 'aria-label': label(m) + ' → ' + label(next),
+    onClick: () => { setMode(next); home(); if (next !== 'normal') offerTutorial(next); } },
+    h('span', { class: 'ms-label' }, label(m)),
+    h('span', { class: 'ms-dots', 'aria-hidden': 'true' }, ...MODES.map(v => h('i', { class: v === m ? 'on' : '' }))));
 }
 
 // ---------------------------------------------------------------- home: the game library
@@ -792,9 +794,11 @@ function tutorialScreen(back: () => void, lesson: Lesson = 'basic') {
 
 /** the first visit (and the first switch to Mega or Colour): offer that tutorial once; afterwards it's in the options */
 async function offerTutorial(lesson: Lesson = 'basic') {
+  // asked once per profile (synced with the account, so other devices don't ask again)
   const key = 'momogram.tutorialAsked' + (lesson === 'basic' ? '' : '.' + lesson);
-  if (localStorage.getItem(key)) return;
-  localStorage.setItem(key, '1');
+  const asked = settings.tutAsked ?? [];
+  if (asked.includes(lesson) || localStorage.getItem(key)) return;
+  settings.tutAsked = [...asked, lesson]; saveSettings();
   let yes = false;
   await choose(t(lesson === 'mega' ? 'tutAskMega' : lesson === 'color' ? 'tutAskColor' : 'tutAsk'), [[t('tutYes'), () => { yes = true; }], [t('tutNo'), () => {}]]);
   if (yes) tutorialScreen(home, lesson);
@@ -986,7 +990,7 @@ function allPacks(): Pack[] {
 // own (PICROSS e6–e9, the Switch games, S+ for every e game) or chosen by MomoGram (game/mega.ts: the same on
 // every device). Mega puzzles are puzzles of their own for progress and scores: their ids end in "@mega".
 const MEGA = '@mega';
-const curMode = (): Mode => settings.mode ?? (settings.mega ? 'mega' : 'normal');
+const curMode = (): Mode => (settings.mode && settings.mode !== 'normal' ? settings.mode : settings.mega ? 'mega' : 'normal');
 function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); }
 const COLOR = '@color';
 /** which rules a medal is earned with (its time is what points look at) */

@@ -169,11 +169,13 @@ export interface Settings {
   showTimer: boolean;
   packMusic: boolean; // play the games' own music
   packColors: boolean; // colour the screens like the pack's original game
-  look?: 'auto' | 'light' | 'dark';
+  look?: 'auto' | 'light' | 'dark'; // dark mode for the menus (the boards keep their look); per device
   /** Mega mode: the games' own Mega puzzles get a glowing dot (mark), aren't marked (none), or are the only ones shown */
   megaMark?: 'none' | 'mark' | 'only';
   /** the whole game's mode: plain, Mega or Colour nonograms */
-  mode?: Mode; // dark mode for the menus (the boards keep their look)
+  mode?: Mode;
+  /** the tutorials already offered (basic, mega, color): never asked again, on any device */
+  tutAsked?: string[];
   difficulty: 'auto' | 'easy' | 'normal' | 'hard'; // auto = the level's own rules
   logicHints: boolean;
   toolsRight: boolean;
@@ -184,7 +186,7 @@ export interface Settings {
 const DEFAULTS: Settings = {
   lang: '', music: true, musicVolume: 0.7, sfx: true, hints: 'ask', unlockAll: false,
   normalStyle: 'stage_jazz_SEQ', freeStyle: 'stage_musicbox_SEQ', lefty: false, showTimer: true,
-  packMusic: true, packColors: true, megaMark: 'mark', difficulty: 'auto', logicHints: false, toolsRight: false, musicMode: 'random-pack', mega: false,
+  packMusic: true, packColors: true, megaMark: 'mark', look: 'auto', mode: 'normal', tutAsked: [], difficulty: 'auto', logicHints: false, toolsRight: false, musicMode: 'random-pack', mega: false,
 };
 
 function readJson<T>(k: string, def: T): T {
@@ -193,7 +195,7 @@ function readJson<T>(k: string, def: T): T {
 
 export const settings: Settings = readJson('momogram.settings', DEFAULTS);
 /** settings that belong to this device and aren't synced with an account */
-const DEVICE_SETTINGS: Array<keyof Settings> = ['music', 'musicVolume', 'sfx', 'lefty', 'toolsRight', 'normalStyle', 'freeStyle'];
+const DEVICE_SETTINGS: Array<keyof Settings> = ['music', 'musicVolume', 'sfx', 'lefty', 'toolsRight', 'normalStyle', 'freeStyle', 'look'];
 export function saveSettings() {
   const old = localStorage.getItem('momogram.settings');
   localStorage.setItem('momogram.settings', JSON.stringify(settings));

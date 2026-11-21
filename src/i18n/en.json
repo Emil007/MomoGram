@@ -1,5 +1,6 @@
 {
  "_name": "English",
+ "_textOrder": "en,ja",
  "tutorialColor": "Colour tutorial",
  "tutAskMega": "This is Mega mode: some numbers span two lines. Want to see how it’s played?",
  "tutAskColor": "This is Colour mode: every block has a colour. Want to see how it’s played?",

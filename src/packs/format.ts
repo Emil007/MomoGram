@@ -131,15 +131,14 @@ export function validatePack(p: any): p is Pack {
   return true;
 }
 
+/** the order in which languages are tried for a puzzle's or game's own texts (set by the interface language) */
+let textOrder: string[] = ['en', 'ja'];
+export function setTextOrder(order: string[]) { textOrder = order; }
 export function pickText(t: Text | undefined, lang: Lang, fallback = ''): string {
   if (!t) return fallback;
-  // Japanese names are often development names in Western releases: only show them to Japanese players
-  // or when nothing else exists in a pack that is Japanese-only
-  if (t[lang]) return t[lang]!;
-  if (t.en) return t.en;
-  const other = Object.entries(t).find(([k, v]) => k !== 'ja' && v);
-  if (other) return other[1]!;
-  return lang === 'ja' ? t.ja ?? fallback : fallback;
+  // the interface language first, then the language file's order (e.g. English, then Japanese), then anything
+  for (const l of [lang, ...textOrder]) if ((t as any)[l]) return (t as any)[l];
+  return Object.values(t).find(Boolean) ?? fallback;
 }
 
 /** Combine regional versions of the same game: same pack id → one pack with every language's names. */
@@ -191,14 +190,14 @@ export function mergePacks(a: Pack, b: Pack): Pack {
     const x: PackPuzzle = JSON.parse(JSON.stringify(p));
     delete (x as any).anim; // animation data belongs to the other version's files
     // Mega-only puzzles stored before Mega was read are new, not exclusive to a region
-    if (!x.megaOnly) x.exclusive = x.exclusive ?? region;
+    if (!x.megaOnly && !x.colorOnly) x.exclusive = x.exclusive ?? region;
     let id = x.id;
     for (let n = 2; ids.has(id); n++) id = `${x.id}~${region.toLowerCase()}${n > 2 ? n : ''}`;
     x.id = id; ids.add(id);
     const mine = out.levels.find(v => v.id === l.id);
     if (mine) mine.puzzles.push(x);
     else {
-      const lid = x.megaOnly ? l.id : l.id + '~' + region.toLowerCase();
+      const lid = x.megaOnly || x.colorOnly ? l.id : l.id + "~" + region.toLowerCase();
       let lv = out.levels.find(v => v.id === lid);
       if (!lv) { lv = JSON.parse(JSON.stringify({ ...l, id: lid, puzzles: [] })) as PackLevel; out.levels.push(lv); }
       lv.puzzles.push(x);
