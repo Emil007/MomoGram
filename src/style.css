@@ -502,3 +502,19 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .score-table th { max-width: 6.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .score-table tbody th { position: sticky; left: 0; background: var(--panel, #fff); z-index: 1; max-width: 9em; }
 .ranking li .who small.extra { white-space: normal; }
+
+/* zoom button held: steering the view */
+.rbtn.steering { transform: scale(1.12); box-shadow: 0 0 0 4px rgba(31, 155, 224, .35); touch-action: none; }
+.tools .rbtn { touch-action: none; }
+
+/* check all games (debug) */
+.gallery { display: flex; flex-direction: column; gap: .8rem; padding: 0 .8rem 1rem; }
+.gal-card { min-height: 120px; }
+.gal-row { display: flex; gap: .6rem; overflow-x: auto; }
+.gal-item { display: flex; flex-direction: column; align-items: center; gap: .3rem; flex: 0 0 auto; }
+.gal-item img, .gal-item canvas { width: 160px; height: 160px; object-fit: contain; border: 2px solid var(--line); border-radius: 8px; background: #fff; image-rendering: pixelated; cursor: zoom-in; }
+.gal-item small { font-weight: 700; color: var(--muted); max-width: 160px; text-align: center; }
+.zoom-modal { display: flex; flex-direction: column; background: rgba(10, 15, 25, .9); }
+.zoom-stage { flex: 1; width: 100%; overflow: hidden; display: grid; place-items: center; touch-action: none; }
+.zoom-img { image-rendering: pixelated; transform-origin: center; user-select: none; -webkit-user-drag: none; max-width: none; }
+.zoom-bar { display: flex; gap: .5rem; padding: .7rem; justify-content: center; }

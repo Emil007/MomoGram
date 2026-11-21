@@ -235,6 +235,13 @@ export class BoardView {
     this.dirty = true;
   }
 
+  /** move the zoomed view (zoom button held and moved like a joystick) */
+  panBy(dx: number, dy: number) {
+    this.scrollX += dx; this.scrollY += dy;
+    this.clampScroll();
+    this.dirty = true;
+  }
+
   toggleZoom() {
     if (this.zoomed) this.setZoom(this.fitCell);
     else {

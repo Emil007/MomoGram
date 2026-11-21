@@ -1056,7 +1056,43 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // bottom bar: one tool button that switches between filling and crossing out, zoom, then hints / undo / try it
   const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'mark' ? lastTool : view.tool === 'fill' ? 'cross' : 'fill') },
     toolSwitchArt());
-  const lensBtn = h('button', { class: 'rbtn', title: t('zoom'), 'aria-label': t('zoom'), onClick: () => { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } }, icon('zoom'));
+  // zoom: a tap zooms in or out; held and moved, the button steers the zoomed view like a joystick (the further
+  // from where it was pressed, the faster)
+  const lensBtn = h('button', { class: 'rbtn', title: t('zoomHold'), 'aria-label': t('zoom') }, icon('zoom'));
+  {
+    let start: { x: number; y: number; id: number } | null = null, stick = { x: 0, y: 0 }, steering = false, raf = 0;
+    const tick = () => {
+      const d = Math.hypot(stick.x, stick.y), dead = 10;
+      if (d > dead) { const sp = Math.min(1, (d - dead) / 70) * 18; view.panBy(stick.x / d * sp, stick.y / d * sp); }
+      raf = requestAnimationFrame(tick);
+    };
+    lensBtn.addEventListener('pointerdown', e => {
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId }; stick = { x: 0, y: 0 }; steering = false;
+      lensBtn.setPointerCapture(e.pointerId);
+    });
+    lensBtn.addEventListener('pointermove', e => {
+      if (!start || e.pointerId !== start.id) return;
+      stick = { x: e.clientX - start.x, y: e.clientY - start.y };
+      if (!steering && Math.hypot(stick.x, stick.y) > 12) {
+        steering = true;
+        if (!view.zoomed) view.toggleZoom();
+        lensBtn.classList.add('on', 'steering');
+        raf = requestAnimationFrame(tick);
+      }
+    });
+    const end = (e: PointerEvent) => {
+      if (!start || e.pointerId !== start.id) return;
+      cancelAnimationFrame(raf);
+      if (!steering && e.type === 'pointerup') view.toggleZoom();
+      start = null; steering = false;
+      lensBtn.classList.remove('steering');
+      lensBtn.classList.toggle('on', view.zoomed);
+    };
+    lensBtn.addEventListener('pointerup', end);
+    lensBtn.addEventListener('pointercancel', end);
+    // keyboard, gamepad (clicks without a pointer: detail 0)
+    lensBtn.addEventListener('click', e => { if (e.detail === 0) { view.toggleZoom(); lensBtn.classList.toggle('on', view.zoomed); } });
+  }
   const boardWrap = h('section', { class: 'boardwrap' }, canvas);
   const tbtn = (ico: string, label: string, fn: () => void) => h('button', { class: 'rbtn small', title: label, 'aria-label': label, onClick: fn }, icon(ico), h('small', {}, label));
   const undoBtn = tbtn('undo', t('undo'), () => { if (board.undo()) { view.invalidate(); updateInfo(); } });
@@ -1678,8 +1714,90 @@ function optionsScreen() {
       row(t('version'), h('b', { class: 'version' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION)),
       h('p', { class: 'fine left' }, t('controls')),
       h('p', { class: 'fine left' }, t('musicNote')),
+      h('button', { class: 'btn', onClick: () => galleryScreen() }, '🔍 ' + t('gallery')),
       /[?&]debug/.test(location.search) ? h('button', { class: 'btn', onClick: () => textureInspector(screen, header('3DS textures', optionsScreen)) }, '3DS textures (debug)') : null,
       h('p', { class: 'fine left' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · ' + t('noGameData')))));
+}
+
+/**
+ * Check every game at a glance (debug): per game a few puzzles, each as a half-solved board in the game's look and
+ * as its solved picture. Tap a picture to look at it big (pinch, wheel or the buttons zoom; drag moves).
+ */
+function galleryScreen() {
+  const body = h('div', { class: 'gallery' });
+  screen(header(t('gallery'), optionsScreen), body);
+  body.append(h('p', { class: 'fine' }, t('galleryHelp')));
+  const io = new IntersectionObserver(es => { for (const e of es) if (e.isIntersecting) { io.unobserve(e.target); (e.target as any).__load?.(); } }, { rootMargin: '400px' });
+  for (const pack of allPacks()) {
+    const puzzles = pack.levels.flatMap(l => l.puzzles.map((z, i) => ({ l, z, i })));
+    if (!puzzles.length) continue;
+    const pick = [...new Set([0, Math.floor(puzzles.length / 2), puzzles.length - 1])].map(i => puzzles[i]);
+    const row = h('div', { class: 'gal-row' });
+    const card = h('section', { class: 'opt-card gal-card' }, h('h2', {}, pickAny(pack.title, packLang()) + ` · ${pack.source.platform}`), row);
+    (card as any).__load = async () => {
+      await loadExtras(pack);
+      for (const { l, z } of pick) {
+        const cell = h('div', { class: 'gal-item' });
+        row.append(cell);
+        cell.append(await boardShot(pack, z), thumbnail(z, pckOf(pack), 160, pack.id), h('small', {}, `${pickAny(l.title, packLang())} · ${z.width}×${z.height}`));
+        for (const el of cell.querySelectorAll('img, canvas')) el.addEventListener('click', () => zoomView(el as HTMLElement));
+      }
+    };
+    io.observe(card);
+    body.append(card);
+  }
+}
+
+/** a picture of a puzzle's board, half solved (filled and crossed cells, greyed clues), in its game's look */
+async function boardShot(pack: Pack, pz: PackPuzzle): Promise<HTMLImageElement> {
+  const board = new Board(pz.rows, 'free', megaPairsOf(pz));
+  for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) {
+    if (y >= board.h / 2 && (x + y) % 3) continue;
+    board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS;
+  }
+  board.touch();
+  const cv = h('canvas') as HTMLCanvasElement;
+  const host = h('div', { style: 'position:fixed;left:-2000px;top:0;width:360px;height:360px' }, cv);
+  document.body.append(host);
+  const view = new BoardView(cv, board, { onChange: () => {} });
+  view.setTheme(packColors(pack)?.board ?? null);
+  view.resize(360, 360);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const img = h('img', { class: 'gal-board', alt: '' }) as HTMLImageElement;
+  img.src = cv.toDataURL();
+  view.destroy(); host.remove();
+  return img;
+}
+
+/** a picture big, with zoom (pinch, wheel, buttons) and moving by dragging */
+function zoomView(src: HTMLElement) {
+  const img = (src instanceof HTMLCanvasElement ? Object.assign(h('img') as HTMLImageElement, { src: src.toDataURL() }) : h('img', { src: (src as HTMLImageElement).src })) as HTMLImageElement;
+  img.className = 'zoom-img';
+  let k = 1, x = 0, y = 0;
+  const apply = () => { img.style.transform = `translate(${x}px, ${y}px) scale(${k})`; };
+  const by = (f: number) => { k = Math.max(0.5, Math.min(16, k * f)); apply(); };
+  const pts = new Map<number, { x: number; y: number }>();
+  let pinch = 0;
+  const stage = h('div', { class: 'zoom-stage' }, img);
+  stage.addEventListener('pointerdown', e => { stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); } });
+  stage.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) { x += e.clientX - p.x; y += e.clientY - p.y; apply(); }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) by(d / pinch); pinch = d; }
+  });
+  const up = (e: PointerEvent) => { pts.delete(e.pointerId); pinch = 0; };
+  stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+  stage.addEventListener('wheel', e => { e.preventDefault(); by(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+  const m = h('div', { class: 'modal zoom-modal' }, stage,
+    h('div', { class: 'zoom-bar' },
+      h('button', { class: 'btn', onClick: () => by(1 / 1.5) }, '−'),
+      h('button', { class: 'btn', onClick: () => { k = 1; x = 0; y = 0; apply(); } }, '1:1'),
+      h('button', { class: 'btn', onClick: () => by(1.5) }, '+'),
+      h('button', { class: 'btn primary', onClick: () => m.remove() }, '✕')));
+  document.body.append(m);
+  // start as big as fits
+  requestAnimationFrame(() => { const r = stage.getBoundingClientRect(), w = img.naturalWidth || 160, hh = img.naturalHeight || 160; k = Math.max(1, Math.min(r.width / w, r.height / hh) * 0.95); apply(); });
 }
 
 export { ctx, CROSS };
