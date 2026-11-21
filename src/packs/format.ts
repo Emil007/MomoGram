@@ -40,7 +40,13 @@ export interface PackLevel {
 /** Look & sound of the original game. Music lives in separate asset files next to the pack (never in the JSON). */
 export interface PackTheme {
   /** colours imitating the original: an accent colour (UI and grid tint), optional explicit fill / background */
-  palette?: { accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string; style?: 'dmg' | 'gbc' | 'default' };
+  palette?: {
+    accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string;
+    /** the board's design: dmg / gbc (Game Boy), switch (Jupiter's Switch games), default (MomoGram's look in the game's colours) */
+    style?: 'dmg' | 'gbc' | 'switch' | 'default';
+    /** more board colours (used by the switch style): guide lines every 5, the cursor's line in the clues and on the board, marks, solved clues */
+    grid5?: string; clueFocus?: string; hl?: string; mark?: string; done?: string; cursorBox?: string; mistake?: string;
+  };
   /** asset names per role; an SDAT asset also names the sequence ("sound.sdat#SEQ_NAME") */
   music?: Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', string>>;
   /** the pack has coloured solved pictures (asset pictures.bin) */

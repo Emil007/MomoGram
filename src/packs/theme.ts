@@ -43,11 +43,32 @@ export function accentFromColors(px: RGB[]): string | null {
 
 export interface ThemeColors {
   accent: string; accentDark: string; bg: string; panel: string; top: string; topLine: string;
-  board: { bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; cross: string; clueBg: string; clueBgAlt: string; clue: string; clueDone: string; outline: string; cursor?: string; hl?: string; hint?: string };
+  board: { bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; cross: string; clueBg: string; clueBgAlt: string; clue: string; clueDone: string; outline: string; cursor?: string; hl?: string; hint?: string } & Partial<BoardShape>;
+}
+
+/** the shape settings of a skin (see Theme in game/view.ts) */
+export interface BoardShape {
+  clueBands: 'fade' | 'flat'; clueArea: string; clueFocusBg: string; crossWidth: number; crossCap: CanvasLineCap;
+  grid5Width: number; cursorBox: string; clueFont: string; mark: string; mistake: string; trialFill: string;
 }
 
 /** full set of colours for the screens and the board, from a pack palette */
 export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
+  if (p.style === 'switch') {
+    // Jupiter's Switch games: white board, flat clue areas, solid dark cells, orange crosses, green guide lines
+    // every 5 cells; the colours come from the game's own colour table (IdxRes_PuzzleColorDef)
+    const cell = p.cell ?? '#ffffff', fill = p.fill ?? '#333333', grid5 = p.grid5 ?? '#00e626';
+    return {
+      accent: p.accent, accentDark: shade(p.accent, -0.12), bg: '#eef1f2', panel: '#fafbfb', top: '#ffffff', topLine: fill,
+      board: {
+        bg: '#ffffff', grid: p.grid ?? '#666666', grid5, cell, cellDither: cell, fill, fillDither: fill, cross: p.cross ?? '#ff7f00',
+        clueBg: cell, clueBgAlt: cell, clue: p.clue ?? fill, clueDone: p.done ?? 'rgba(51, 51, 51, 0.4)', outline: fill,
+        cursor: p.hint ?? '#ff092d', hint: '#0085eb', hl: p.hl ?? 'rgba(128, 230, 255, 0.35)',
+        clueBands: 'flat', clueArea: cell, clueFocusBg: p.clueFocus ?? '#cfffd1', crossWidth: 0.11, crossCap: 'butt',
+        grid5Width: 0.1, cursorBox: p.cursorBox ?? '#ff0000', clueFont: '700', mark: p.mark ?? '#808080', mistake: p.mistake ?? '#ff0000', trialFill: '#0085eb',
+      },
+    };
+  }
   if (p.style === 'dmg') {
     // the four shades of the original Game Boy screen
     const c0 = p.cell ?? '#c4cfa1', c1 = '#8b956d', c2 = p.grid ?? '#4d533c', c3 = p.fill ?? '#1f1f1f';

@@ -11,6 +11,21 @@ export interface ViewEvents {
 export interface Theme {
   bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; trialFill: string; cross: string; mistake: string; mark?: string;
   clueBg: string; clueBgAlt: string; clue: string; clueOutline: string; clueDone: string; hl: string; cursor: string; hint: string; roulette: string; outline: string;
+  // ---- shape of the board (a game's skin); left out: MomoGram's own look
+  /** clue areas: fading stripes on every other line (default), or flat with a line every 5 like the grid */
+  clueBands?: 'fade' | 'flat';
+  /** background of the clue areas when flat */
+  clueArea?: string;
+  /** the cursor line's clue background (flat clue areas) */
+  clueFocusBg?: string;
+  /** cross lines: width as a share of the cell, and their ends */
+  crossWidth?: number; crossCap?: CanvasLineCap;
+  /** guide line width every 5 cells, as a share of the cell */
+  grid5Width?: number;
+  /** cursor box: a single colour instead of black and white */
+  cursorBox?: string;
+  /** clue numbers: font weight and family */
+  clueFont?: string;
 }
 
 // MomoGram's own sky-blue look: striped clue bands, dithered cells, orange 5-cell guides
@@ -419,19 +434,37 @@ export class BoardView {
     const cueX = this.showCursor || this.spin ? (this.spin ? this.spin.col : this.cursorX) : -1;
     const cueY = this.showCursor || this.spin ? (this.spin ? this.spin.row : this.cursorY) : -1;
 
-    // ---- clue bands: alternating colour stripes that fade out towards the edge
+    // ---- clue areas: flat (with a line every 5, like the grid) or alternating stripes that fade out
+    if (T.clueBands === 'flat') {
+      ctx.fillStyle = T.clueArea ?? T.bg;
+      ctx.fillRect(0, this.clueH, this.clueW, gh); ctx.fillRect(this.clueW, 0, gw, this.clueH);
+      if (cueY >= 0 && T.clueFocusBg) { ctx.fillStyle = T.clueFocusBg; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
+      if (cueX >= 0 && T.clueFocusBg) { ctx.fillStyle = T.clueFocusBg; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.rect(this.clueW, 0, gw, this.clueH); ctx.clip();
+      ctx.fillStyle = T.grid;
+      for (let y = vy0; y <= vy1; y++) ctx.fillRect(0, Math.round(oy + y * cs) - 0.5, this.clueW, 1);
+      for (let x = vx0; x <= vx1; x++) ctx.fillRect(Math.round(ox + x * cs) - 0.5, 0, 1, this.clueH);
+      ctx.fillStyle = T.grid5;
+      const w5 = Math.max(1.5, cs * (T.grid5Width ?? 1 / 12));
+      for (let y = vy0; y <= vy1; y++) if (y % 5 === 0 && y > 0 && y < b.h) ctx.fillRect(0, oy + y * cs - w5 / 2, this.clueW, w5);
+      for (let x = vx0; x <= vx1; x++) if (x % 5 === 0 && x > 0 && x < b.w) ctx.fillRect(ox + x * cs - w5 / 2, 0, w5, this.clueH);
+      ctx.restore();
+    }
     const bandH = ctx.createLinearGradient(0, 0, this.clueW, 0);
     bandH.addColorStop(0, T.clueBg + '00'); bandH.addColorStop(0.45, T.clueBg); bandH.addColorStop(1, T.clueBg);
     const bandV = ctx.createLinearGradient(0, 0, 0, this.clueH);
     bandV.addColorStop(0, T.clueBg + '00'); bandV.addColorStop(0.45, T.clueBg); bandV.addColorStop(1, T.clueBg);
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.clip();
-    for (let y = vy0; y < vy1; y++) if (y % 2 === 0) { ctx.fillStyle = bandH; ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
-    ctx.restore();
-    ctx.save();
-    ctx.beginPath(); ctx.rect(this.clueW, 0, gw, this.clueH); ctx.clip();
-    for (let x = vx0; x < vx1; x++) if (x % 2 === 0) { ctx.fillStyle = bandV; ctx.fillRect(ox + x * cs, 0, cs, this.clueH); }
-    ctx.restore();
+    if (T.clueBands !== 'flat') {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.clip();
+      for (let y = vy0; y < vy1; y++) if (y % 2 === 0) { ctx.fillStyle = bandH; ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(this.clueW, 0, gw, this.clueH); ctx.clip();
+      for (let x = vx0; x < vx1; x++) if (x % 2 === 0) { ctx.fillStyle = bandV; ctx.fillRect(ox + x * cs, 0, cs, this.clueH); }
+      ctx.restore();
+    }
 
     // ---- cells
     ctx.save();
@@ -455,8 +488,8 @@ export class BoardView {
         let col = trial ? T.trialFill : T.cross;
         if (t !== undefined) { if (now - t > 1200) this.mistakeFlash.delete(i); else col = T.mistake; }
         ctx.strokeStyle = col;
-        ctx.lineWidth = Math.max(1.5, cs / 7);
-        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(1.5, cs * (T.crossWidth ?? 1 / 7));
+        ctx.lineCap = T.crossCap ?? 'round';
         const m = cs * 0.24;
         ctx.beginPath();
         ctx.moveTo(px + m, py + m); ctx.lineTo(px + cs - m, py + cs - m);
@@ -469,7 +502,7 @@ export class BoardView {
     for (let x = vx0; x <= vx1; x++) ctx.fillRect(Math.round(ox + x * cs) - 0.5, oy + vy0 * cs, 1, (vy1 - vy0) * cs);
     for (let y = vy0; y <= vy1; y++) ctx.fillRect(ox + vx0 * cs, Math.round(oy + y * cs) - 0.5, (vx1 - vx0) * cs, 1);
     ctx.fillStyle = T.grid5;
-    const g5 = Math.max(1.5, cs / 12);
+    const g5 = Math.max(1.5, cs * (T.grid5Width ?? 1 / 12));
     for (let x = vx0; x <= vx1; x++) if (x % 5 === 0 && x > 0 && x < b.w) ctx.fillRect(ox + x * cs - g5 / 2, oy + vy0 * cs, g5, (vy1 - vy0) * cs);
     for (let y = vy0; y <= vy1; y++) if (y % 5 === 0 && y > 0 && y < b.h) ctx.fillRect(ox + vx0 * cs, oy + y * cs - g5 / 2, (vx1 - vx0) * cs, g5);
     // roulette / cursor beams over the grid
@@ -481,8 +514,11 @@ export class BoardView {
     if (this.showCursor && !this.spin) {
       // black-and-white cursor box
       const x = ox + this.cursorX * cs, y = oy + this.cursorY * cs, lw = Math.max(2, cs / 9);
-      ctx.lineWidth = lw * 2; ctx.strokeStyle = '#fff'; ctx.strokeRect(x + lw, y + lw, cs - lw * 2, cs - lw * 2);
-      ctx.lineWidth = lw; ctx.strokeStyle = T.outline; ctx.strokeRect(x + lw / 2, y + lw / 2, cs - lw, cs - lw);
+      if (T.cursorBox) { ctx.lineWidth = lw * 1.4; ctx.strokeStyle = T.cursorBox; ctx.strokeRect(x + lw * 0.7, y + lw * 0.7, cs - lw * 1.4, cs - lw * 1.4); }
+      else {
+        ctx.lineWidth = lw * 2; ctx.strokeStyle = '#fff'; ctx.strokeRect(x + lw, y + lw, cs - lw * 2, cs - lw * 2);
+        ctx.lineWidth = lw; ctx.strokeStyle = T.outline; ctx.strokeRect(x + lw / 2, y + lw / 2, cs - lw, cs - lw);
+      }
     }
     ctx.restore();
     // outer frame
@@ -495,7 +531,7 @@ export class BoardView {
 
     // ---- clue numbers: plain, tabular digits with a clear gap to the grid frame
     const fs = Math.max(9, Math.min(cs * 0.6, 25));
-    ctx.font = `600 ${fs}px "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif`;
+    ctx.font = `${T.clueFont ?? '600'} ${fs}px "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const frameW = Math.max(2, cs / 10);
@@ -504,7 +540,7 @@ export class BoardView {
     const cc = Math.max(cs, 14);
     ctx.save();
     ctx.beginPath(); ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH - frameW); ctx.clip();
-    if (cueX >= 0) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
+    if (cueX >= 0 && (this.spin || !T.clueFocusBg)) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
     const stepV = Math.min(cc * 0.66, 28, fs * 1.15);
     for (let x = vx0; x < vx1; x++) {
       const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
@@ -516,7 +552,7 @@ export class BoardView {
     ctx.restore();
     ctx.save();
     ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW - frameW, viewH - this.clueH); ctx.clip();
-    if (cueY >= 0) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
+    if (cueY >= 0 && (this.spin || !T.clueFocusBg)) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
     const stepH = Math.min(cc * 0.62, 26, fs * 1.05);
     for (let y = vy0; y < vy1; y++) {
       const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);

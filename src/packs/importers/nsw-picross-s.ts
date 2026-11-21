@@ -28,6 +28,8 @@
 //   tables   StreamingAssets/AssetBundles/idxresdata/* (PICROSS S: resources.assets), "IdxRes2" tables:
 //            IdxRes_PuzzleList_Picross (play order), IdxRes_Text_PuzzleTitle / IdxRes_PuzzleList_Title (names in
 //            up to ten languages), IdxRes_SoundDef (which song plays where).
+//   colours  idxresdata/IdxRes_PuzzleColorDef: the board's colours (filled, crosses, grid, guide lines every 5,
+//            the cursor's line), float RGB(A) lists; the same in every game, so PICROSS S uses these values too
 //   music    StreamingAssets/AssetBundles/snd/<song> (one bundle per AudioClip) or resources.assets AudioClips
 //            in resources.resource: FSB5 Vorbis, rebuilt as Ogg (src/audio/fsb5.ts).
 import { registerSetImporter, GameFiles } from './index';
@@ -95,6 +97,39 @@ function idxRes2(d: Uint8Array): { cols: string[]; rows: Array<{ key: string; va
     }
     return { cols: cols.map(c => c[1]), rows };
   } catch { return null; }
+}
+
+/** IdxRes_PuzzleColorDef: per key a list of colours (float r, g, b[, a] 0-255) */
+function colorTable(d: Uint8Array): Map<string, number[][]> {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength), td = new TextDecoder(), out = new Map<string, number[][]>();
+  let o = 0;
+  const u32 = () => { const v = dv.getUint32(o, true); o += 4; return v; };
+  const str = () => { const n = u32(); const s = td.decode(d.subarray(o, o + n)); o += n; return s; };
+  try {
+    if (str().endsWith('[2.0]')) for (let i = 0; i < 4; i++) str();
+    for (let i = 0, n = u32(); i < n; i++) { u32(); str(); }
+    for (let r = 0, n = u32(); r < n; r++) {
+      const key = str(), list: number[][] = [];
+      for (let k = 0, m = u32(); k < m; k++) { const c = u32(); const v: number[] = []; for (let j = 0; j < c; j++) { v.push(dv.getFloat32(o, true)); o += 4; } list.push(v); }
+      out.set(key, list);
+    }
+  } catch { /* partial */ }
+  return out;
+}
+const hex = (c?: number[]) => c && c.length >= 3 ? '#' + c.slice(0, 3).map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('') : undefined;
+const rgba = (c?: number[], a?: number) => c && c.length >= 3 ? `rgba(${c.slice(0, 3).map(Math.round).join(', ')}, ${a ?? (c[3] ?? 255) / 255})` : undefined;
+
+/** the board's colours: the game's table, or the same values (PICROSS S has no table) */
+function switchPalette(t: Map<string, number[][]> | null): NonNullable<NonNullable<Pack['theme']>['palette']> {
+  const c = (k: string) => t?.get(k)?.[0];
+  return {
+    style: 'switch', accent: '#1d9e3a',
+    fill: hex(c('ColorPrs_Nuri')) ?? '#333333', cross: hex(c('ColorPrs_Batu')) ?? '#ff7f00', mark: hex(c('ColorPrs_Mark')) ?? '#808080',
+    cell: hex(c('ColorPrs_BG')) ?? '#ffffff', grid: hex(c('ColorPrs_Grid')) ?? '#666666', grid5: hex(c('ColorPrs_Grid5')) ?? '#00e626',
+    clueFocus: hex(c('ColorPrs_HintLineSub')) ?? '#cfffd1', hint: hex(c('ColorPrs_FocusHintNum')) ?? '#ff092d',
+    hl: rgba(c('Color_Player'), 0.35) ?? 'rgba(128, 230, 255, 0.35)', done: rgba(c('ColorPrs_Gray')) ?? 'rgba(51, 51, 51, 0.4)',
+    cursorBox: hex(c('ColorPrs_FocusLine_Main')) ?? '#ff0000', mistake: hex(c('ColorPrs_Red')) ?? '#ff0000',
+  };
 }
 
 // ---- puzzles ----
@@ -186,7 +221,7 @@ registerSetImporter({
     // tables: only the ones read here; bundles, or plain IdxRes2 files (Addressables games)
     for (const n of mine) {
       const base = n.slice(n.lastIndexOf('/') + 1).replace(/_[0-9a-f]{32}(?=\.bundle$)/, '');
-      const m = base.match(/^(idxres_(?:puzzlelist_picross|text_puzzletitle|puzzlelist_title|sounddef))(\.bytes)?(\.unity3d|\.bundle)?$/i);
+      const m = base.match(/^(idxres_(?:puzzlelist_picross|text_puzzletitle|puzzlelist_title|sounddef|puzzlecolordef))(\.bytes)?(\.unity3d|\.bundle)?$/i);
       if (!m || !/idxresdata\//i.test(n)) continue;
       const d = await files.get(n);
       if (!d) continue;
@@ -250,10 +285,12 @@ registerSetImporter({
       const list = [...seen.values()];
       const levels = sizeLevels(list, order, names, game.id.startsWith('ctr-') ? 'free' : 'normal');
       const music = await gameMusic(g, sound, audio, files, clipFiles);
+      const colors = blobs.find(x => x.name.toLowerCase() === 'idxres_puzzlecolordef');
+      const palette = switchPalette(colors ? colorTable(colors.bytes) : null);
       packs.push({
         format: 'momogram-pack', version: 1, id: game.id, title: game.title,
         source: { game: game.title.en!, platform: 'Nintendo Switch', developer: 'Jupiter', year: game.year },
-        levels, theme: music.theme, assets: music.assets.length ? music.assets : undefined,
+        levels, theme: { ...music.theme, palette }, assets: music.assets.length ? music.assets : undefined,
       });
     }
     return packs;
