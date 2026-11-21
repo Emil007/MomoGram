@@ -81,7 +81,8 @@ language's names. Do it once: export the packs, or keep them on your server, and
 | DS Puzzler: Nanpure Fan & Oekaki Logic, Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS (Success) | ✓ 500 picture logic puzzles each, in ten levels, with names (Challenge Me: five languages) | ✓ the game's music |
 | Illu-Logi VOW | DS (Success) | ✓ the 139 normal puzzles (colour puzzles: later) | ✓ the game's music |
 | Hello Kitty no Paku Paku & Logic | DS | ✓ all 122 logic puzzles | ✓ the game's music |
-| Picross S, S2–S9, S+ (Picross e1–e9), Genesis & Master System, Doraemon, Lord of the Nazarick, LogiartGrimoire | Switch (decrypted RomFS) | in progress | later |
+| PICROSS S, S2–S9, S GENESIS & Master System, S Doraemon & F Characters, Lord of the Nazarick, LogiartGrimoire, Kemono Friends Picross, Raden's Guide for Pixel Museum | Switch (decrypted RomFS folder, or a zip of it) | ✓ the normal puzzles (150–281 per game), names in up to seven languages (Mega Picross reuses the same pictures; clip and colour puzzles: later) | ✓ the game's music (FMOD Vorbis, rebuilt as Ogg) |
+| PICROSS S+ | Switch | ✓ all of Picross e – e9, merged with the 3DS packs of the same games (your progress stays), and its own 30 puzzles | ✓ the Switch versions of the e-series music |
 
 Other nonogram games are added one by one (see the table). To add a game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
@@ -198,6 +199,7 @@ APK via Capacitor, released when `version` in `package.json` changes).
 - `src/rom/picrossds.ts`: puzzle-set tables, records, display order, localized names and solved-picture animation scripts.
 - `src/rom/dsgfx.ts`: DS OBJ cells (4bpp, 2D mapping) for the solved pictures.
 - `src/rom/ctr.ts`: decrypted 3DS containers (NCSD / NCCH / CIA), RomFS, icon, LZ11.
+- `src/rom/unity.ts`, `lzma.ts`: Unity asset bundles and serialized files (Switch games); `src/audio/fsb5.ts`: FMOD sound banks, Vorbis rebuilt as Ogg.
 - `src/audio/`: SDAT reader and SSEQ sequencer (DS music), BCSTM DSP-ADPCM decoder (3DS music); `gb/` and `snes/`: sound hardware emulation (see *Sound emulation*), `worklet.ts` / `chipplayer.ts`: playback on the audio thread.
 - `src/packs/`: pack format, `.momopack` files, pack colours; `src/packs/importers/`: one file per import method, each starting with a table of the games it reads ([how to add one](docs/writing-importers.md)).
 - `server/`: the optional sync / high score / pack server (PHP, MySQL or SQLite).

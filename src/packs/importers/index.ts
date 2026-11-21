@@ -15,6 +15,39 @@ export interface Importer {
 const importers: Importer[] = [];
 export function registerImporter(i: Importer) { importers.push(i); }
 
+/** the files of a game that is a folder rather than one file (Switch RomFS), from a picked folder or an archive */
+export interface GameFiles {
+  /** paths relative to what the player picked, with "/" */
+  names: string[];
+  get(name: string): Promise<Uint8Array | undefined>;
+}
+export interface SetImporter {
+  name: string;
+  /** the games among the paths: a root folder each (every file under it is the game's) */
+  find(names: string[]): string[];
+  read(files: GameFiles, root: string): Promise<Pack[]>;
+}
+const setImporters: SetImporter[] = [];
+export function registerSetImporter(i: SetImporter) { setImporters.push(i); }
+
+/** read the folder games among the files; returns the results and which files they took */
+export async function importFileSet(files: GameFiles): Promise<{ results: ImportResult[]; used: (name: string) => boolean }> {
+  const results: ImportResult[] = [], roots: string[] = [];
+  for (const imp of setImporters) {
+    for (const root of imp.find(files.names)) {
+      if (roots.some(r => root.startsWith(r))) continue;
+      roots.push(root);
+      try {
+        const packs = await imp.read(files, root);
+        results.push({ file: root.replace(/\/$/, '') || imp.name, ok: packs.length > 0, packs, message: packs.length ? imp.name : 'unsupported' });
+      } catch (e: any) {
+        results.push({ file: root.replace(/\/$/, '') || imp.name, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` });
+      }
+    }
+  }
+  return { results, used: n => roots.some(r => n.startsWith(r)) };
+}
+
 export function is3dsEncrypted(d: Uint8Array): boolean | null {
   // look for an NCCH header and test the NoCrypto flag
   for (let i = 0; i < Math.min(d.length - 0x200, 0x40000); i += 0x40) {

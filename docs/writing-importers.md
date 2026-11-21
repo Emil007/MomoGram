@@ -17,6 +17,7 @@ src/packs/importers/
   nds-ds-puzzler.ts
   nds-illu-logi-vow.ts
   nds-hello-kitty-logic.ts
+  nsw-picross-s.ts          Switch games: a folder, read with registerSetImporter (see below)
   ctr-picross.ts
 src/rom/                    shared readers for the systems: headers, containers, compression, music
   gb.ts  sfc.ts  nds.ts  ctr.ts  picrossds.ts  jtex.ts  dsgfx.ts
@@ -61,6 +62,10 @@ registerImporter({
 });
 ```
 
+Games that are a folder rather than one file (Switch RomFS) use `registerSetImporter({ name, find, read })`
+instead: `find(paths)` returns the root folder of each game among the picked files (a folder, a zip, or a single
+file), and `read(files, root)` gets the files lazily through `files.get(path)`.
+
 `importGameFile` asks each importer's `detect` in turn. The first one that returns true and then returns at least one pack wins. If its `read` throws, the error message is shown to the player, so write it for them (for example `'Puzzle table not found.'`).
 
 A new file is picked up on the next `node build.mjs`, which regenerates `all.ts`. No other file needs changing.
@@ -84,6 +89,8 @@ Use the types in `src/packs/format.ts`; the [format description](momopack-format
 | `sfc.ts` | `sfcHeaderTitle`, `sfcWithMusic` |
 | `nds.ts` | `NdsRom` (file system, overlays; DSiWare too), `blzDecompress`, `ndsMusic` (the game's sound archive as pack music), `bgr555Hex` |
 | `ctr.ts` | `readCtr` (CIA / CCI / CXI → files of the RomFS, titles, icon), `ctrCode` (code.bin), `lz11`, `ctrEncrypted` |
+| `unity.ts` | Unity bundles (LZ4 / LZMA) and serialized files: `serializedFiles`, `readSerialized`, `namedBlobs`, `audioClip`, `readTyped` |
+| `../audio/fsb5.ts` | FMOD FSB5 banks; `fsbVorbisToOgg` (needs the setup header in `vorbis-setups.ts`) |
 | `picrossds.ts` | the Picross DS data, sound and animations |
 | `jtex.ts` | 3DS textures, `packPictures` for coloured solved pictures |
 | `dsgfx.ts` | DS tiles and palettes |
@@ -94,7 +101,7 @@ MomoGram decrypts nothing. A game that is only available encrypted is reported a
 
 ```
 node build.mjs                                   # regenerates all.ts
-node tools/import.mjs "path/to/game file" …      # what each file becomes
+node tools/import.mjs "path/to/game file" …      # what each file (or game folder) becomes
 node tools/import.mjs game.sfc --json out/       # also writes each pack.json (without assets)
 ```
 

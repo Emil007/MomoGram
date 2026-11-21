@@ -1,7 +1,7 @@
 // Reading and writing packs: the .momopack file (one zip with the pack and all its files), older pack files
 // (.momopack.json, .zip exports) and the user's game files, from loose files or archives.
 import { Pack, PackAsset, validatePack, pickAny, Lang } from './format';
-import { importGameFile } from './importers/index';
+import { importGameFile, importFileSet } from './importers/index';
 import './importers/all';
 import { storage } from '../store';
 import { makeZip, unzipAll } from '../util/files';
@@ -60,6 +60,17 @@ export async function readEntries(entries: Array<{ name: string; data: Uint8Arra
     out.made.push(p); out.fromPackFiles++;
     out.msgs.push(`✓ ${pickAny(p.title, lang)} (${count(p)})`);
   }
+  // games that are folders (Switch): handed over as a whole
+  const byName = new Map(entries.map(e => [e.name, e]));
+  const sets = await importFileSet({ names: entries.map(e => e.name), get: async n => byName.get(n)?.data });
+  for (const r of sets.results) {
+    if (r.ok) {
+      const rev = newRev();
+      for (const p of r.packs) { p.source.file = r.file; p.rev = rev; out.made.push(p); }
+      out.msgs.push(`✓ ${r.packs.map(p => `${pickAny(p.title, lang)} (${count(p)})`).join(', ')}`);
+    } else out.msgs.push(`✕ ${r.file}: ${r.message === 'unsupported' ? t('unsupported') : r.message}`);
+  }
+  for (const e of entries) if (sets.used(e.name)) used.add(e.name);
   // everything else is read as a game
   for (const e of entries) {
     if (used.has(e.name) || /\.(json|momopack)$/i.test(e.name)) continue;

@@ -2,6 +2,7 @@
 // user's own games), plus MomoGram's own small UI sounds.
 import { Sdat } from './audio/sdat';
 import { SeqPlayer } from './audio/player';
+import { oggInfo } from './audio/fsb5';
 import { decodeBcstm, isBcstm } from './audio/bcstm';
 import { settings, storage } from './store';
 import { ChipPlayer } from './audio/chipplayer';
@@ -76,11 +77,20 @@ async function loadBuffer(packId: string, name: string): Promise<AudioBuffer | n
   const key = packId + '/' + name;
   if (buffers.has(key)) return buffers.get(key)!;
   const data = await storage.loadAsset(packId, name);
-  if (!data || !isBcstm(data)) return null;
-  const s = decodeBcstm(data);
-  const buf = ac!.createBuffer(s.channels.length, s.channels[0].length, s.sampleRate);
-  s.channels.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
-  (buf as any).loopInfo = s;
+  if (!data) return null;
+  let buf: AudioBuffer;
+  const ogg = oggInfo(data);
+  if (ogg) {
+    // Ogg Vorbis (Switch music): the browser decodes it; loop points in samples of the original rate
+    buf = await ac!.decodeAudioData(data.slice().buffer);
+    (buf as any).loopInfo = ogg.loop ? { loop: true, loopStart: ogg.loop[0], loopEnd: ogg.loop[1], sampleRate: ogg.rate } : null;
+  } else {
+    if (!isBcstm(data)) return null;
+    const s = decodeBcstm(data);
+    buf = ac!.createBuffer(s.channels.length, s.channels[0].length, s.sampleRate);
+    s.channels.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+    (buf as any).loopInfo = s;
+  }
   if (buffers.size > 6) buffers.delete(buffers.keys().next().value!);
   buffers.set(key, buf);
   return buf;

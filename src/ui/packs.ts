@@ -1,7 +1,8 @@
 // Pack manager: the installed packs, adding games and pack files, exporting .momopack files, and the packs on the
 // MomoGram server (download, update, upload).
 import { Pack, pickAny, mergePacks } from '../packs/format';
-import { readEntries, momopackOf, momopackName, packRev } from '../packs/io';
+import { readEntries, momopackOf, momopackName, packRev, newRev } from '../packs/io';
+import { importFileSet } from '../packs/importers/index';
 import { storage } from '../store';
 import { t, lang } from '../i18n';
 import { h, pickFiles, serverError } from '../app';
@@ -83,6 +84,45 @@ export function openPackManager(pm: PM) {
       // offering an export only makes sense for packs made from games
       if (made.length > fromPackFiles) results.append(h('li', {}, h('button', { class: 'btn primary', onClick: () => exportAll(unique, 'momogram-new-packs.zip') }, t('exportAll'))));
     }
+  }
+
+  /** a folder: Switch games are folders (their RomFS); other games in it are read one by one */
+  async function addFolder() {
+    const files = await new Promise<File[]>(res => {
+      const i = h('input', { type: 'file', multiple: true }) as HTMLInputElement;
+      i.setAttribute('webkitdirectory', '');
+      i.onchange = () => res([...(i.files ?? [])]);
+      i.click();
+    });
+    if (!files.length) return;
+    const results = h('ul', { class: 'results' });
+    status.innerHTML = '';
+    status.append(results);
+    const li = h('li', {}, t('analyzing'));
+    results.append(li);
+    const byName = new Map(files.map(f => [(f as any).webkitRelativePath || f.name, f]));
+    const names = [...byName.keys()];
+    const made: Pack[] = [];
+    const sets = await importFileSet({ names, get: async n => { const f = byName.get(n); return f ? new Uint8Array(await f.arrayBuffer()) : undefined; } });
+    li.remove();
+    for (const r of sets.results) {
+      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; made.push(p); } }
+      results.append(h('li', {}, r.file + ': ' + (r.ok ? '✓ ' + r.packs.map(p => pickAny(p.title, lang())).join(', ') : '✕ ' + (r.message === 'unsupported' ? t('unsupported') : r.message))));
+    }
+    // everything else: like single files (folders of ROMs)
+    for (const n of names) {
+      if (sets.used(n) || !/\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|zip|7z|rar|momopack|json)$/i.test(n)) continue;
+      const f = byName.get(n)!;
+      const line = h('li', {}, n + ' … ' + t('analyzing'));
+      results.append(line);
+      try {
+        const r = await readEntries(await filesToEntries({ name: f.name, file: f }), lang(), t);
+        made.push(...r.made);
+        line.textContent = n + ': ' + (r.msgs.join(' · ') || '✕ ' + t('unsupported'));
+      } catch (e: any) { line.textContent = n + ': ✕ ' + (e.message || e); }
+    }
+    if (made.length) await addPacks(made);
+    else if (!results.children.length) results.append(h('li', {}, '✕ ' + t('unsupported')));
   }
 
   /** several packs: one .zip holding a .momopack per pack (one pack: just its .momopack) */
@@ -187,6 +227,7 @@ export function openPackManager(pm: PM) {
   pm.screen(pm.header(t('packs')), h('div', { class: 'packs' },
     h('div', { class: 'row wrap' },
       h('button', { class: 'btn primary', onClick: addFiles }, '✚ ' + t('addFiles')),
+      h('button', { class: 'btn', onClick: addFolder }, '📁 ' + t('addFolder')),
       h('button', { class: 'btn', onClick: () => exportAll(pm.packs()) }, '⤓ ' + t('exportAll'))),
     h('p', { class: 'fine' }, t('createHelp')),
     status, list, online));

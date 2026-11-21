@@ -133,6 +133,18 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   // puzzles exist in one region only
   const all = out.levels.flatMap(l => l.puzzles);
   const byRows = new Map(all.map(p => [p.rows.join('/'), p]));
+  // a puzzle both versions have keeps the id of the other version (b: the copy stored so far), so progress saved
+  // under it stays (a game read again, another region or the Switch release of a 3DS game numbers it differently)
+  const keep = new Map<PackPuzzle, string>();
+  for (const l of b.levels) for (const p of l.puzzles) { const q = byRows.get(p.rows.join('/')); if (q && q.id !== p.id) keep.set(q, p.id); }
+  if (keep.size) {
+    const taken = new Set([...keep.values()]);
+    for (const q of all) {
+      if (keep.has(q)) q.id = keep.get(q)!;
+      else if (taken.has(q.id)) { let n = 2; while (taken.has(`${q.id}~${n}`)) n++; q.id = `${q.id}~${n}`; }
+      taken.add(q.id);
+    }
+  }
   const ids = new Set(all.map(p => p.id));
   const region = b.source.region || 'other';
   for (const l of b.levels) for (const p of l.puzzles) {
