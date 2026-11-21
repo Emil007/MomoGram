@@ -769,14 +769,14 @@ const original = (p: Pack) => originals.get(p) ?? p;
 function megaBadge(pz: PackPuzzle): HTMLElement | null {
   if (!pz.id.endsWith(MEGA)) return null;
   const own = !!pz.mega, none = !own && !megaPairsOf(pz);
-  return h('p', { class: 'mega-src ' + (own ? 'game' : 'momo'), title: own ? t('megaFromGameHelp') : t('megaByMomoHelp') },
+  return h('p', { class: 'mega-src ' + (own ? 'src-game' : 'src-momo'), title: own ? t('megaFromGameHelp') : t('megaByMomoHelp') },
     own ? '🎮 ' + t('megaFromGame') : none ? t('megaNone') : '✨ ' + t('megaByMomo'));
 }
 function megaLevelBadge(lv: PackLevel): HTMLElement | null {
   if (!lv.puzzles[0]?.id.endsWith(MEGA)) return null;
   const own = lv.puzzles.filter(z => z.mega).length;
   const k = own === lv.puzzles.length ? 'game' : own ? 'mixed' : 'momo';
-  return h('span', { class: 'mega-src small ' + k }, k === 'game' ? '🎮 ' + t('megaFromGame') : k === 'momo' ? '✨ ' + t('megaByMomo') : `🎮 ${own} · ✨ ${lv.puzzles.length - own}`);
+  return h('span', { class: 'mega-src small src-' + k }, k === 'game' ? '🎮 ' + t('megaFromGame') : k === 'momo' ? '✨ ' + t('megaByMomo') : `🎮 ${own} · ✨ ${lv.puzzles.length - own}`);
 }
 
 /** the pairs a puzzle is played with in Mega mode: the game's own, else MomoGram's (kept on this device) */

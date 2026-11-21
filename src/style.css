@@ -478,9 +478,9 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 
 /* where a Mega puzzle comes from */
 .mega-src { align-self: center; margin: 0; padding: .25em .8em; border-radius: 999px; font-weight: 800; font-size: .85rem; border: 2px solid var(--line); background: #fff; }
-.mega-src.game { background: #fff1e0; color: #a14a00; }
-.mega-src.momo { background: #eef4ff; color: #2c4f9e; }
-.mega-src.mixed { background: #f4f0ff; color: #5a3fa0; }
+.mega-src.src-game { background: #fff1e0; color: #a14a00; }
+.mega-src.src-momo { background: #eef4ff; color: #2c4f9e; }
+.mega-src.src-mixed { background: #f4f0ff; color: #5a3fa0; }
 .mega-src.small { display: inline-block; margin-top: .2rem; padding: .1em .6em; font-size: .72rem; border-width: 1.5px; }
 
 .soundtest .st-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
