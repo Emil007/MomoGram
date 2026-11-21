@@ -189,33 +189,56 @@ switch ($a) {
     $users = []; $best = []; $week = gmdate('Y-m-d\TH:i:s\Z', time() - 7 * 86400);
     // a time counts with the rules it was played with: Hard (and Free) before Normal before Easy
     $rank = ['hard' => 0, 'free' => 0, 'normal' => 1, 'easy' => 2];
+    $empty = fn() => ['solved' => 0, 'week' => 0, 'medals' => ['bronze' => 0, 'silver' => 0, 'gold' => 0, 'platinum' => 0], 'packs' => [], 'time' => 0, 'records' => 0, 'points' => 0, 'rated' => []];
     foreach (q('SELECT u.name, s.data FROM momo_saves s JOIN momo_users u ON u.id = s.user_id')->fetchAll() as $r) {
       $s = json_decode($r['data'], true);
-      $solved = 0; $weekN = 0; $medals = ['bronze' => 0, 'silver' => 0, 'gold' => 0, 'platinum' => 0]; $per = []; $time = 0;
+      // normal and Mega puzzles (ids ending in "@mega") are counted apart: two games
+      $m = ['normal' => $empty(), 'mega' => $empty()];
       foreach (($s['packs'] ?? []) as $pid => $pk) {
         if (strncmp((string)$pid, 'my-', 3) === 0) continue; // packs made in the editor don't count
         foreach (($pk['progress'] ?? []) as $pz => $v) {
           if (empty($v['cleared'])) continue;
-          $solved++; $per[$pid] = ($per[$pid] ?? 0) + 1;
-          if (!empty($v['at']) && $v['at'] >= $week) $weekN++;
-          if (!empty($v['medal']) && isset($medals[$v['medal']])) $medals[$v['medal']]++;
+          $mode = substr((string)$pz, -5) === '@mega' ? 'mega' : 'normal';
+          $x = &$m[$mode];
+          $x['solved']++; $x['packs'][$pid] = ($x['packs'][$pid] ?? 0) + 1;
+          if (!empty($v['at']) && $v['at'] >= $week) $x['week']++;
+          if (!empty($v['medal']) && isset($x['medals'][$v['medal']])) $x['medals'][$v['medal']]++;
+          $x['points'] += (int)($v['pts'] ?? 0);
+          foreach (($v['rated'] ?? []) as $rr) if (is_array($rr) && isset($rr['at'], $rr['pr'], $rr['s'])) $x['rated'][] = $rr;
           // the best time under the strictest rules it was played with
           $pick = null;
           foreach (($v['times'] ?? []) as $rules => $ms) if (is_numeric($ms) && isset($rank[$rules]) && ($pick === null || [$rank[$rules], $ms] < [$rank[$pick[1]], $pick[0]])) $pick = [(int)$ms, $rules];
           if ($pick === null && isset($v['best']) && is_numeric($v['best'])) $pick = [(int)$v['best'], ''];
-          $medal = (!empty($v['medal']) && isset($medals[$v['medal']])) ? $v['medal'] : '';
-          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1], $medal]; $time += $pick[0]; }
+          $medal = (!empty($v['medal']) && isset($x['medals'][$v['medal']])) ? $v['medal'] : '';
+          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1], $medal]; $x['time'] += $pick[0]; }
+          unset($x);
         }
       }
-      $users[] = ['name' => $r['name'], 'solved' => $solved, 'week' => $weekN, 'medals' => $medals, 'packs' => (object)$per, 'time' => $time, 'records' => 0];
+      foreach ($m as &$x) {
+        // PixElo: replayed from the rated solves in order (game/rating.ts does the same)
+        usort($x['rated'], fn($a, $b) => strcmp((string)$a['at'], (string)$b['at']));
+        $elo = 1000; $peak = 1000; $n = 0;
+        foreach ($x['rated'] as $rr) {
+          $k = $n < 15 ? 40 : 20;
+          $e = 1 / (1 + pow(10, ((float)$rr['pr'] - $elo) / 400));
+          $elo = max(100, (int)round($elo + $k * ((float)$rr['s'] - $e)));
+          $peak = max($peak, $elo); $n++;
+        }
+        $x['elo'] = $elo; $x['peak'] = $peak; $x['rated'] = $n; $x['packs'] = (object)$x['packs'];
+      }
+      unset($x);
+      $users[] = ['name' => $r['name']] + $m['normal'] + ['modes' => $m];
     }
     $rk = fn($e) => [$rank[$e[2]] ?? 3, $e[1]];
     foreach ($best as &$l) usort($l, fn($a, $b) => $rk($a) <=> $rk($b));
     unset($l);
     // records: puzzles where someone has the best time (only counted when two or more played it)
-    foreach ($best as $l) if (count($l) > 1) foreach ($users as &$u) if ($u['name'] === $l[0][0]) $u['records']++;
-    unset($u);
-    usort($users, fn($a, $b) => [$b['solved'], $b['medals']['platinum'], $b['medals']['gold'], $b['medals']['silver'], $a['time']] <=> [$a['solved'], $a['medals']['platinum'], $a['medals']['gold'], $a['medals']['silver'], $b['time']]);
+    foreach ($best as $key => $l) if (count($l) > 1) {
+      $mode = substr((string)$key, -5) === '@mega' ? 'mega' : 'normal';
+      foreach ($users as &$u) if ($u['name'] === $l[0][0]) { $u['modes'][$mode]['records']++; if ($mode === 'normal') $u['records']++; }
+      unset($u);
+    }
+    usort($users, fn($a, $b) => [$b['points'], $b['solved']] <=> [$a['points'], $a['solved']]);
     out(['users' => $users, 'best' => (object)$best]);
   }
 

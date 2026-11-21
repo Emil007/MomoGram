@@ -10,7 +10,8 @@ import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/pictu
 import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { readEntries, packRev, newRev } from './packs/io';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints } from './store';
+import { puzzleRating, performance as perfScore, points, RatedRules } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
 export { choose };
 import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
@@ -110,6 +111,7 @@ export async function boot() {
     } catch (e) { console.warn('game from command line', e); }
   }
   home();
+  setTimeout(backfillPoints, 1500);
   // installed web app: .momopack files opened with it (File Handling API, Chromium)
   (window as any).launchQueue?.setConsumer(async (p: { files?: Array<{ getFile(): Promise<File> }> }) => {
     const files = [];
@@ -186,6 +188,24 @@ function logo(): HTMLElement {
       h('div', { class: 'tagline' }, t('tagline')))));
 }
 
+/** points for puzzles solved before points existed (from their medal and times); a little at a time */
+async function backfillPoints() {
+  const todo = unpointed();
+  if (!todo.length) return;
+  const find = new Map<string, PackPuzzle>();
+  for (const p of [STARTER, ...ctx.packs]) for (const v of [p, megaView(p)]) for (const l of v.levels) for (const z of l.puzzles) find.set(p.id + '/' + z.id, z);
+  const out: Array<[string, string, number]> = [];
+  for (let i = 0; i < todo.length; i++) {
+    const [pid, pzid, pr] = todo[i];
+    const z = find.get(pid + '/' + pzid);
+    if (!z) continue; // a game not on this device: counted once it is
+    const mega = pzid.endsWith(MEGA);
+    out.push([pid, pzid, points(z.rows, mega, pr.medal, pr.times?.[RULES_OF[pr.medal ?? 'bronze'] as 'easy'] ?? pr.best, puzzleRating(z.rows, mega).par)]);
+    if (i % 50 === 49) await new Promise(r => setTimeout(r, 0));
+  }
+  setPoints(out);
+}
+
 /** the switch between normal and Mega puzzles for the whole game */
 function megaSwitch(): HTMLElement {
   const b = h('button', { class: 'mega-switch' + (settings.mega ? ' on' : ''), role: 'switch', 'aria-checked': String(settings.mega), title: t('megaHelp'),
@@ -215,7 +235,7 @@ export function home() {
   if (!Snd.current()) menuMusic(null, true);
   void hashTracks();
   dailyToGames();
-  const q = getQuickSave();
+  const q = getQuickSave(curMode());
   const qPack = q ? quickTarget(q)?.pack : null;
   const packs = allPacks();
   let solved = 0, total = 0;
@@ -614,44 +634,59 @@ function strictestTime(p: { best?: number; times?: Partial<Record<string, number
   return pick ?? (p.best !== undefined ? [p.best, ''] : null);
 }
 
-/** everyone on the server: puzzles solved, medals, and per game */
+/**
+ * Everyone on the server (up to 10 players), for the mode that is on (normal and Mega are two games): ranked by
+ * points, PixElo or puzzles solved; medals; and per game.
+ */
+let scoreSort: 'points' | 'elo' | 'solved' = 'points';
 async function scoresScreen() {
   const body = h('div', { class: 'scores' });
-  screen(header(t('scores'), home), body);
+  const mode = curMode();
+  screen(header(t('scores') + (mode === 'mega' ? ' · MEGA' : ''), home), body);
   let sc = Sync.scores(), note = '';
   const draw = () => {
     body.innerHTML = '';
     const me = Sync.account()?.name;
+    type Row = Sync.ScoreStats & { name: string };
+    const of = (u: NonNullable<typeof sc>['users'][0]): Row => ({ name: u.name, ...(u.modes?.[mode] ?? (mode === 'normal' ? u : { solved: 0, medals: {}, packs: {}, time: 0 })) });
+    let users: Row[] = sc ? sc.users.map(of) : [];
     // this profile's own numbers come from this device: they may be newer than the server's
-    if (sc && me) {
-      const users = [...sc.users.filter(u => u.name !== me), { ...sc.users.find(u => u.name === me), name: me, ...localStats() }];
-      const key = (u: typeof users[0]) => [u.solved, u.medals.platinum ?? 0, u.medals.gold ?? 0, u.medals.silver ?? 0, -u.time];
-      users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
-      sc = { ...sc, users };
-    }
-    if (!sc || !sc.users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); return; }
-    const medal = (m: string, n: number) => n ? h('span', { class: 'mcount' }, medalEl(m as Medal, false), '×' + n) : null;
-    body.append(h('ol', { class: 'ranking' }, ...sc.users.map((u, k) => h('li', { class: u.name === me ? 'me' : '' },
+    const mine: Row = { ...(users.find(u => u.name === me) ?? {}), ...localStats(mode), name: me ?? activeProfile().name };
+    users = [...users.filter(u => u.name !== mine.name), mine];
+    const key = (u: Row) => scoreSort === 'points' ? [u.points ?? 0, u.solved] : scoreSort === 'elo' ? [(u.rated ?? 0) ? u.elo ?? 0 : -1, u.rated ?? 0] : [u.solved, u.medals.platinum ?? 0, u.medals.gold ?? 0, -u.time];
+    users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
+    body.append(h('div', { class: 'score-tabs' }, ...([['points', t('pointsTab')], ['elo', 'PixElo'], ['solved', t('solvedTab')]] as const).map(([k, label]) =>
+      h('button', { class: 'chip' + (scoreSort === k ? ' on' : ''), onClick: () => { scoreSort = k; draw(); } }, label))));
+    if (!users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); return; }
+    const medal = (m: string, n: number | undefined) => n ? h('span', { class: 'mcount' }, medalEl(m as Medal, false), '×' + n) : null;
+    const main = (u: Row) => scoreSort === 'points' ? String(u.points ?? 0) : scoreSort === 'elo' ? (u.rated ? String(u.elo) : '–') : String(u.solved);
+    body.append(h('ol', { class: 'ranking' }, ...users.map((u, k) => h('li', { class: u.name === me ? 'me' : '' },
       h('span', { class: 'rank' }, String(k + 1)),
       h('div', { class: 'who' }, h('b', {}, u.name),
         h('small', {}, medal('platinum', u.medals.platinum), medal('gold', u.medals.gold), medal('silver', u.medals.silver), medal('bronze', u.medals.bronze)),
-        h('small', { class: 'extra' }, [u.week ? t('thisWeek', { n: u.week }) : '', u.records ? t('recordsN', { n: u.records }) : ''].filter(Boolean).join(' · '))),
-      h('b', { class: 'num' }, String(u.solved))))));
-    // per game: the installed packs anyone has played
-    const packs = allPacks().filter(p => sc!.users.some(u => u.packs[p.id]));
+        h('small', { class: 'extra' }, [
+          scoreSort !== 'points' ? `${u.points ?? 0} ${t('pointsShort')}` : '',
+          scoreSort !== 'elo' && u.rated ? `PixElo ${u.elo}` : '',
+          scoreSort === 'elo' && u.rated ? t('peakN', { n: u.peak ?? u.elo ?? 0 }) + (u.rated < 15 ? ' · ' + t('provisional') : '') : '',
+          scoreSort !== 'solved' ? t('solvedN', { n: u.solved }) : '',
+          u.week ? t('thisWeek', { n: u.week }) : '', u.records ? t('recordsN', { n: u.records }) : ''].filter(Boolean).join(' · '))),
+      h('b', { class: 'num' }, main(u))))));
+    // per game: the installed packs anyone has played (a column per player: up to 10, the table scrolls sideways)
+    const packs = allPacks().filter(p => users.some(u => u.packs?.[p.id]));
     if (packs.length) {
       body.append(h('h2', { class: 'section-title' }, t('perGame')), h('div', { class: 'score-table' }, h('table', {},
-        h('thead', {}, h('tr', {}, h('th', {}), ...sc.users.map(u => h('th', { class: u.name === me ? 'me' : '' }, u.name)))),
+        h('thead', {}, h('tr', {}, h('th', {}), ...users.map(u => h('th', { class: u.name === me ? 'me' : '', title: u.name }, u.name)))),
         h('tbody', {}, ...packs.map(p => {
           const total = countPack(p)[1];
-          const top = Math.max(...sc!.users.map(u => u.packs[p.id] ?? 0));
+          const top = Math.max(...users.map(u => u.packs?.[p.id] ?? 0));
           return h('tr', {}, h('th', {}, pickAny(p.title, packLang())),
-            ...sc!.users.map(u => { const n = u.packs[p.id] ?? 0; return h('td', { class: (n && n === top ? 'top' : '') + (u.name === me ? ' me' : '') }, n ? `${n}/${total}` : '–'); }));
+            ...users.map(u => { const n = u.packs?.[p.id] ?? 0; return h('td', { class: (n && n === top ? 'top' : '') + (u.name === me ? ' me' : '') }, n ? `${n}/${total}` : '–'); }));
         })))));
     }
     if (note) body.append(h('p', { class: 'fine' }, note));
   };
   draw();
+  if (!Sync.account()) return;
   try { await Sync.sync(); sc = await Sync.refreshScores(); note = ''; } catch { note = t('scoresOffline'); }
   if (body.isConnected) draw();
 }
@@ -668,7 +703,7 @@ function quickTarget(q: QuickSave): { pack: Pack; lv: PackLevel; i: number; lone
 }
 
 async function resumeQuick() {
-  const q = getQuickSave();
+  const q = getQuickSave(curMode());
   if (!q) return home();
   const tg = quickTarget(q);
   // the game isn't on this device (yet): keep the save for when it is
@@ -706,6 +741,9 @@ function allPacks(): Pack[] { const ps = [STARTER, ...ctx.packs]; return ps.map(
 // own (PICROSS e6–e9, the Switch games, S+ for every e game) or chosen by MomoGram (game/mega.ts: the same on
 // every device). Mega puzzles are puzzles of their own for progress and scores: their ids end in "@mega".
 const MEGA = '@mega';
+const curMode = (): Mode => (settings.mega ? 'mega' : 'normal');
+/** which rules a medal is earned with (its time is what points look at) */
+const RULES_OF: Record<string, string> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'free' };
 const views = new WeakMap<Pack, Pack>(), megaViews = new WeakMap<Pack, Pack>(), originals = new WeakMap<Pack, Pack>();
 const keep = (levels: PackLevel[]) => levels.filter(l => l.puzzles.length);
 function plainView(p: Pack): Pack {
@@ -1056,6 +1094,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // medal: bronze on Easy, silver on Normal, gold on Hard, platinum on Hard without logic hints. Whether hints
   // were on at any moment of this puzzle is kept (with the saved board too), not only whether they are on at the end.
   let usedHints = logicOn || !!restore?.usedHints;
+  // roulette spins (PixElo counts each as extra time)
+  let roulette = (restore as any)?.roulette ?? 0;
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
     board, view,
     solve() { for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS; board.touch(); view.invalidate(); if (board.checkSolved()) solved(); },
@@ -1167,7 +1207,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   /** keep the board as it is, to come back to (pause menu, or when the app is put away) */
   function keepBoard() {
     if (finished) return;
-    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints } as any,
+    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints, roulette } as any,
       puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title });
   }
   const onHide = () => { if (document.visibilityState === 'hidden' && board.elapsedMs > 0) keepBoard(); };
@@ -1237,6 +1277,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
       running = false;
       const row = Math.floor(Math.random() * board.h), col = Math.floor(Math.random() * board.w);
       await view.roulette(row, col, () => Snd.sfx('tap'));
+      roulette++;
       board.pushUndo(); board.revealHint(Math.random, row, col);
       Snd.sfx('clear');
       view.invalidate(); updateInfo();
@@ -1252,12 +1293,22 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
-    const newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rules);
-    // a daily puzzle is also solved in its own game
-    if (pz.origin) { const k = pz.origin.lastIndexOf('/'); recordClear(pz.origin.slice(0, k), pz.origin.slice(k + 1), board.totalMs, under, medal, rules); }
+    // points and PixElo (the first solve under these rules is rated); a daily puzzle counts in its own game
+    const mode = curMode(), mega = pz.id.endsWith(MEGA);
+    const { pr, par } = puzzleRating(pz.rows, mega);
+    const before = localStats(mode);
+    const extra = {
+      rated: { pr, s: perfScore(board.totalMs, par, rules as RatedRules, { logic: usedHints, roulette }) },
+      pts: (p: { medal?: Medal; times?: Partial<Record<string, number>> }) => points(pz.rows, mega, p.medal, p.times?.[RULES_OF[p.medal ?? 'bronze']], par),
+    };
+    const target = pz.origin ? [pz.origin.slice(0, pz.origin.lastIndexOf('/')), pz.origin.slice(pz.origin.lastIndexOf('/') + 1)] : [pack.id, pz.id];
+    const wasRated = !!getProgress(target[0], target[1]).rated?.[rules as RatedRules];
+    let newMedal = recordClear(target[0], target[1], board.totalMs, under, medal, rules, extra);
+    if (pz.origin) newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rules) || newMedal;
+    const after = localStats(mode);
     clearBoard(pack.id, lv.id, pz.id);
     cleanup();
-    showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal);
+    showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal, { elo: after.elo - before.elo, rated: !wasRated, points: after.points - before.points, total: after.points, now: after.elo });
   }
 }
 
@@ -1265,7 +1316,8 @@ function medalEl(m: Medal, big = false) {
   return h('span', { class: 'medal ' + m + (big ? ' big' : ''), title: t(m) }, big ? t(m) : '');
 }
 
-function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, under: boolean, pck: PckGetter | null, back: () => void, medal?: Medal, newMedal = false) {
+function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, under: boolean, pck: PckGetter | null, back: () => void, medal?: Medal, newMedal = false,
+  score?: { elo: number; rated: boolean; points: number; total: number; now: number }) {
   const pz = lv.puzzles[index];
   const cv = h('canvas', { class: 'solved-pic' });
   const anim = new PictureAnimator(pz as any, pck, pack.id);
@@ -1280,6 +1332,9 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
       h('div', {}, t('time'), h('b', {}, formatTime(board.totalMs))),
       board.mistakes ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(board.penaltyMs))) : null,
       best !== undefined ? h('div', {}, t('best'), h('b', {}, formatTime(best))) : null),
+    score ? h('div', { class: 'score-gain' },
+      h('span', { class: 'pts' + (score.points ? ' up' : '') }, (score.points ? '+' + score.points : '±0') + ' ' + t('pointsShort')),
+      h('span', { class: 'elo' + (score.elo > 0 ? ' up' : score.elo < 0 ? ' down' : '') }, score.rated ? `${score.elo >= 0 ? '+' : ''}${score.elo} PixElo · ${score.now}` : t('unratedReplay'))) : null,
     fastestRow(pack.id, pz.id),
     h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => { stop(); back(); } }, t('toList')), next)));
   setTimeout(() => { Snd.stop(); usePack(pack, 'menu'); }, roleSongs(pack.theme, 'clear').length ? 4500 : 1500);

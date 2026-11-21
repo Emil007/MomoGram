@@ -1,4 +1,5 @@
 // Persistent storage: the user's ROM and packs in IndexedDB, progress/settings in localStorage.
+import { replay } from './game/rating';
 import type { Pack } from './packs/format';
 import { compressAsset, decompressAsset, sha1 } from './util/files';
 import type { BoardSnapshot } from './game/board';
@@ -123,7 +124,15 @@ export interface PuzzleProgress {
   times?: Partial<Record<Rules, number>>;
   /** first solved (for "this week" in the high scores) */
   at?: string;
+  /** PixElo: the first solve under each rule set (game/rating.ts) */
+  rated?: Partial<Record<Rules, { at: string; pr: number; s: number }>>;
+  /** points this puzzle is worth so far (its best result; only goes up) */
+  pts?: number;
 }
+
+/** Mega puzzles are a game of their own: progress, points and PixElo are counted apart */
+export type Mode = 'normal' | 'mega';
+export const modeOf = (puzzleKey: string): Mode => (puzzleKey.endsWith('@mega') ? 'mega' : 'normal');
 
 // ---- time: a MomoGram server's clock, when there is one (a device with a wrong clock must not win every merge) ----
 let clockOffset = Number(localStorage.getItem('momogram.clockOffset') || 0) || 0;
@@ -270,10 +279,13 @@ export function packProgress(packId: string): Array<[string, PuzzleProgress]> {
 }
 
 /** returns true when the medal is better than the one the puzzle had */
-export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal, rules?: Rules): boolean {
+export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal, rules?: Rules,
+  extra?: { rated?: { pr: number; s: number }; pts?: (best: PuzzleProgress) => number }): boolean {
   loadActive(); // another tab / the installed app may have saved meanwhile: never write back an old copy
   const k = packId + '/' + puzzleId;
   const p = progress[k] ?? {};
+  // PixElo: only the first solve under these rules is rated
+  if (rules && extra?.rated && !p.rated?.[rules]) (p.rated ??= {})[rules] = { at: nowIso(), ...extra.rated };
   if (!p.cleared) p.at = nowIso();
   p.cleared = true;
   if (rules) { p.times ??= {}; if (p.times[rules] === undefined || totalMs < p.times[rules]!) p.times[rules] = totalMs; }
@@ -281,6 +293,7 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
   if (better) p.medal = medal;
   if (underLimit) p.underLimit = true;
   if (p.best === undefined || totalMs < p.best) p.best = totalMs;
+  if (extra?.pts) p.pts = Math.max(p.pts ?? 0, extra.pts(p));
   progress[k] = p;
   persist([packId]);
   return better;
@@ -341,10 +354,10 @@ export function getBoard(packId: string, levelId: string, puzzleId: string): Qui
   return loadBoards()[bkey(packId, levelId, puzzleId)]?.q ?? null;
 }
 /** the board played last */
-export function getQuickSave(): QuickSave | null { return latestBoard(loadBoards())?.q ?? null; }
-function latestBoard(b: Boards) {
+export function getQuickSave(mode?: Mode): QuickSave | null { return latestBoard(loadBoards(), mode)?.q ?? null; }
+function latestBoard(b: Boards, mode?: Mode) {
   let best: Boards[string] | null = null;
-  for (const v of Object.values(b)) if (v.q && (!best || v.saved > best.saved)) best = v;
+  for (const v of Object.values(b)) if (v.q && (!mode || modeOf(v.q.puzzleId) === mode) && (!best || v.saved > best.saved)) best = v;
   return best;
 }
 /** join boards from elsewhere: per puzzle, the newer one wins (an empty entry too) */
@@ -453,6 +466,12 @@ function bestOf(a: PuzzleProgress | undefined, b: PuzzleProgress): PuzzleProgres
     for (const [r, ms] of Object.entries(b.times ?? {})) if (out.times[r as Rules] === undefined || ms! < out.times[r as Rules]!) out.times[r as Rules] = ms;
   }
   if (a.at && b.at) out.at = a.at < b.at ? a.at : b.at;
+  // points: the higher; rated solves: per rule set the earlier one
+  if (a.pts !== undefined || b.pts !== undefined) out.pts = Math.max(a.pts ?? 0, b.pts ?? 0);
+  if (a.rated || b.rated) {
+    out.rated = { ...a.rated };
+    for (const [r, v] of Object.entries(b.rated ?? {})) { const o = out.rated[r as Rules]; if (!o || (v && v.at < o.at)) out.rated[r as Rules] = v; }
+  }
   return out;
 }
 
@@ -470,19 +489,37 @@ export function rekeyProfile(from: string, to: string, name?: string) {
 }
 
 /** the active profile's numbers as the server's high scores count them (this device may be newer than the server) */
-export function localStats(): { solved: number; week: number; medals: Record<Medal, number>; packs: Record<string, number>; time: number } {
-  const out = { solved: 0, week: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0 };
+export interface ModeStats { solved: number; week: number; medals: Record<Medal, number>; packs: Record<string, number>; time: number; points: number; elo: number; peak: number; rated: number }
+export function localStats(mode: Mode = 'normal'): ModeStats {
+  const out = { solved: 0, week: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0, points: 0, elo: 1000, peak: 1000, rated: 0 };
   const week = new Date(Date.parse(nowIso()) - 7 * 86400000).toISOString();
+  const solves: Array<{ at: string; pr: number; s: number }> = [];
   for (const [k, v] of Object.entries(progress)) {
-    if (!v.cleared) continue;
+    if (!v.cleared || modeOf(k) !== mode) continue;
     const id = k.slice(0, k.lastIndexOf('/'));
     if (id.startsWith('my-')) continue; // packs made in the editor don't count
     out.solved++; out.packs[id] = (out.packs[id] ?? 0) + 1;
     if (v.at && v.at >= week) out.week++;
     if (v.medal) out.medals[v.medal]++;
     if (v.best !== undefined) out.time += v.best;
+    out.points += v.pts ?? 0;
+    for (const r of Object.values(v.rated ?? {})) if (r) solves.push(r);
   }
-  return out;
+  const e = replay(solves);
+  return { ...out, elo: e.elo, peak: e.peak, rated: e.n };
+}
+
+/** every cleared puzzle of a mode without points yet (older progress): [pack id, puzzle id, progress] */
+export function unpointed(): Array<[string, string, PuzzleProgress]> {
+  return Object.entries(progress).filter(([, v]) => v.cleared && v.medal && v.pts === undefined).map(([k, v]) => { const i = k.lastIndexOf('/'); return [k.slice(0, i), k.slice(i + 1), v]; });
+}
+/** set points worked out later (older progress) */
+export function setPoints(list: Array<[string, string, number]>) {
+  if (!list.length) return;
+  loadActive();
+  const packs = new Set<string>();
+  for (const [pid, pz, n] of list) { const p = progress[pid + '/' + pz]; if (p && (p.pts ?? 0) < n) { p.pts = n; packs.add(pid); } }
+  if (packs.size) persist([...packs]);
 }
 
 /** solved puzzles per pack id (of the active profile, or of a save) */
