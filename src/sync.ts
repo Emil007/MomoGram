@@ -179,7 +179,7 @@ function flush() {
 }
 
 // ---- high scores of everyone on the server (kept for offline use) ----
-export interface Scores { users: Array<{ name: string; solved: number; week?: number; records?: number; medals: Record<string, number>; packs: Record<string, number>; time: number }>; best: Record<string, Array<[string, number, string?]>> }
+export interface Scores { users: Array<{ name: string; solved: number; week?: number; records?: number; medals: Record<string, number>; packs: Record<string, number>; time: number }>; best: Record<string, Array<[string, number, string?, string?]>> }
 let scoresCache: Scores | null = null, scoresOf = '';
 export function scores(): Scores | null {
   if (!account()) return null;

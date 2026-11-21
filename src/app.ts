@@ -5,7 +5,7 @@ import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/pictu
 import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { readEntries, packRev } from './packs/io';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
 import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager, storePacks, filesToEntries } from './ui/packs';
@@ -189,6 +189,7 @@ export function home() {
   // whatever plays keeps playing; only a silent start picks a random track from all games
   if (!Snd.current()) menuMusic(null, true);
   void hashTracks();
+  dailyToGames();
   const q = getQuickSave();
   const qPack = q ? quickTarget(q)?.pack : null;
   const packs = allPacks();
@@ -239,7 +240,8 @@ function seriesOf(p: Pack): string {
     [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
     [/mario/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
     // the picture logic games of other makers (Hudson, Success, …)
-    [/illust logic|illu-logi|ds puzzler|challenge me|oekaki|paku paku & logic/i, 'Illust Logic'],
+    [/sanrio|hello kitty/i, 'Sanrio'],
+    [/illust logic|illu-logi|ds puzzler|challenge me|oekaki/i, 'Illust Logic'],
   ];
   for (const [re, name] of rules) if (re.test(n)) return name;
   return n;
@@ -531,14 +533,15 @@ function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
   const sc = Sync.scores(), me = Sync.account();
   if (!sc || !me) return null;
   const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name);
-  const mine = strictestTime(getProgress(packId, puzzleId));
-  if (mine) list.push([me.name, mine[0], mine[1]]);
+  const myProgress = getProgress(packId, puzzleId), mine = strictestTime(myProgress);
+  if (mine) list.push([me.name, mine[0], mine[1], myProgress.medal ?? '']);
   if (!list.length) return null;
   // times under stricter rules come first: a fast Easy time doesn't beat a Hard one
   list.sort((a, b) => (RULE_RANK[a[2] ?? ''] ?? 3) - (RULE_RANK[b[2] ?? ''] ?? 3) || a[1] - b[1]);
   return h('p', { class: 'fastest' }, '🏆 ' + t('fastest') + ': ',
-    ...list.slice(0, 3).map(([n, ms, r], k) => h('span', { class: n === me.name ? 'me' : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
-      r ? h('i', { class: 'rule-tag r-' + r, title: rulesName(r as PlayRules) }, rulesName(r as PlayRules).slice(0, 1)) : null)));
+    ...list.slice(0, 3).map(([n, ms, r, m], k) => h('span', { class: n === me.name ? 'me' : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
+      r ? h('i', { class: 'rule-tag r-' + r, title: rulesName(r as PlayRules) }, rulesName(r as PlayRules).slice(0, 1)) : null,
+      m ? medalEl(m as Medal) : null)));
 }
 const RULE_RANK: Record<string, number> = { free: 0, hard: 0, normal: 1, easy: 2 };
 /** a puzzle's best time under the strictest rules it was solved with (older progress: its best time, rules unknown) */
@@ -811,6 +814,29 @@ function patternId(rows: string[]): string {
 
 const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, packLang())} · ${pickAny(e.lv.title, packLang())}`;
 
+/**
+ * Daily puzzles solved before they counted in their own game too (MomoGram < 0.13): find the game's puzzle by
+ * its pattern and record the solve there. Runs once per profile and game list change; does nothing twice.
+ */
+let dailyChecked = '';
+function dailyToGames() {
+  const done = packProgress('daily').filter(([, p]) => p.cleared && p.best !== undefined);
+  const key = activeProfile().id + ':' + allPacks().length + ':' + done.length;
+  if (!done.length || key === dailyChecked) return;
+  dailyChecked = key;
+  const byPattern = new Map<string, [string, string]>();
+  for (const pk of allPacks()) if (pk.id !== 'daily') for (const lv of pk.levels) for (const pz of lv.puzzles) {
+    const k = patternId(pz.rows);
+    if (!byPattern.has(k)) byPattern.set(k, [pk.id, pz.id]);
+  }
+  for (const [id, p] of done) {
+    const m = id.match(/^daily-\d+-(.+)$/), target = m && byPattern.get(m[1]);
+    if (!target || getProgress(target[0], target[1]).cleared) continue;
+    const rules = (['hard', 'normal', 'easy'] as const).find(r => p.times?.[r] !== undefined);
+    recordClear(target[0], target[1], rules ? p.times![rules]! : p.best!, !!p.underLimit, p.medal, rules);
+  }
+}
+
 /** 15 puzzles a day, 5 per difficulty, from all visible games; solved ones are saved for the day */
 async function daily() {
   const d = new Date();
@@ -820,7 +846,7 @@ async function daily() {
     id: `daily-${seed}-d${level}`, title: { en: t('diff' + level) }, rules: 'normal' as const,
     // a daily puzzle is known by its pattern: the same puzzle has the same id on every device and for everyone
     // (each device draws from its own games, so the lists can differ)
-    puzzles: drawPuzzles(rand, level, 5, seen, true).map(e => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-${patternId(e.lv.puzzles[e.i].rows)}`, from: fromText(e), name: undefined })),
+    puzzles: drawPuzzles(rand, level, 5, seen, true).map(e => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-${patternId(e.lv.puzzles[e.i].rows)}`, from: fromText(e), origin: `${e.pack.id}/${e.lv.puzzles[e.i].id}`, name: undefined })),
   })).filter(l => l.puzzles.length);
   if (!levels.length) return;
   // coloured pictures of the games the puzzles come from
@@ -1072,6 +1098,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
     const newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rules);
+    // a daily puzzle is also solved in its own game
+    if (pz.origin) { const k = pz.origin.lastIndexOf('/'); recordClear(pz.origin.slice(0, k), pz.origin.slice(k + 1), board.totalMs, under, medal, rules); }
     clearBoard(pack.id, lv.id, pz.id);
     cleanup();
     showSolved(pack, lv, index, board, under, pckOf(pack), back, medal, newMedal);

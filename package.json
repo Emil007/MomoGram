@@ -1,6 +1,6 @@
 {
   "name": "momogram",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "One nonogram player for all the nonogram games you own",
   "scripts": {
     "build": "node build.mjs",

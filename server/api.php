@@ -184,7 +184,8 @@ switch ($a) {
           $pick = null;
           foreach (($v['times'] ?? []) as $rules => $ms) if (is_numeric($ms) && isset($rank[$rules]) && ($pick === null || [$rank[$rules], $ms] < [$rank[$pick[1]], $pick[0]])) $pick = [(int)$ms, $rules];
           if ($pick === null && isset($v['best']) && is_numeric($v['best'])) $pick = [(int)$v['best'], ''];
-          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1]]; $time += $pick[0]; }
+          $medal = (!empty($v['medal']) && isset($medals[$v['medal']])) ? $v['medal'] : '';
+          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1], $medal]; $time += $pick[0]; }
         }
       }
       $users[] = ['name' => $r['name'], 'solved' => $solved, 'week' => $weekN, 'medals' => $medals, 'packs' => (object)$per, 'time' => $time, 'records' => 0];

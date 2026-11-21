@@ -8,6 +8,8 @@ export type Rules = 'normal' | 'free';
 export interface PackPuzzle {
   /** where a puzzle comes from when it is shown outside its game (daily, random) */
   from?: string;
+  /** the same puzzle in its game ("<pack id>/<puzzle id>"): solving it here counts there too (daily puzzles) */
+  origin?: string;
   /** only in this region's release of the game (set when regions are merged) */
   exclusive?: string;
   /** stable id within the pack, e.g. "n01-03" */

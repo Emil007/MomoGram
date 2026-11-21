@@ -196,6 +196,12 @@ export function getProgress(packId: string, puzzleId: string): PuzzleProgress {
   return progress[packId + '/' + puzzleId] ?? {};
 }
 
+/** progress of one pack: [puzzle id, progress] */
+export function packProgress(packId: string): Array<[string, PuzzleProgress]> {
+  const pre = packId + '/';
+  return Object.entries(progress).filter(([k]) => k.startsWith(pre)).map(([k, v]) => [k.slice(pre.length), v]);
+}
+
 /** returns true when the medal is better than the one the puzzle had */
 export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal, rules?: Rules): boolean {
   loadActive(); // another tab / the installed app may have saved meanwhile: never write back an old copy
