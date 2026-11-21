@@ -40,10 +40,7 @@ Nonograms do that too.
 
 ## What you get
 
-- **All your nonogram games in one library.** Each game you add becomes a card with its own modes and levels, puzzle names (shown once a puzzle is solved), solved pictures, music and colours. Games of a series form a folder (all Picross e games, Picross NP, Illust Logic, …); sort them by series or system, rearrange and hide them.
-- **Mega mode:** one switch on the home screen turns the whole game into *Mega MomoGram*. Mega numbers span two rows or columns and count a connected group of cells that reaches into both. PICROSS e6–e9 and the Switch games bring their own Mega puzzles (PICROSS S+ adds them for every e game, and the Mega-only puzzles come along); for every other game MomoGram chooses the pairs itself, checks that each puzzle still has exactly one solution, and makes the same choice on every device, so times and medals stay comparable. Mega puzzles keep their own progress and scores.
-- **Points and PixElo**, apart for normal and Mega puzzles: points count everything you have solved, PixElo is a chess-style rating of how good you are. Your PixElo is shown under your name on the home screen, both are in the high scores. How they work: [Points and PixElo](#points-and-pixelo).
-- **A daily nonogram:** 15 puzzles a day, five per difficulty, drawn from all your games. Solving one counts in its own game too. And a **Random** button for one puzzle from anywhere.
+- **All your nonogram games in one library**, each with its own modes and levels, the puzzle names, solved pictures, music and colours of the original. Series form folders (all Picross e games, the S series, Picross NP, Illust Logic …); show them as cards, tiles or a list, sorted by series or system.
 - **Every puzzle on every difficulty**, with medals:
 
   | | Mistakes | Hint roulette | Medal |
@@ -52,87 +49,132 @@ Nonograms do that too.
   | **Normal** | caught, +2 / 4 / 8 minutes | offered | 🥈 Silver |
   | **Hard** | not checked, *Try it out* to test ideas | none | 🥇 Gold, 💠 **Platinum** without logic hints |
 
-- **A board that feels like the handhelds:** striped clue bands, guide lines every five cells, a cursor that lights up its row and column into the clues, a drag counter, and clue numbers that grey out only when their block is certainly in place.
-- **Three tools:** fill, cross out, and your own **marks**, which stay while you fill and cross the rest. One big button switches between fill and cross; *Tools on the right* puts it under your right thumb.
-- **Logic hints** (💡): clue numbers turn blue when their line lets you deduce a new cell, like in the newer 3DS and Switch games. And the **hint roulette**, spinning over rows and columns like the original.
-- **Made for one hand on a phone:** portrait layout, the tools at the bottom, pinch to zoom, drags that stay on their row or column. Landscape puts the tools beside the board.
-- **Your progress is never lost:** every puzzle you start is kept and continues where you left it, best times per difficulty, medals, profiles with their own saves.
-- **The games' own music:** every song of each game, a sound test to retag or switch songs off, a music bar at the bottom of the home screen shows what plays and skips to the next song; the same song from several games counts once.
-- **An editor** for your own puzzles and packs.
-- **Your own server (optional):** sync progress, settings and paused puzzles between your devices, share packs within your family or friends, and see each other's high scores (points, PixElo, puzzles solved, medals, fastest times).
-- **Updates itself:** the home screen tells you when a new version is out; the web version (also installed on the home screen) switches to it with one tap, the apps link to the download. The back button (Android, browser) goes back inside MomoGram.
-- **Your library, your way:** cards, three tiles in a row, or a slim list (Arrange → View).
-- Offline after the first start; English and German, with the games' puzzle names in every language they have.
+- **Mega mode** for everything: one switch turns the whole game into *Mega MomoGram*. Mega numbers span two rows or columns. Games that have Mega puzzles bring their own (a glowing dot marks them); for all others MomoGram chooses the pairs, checks that each puzzle still has one solution, and makes the same choice on every device. Mega has its own progress and scores.
+- **Points and PixElo** – points count everything you've solved, PixElo is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixElo is shown under your name.
+- **A board that feels like the handhelds:** the row and column you draw in light up into the clues, a counter shows the length of the block you're drawing, clue numbers grey out only when their block is certainly done, logic hints (💡) turn a clue blue when its line gives away a new cell, and your own marks stay while you fill and cross the rest.
+- **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
+- **A daily nonogram** (15 a day from all your games) and a **Random** button.
+- **The games' own music**, every song of every game, with a sound test to choose where each plays.
+- **An interactive tutorial** for nonograms and Mega, an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have.
+- **Your progress is never lost:** paused puzzles, best times per difficulty, medals, profiles with their own saves.
+- **Your own server (optional):** progress and settings on all your devices, packs shared within your family or friends, and high scores for up to 10 players.
 
 ## Supported games
 
-**Options → Puzzle packs → Add games or packs**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
-MomoGram finds the puzzles and makes one pack per game, with the original level structure and the puzzle
-names where the game has them. Regional versions of the same game become **one** pack with every
-language's names. **Add a folder (everything in it)** takes a whole folder with its subfolders: every ROM,
-archive, `.momopack` and Switch RomFS folder in it is read and stored one game at a time. The same song in
-several games is kept only once on the device. Do it once: export the packs, or keep them on your server, and use them on every device.
+**Options → Puzzle packs → Add games or packs** reads game files you own (raw, or in `.zip` / `.7z` / `.rar`), or a whole folder with everything in it. MomoGram makes one pack per game, with the original level structure; regional versions of a game become **one** pack with every language's names, and the same song in several games is stored only once. Do it once: export the packs, or keep them on your own server, and use them on every device.
 
-| Game | Platform | Puzzles | Music & colours |
-|---|---|---|---|
-| Picross DS (full game and the Download Station / Nintendo Channel demos) | DS | ✓ all modes and levels, solved-picture animations, daily puzzles | ✓ the game's own (title, nine in-game styles, clear jingle) |
-| Picross e, e2–e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross, Sanrio Characters Picross | 3DS (decrypted) | ✓ | ✓ the game's music, colours from its icon |
-| Mario's Picross | Game Boy | ✓ Easy, Kinoko, Star, Time Trial | ✓ the game's music (emulated), Super Game Boy colours |
-| Picross 2 | Game Boy | ✓ as 15×15 sections | ✓ the game's music (emulated), Super Game Boy colours |
-| Pokémon Picross (prototype) | Game Boy Color | ✓ all 217 stages (main game incl. Mew, Safari Zone); 20×20 and 30×30 pictures as their four sections | ✓ the game's music (emulated); colours in progress |
-| Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | ✓ the game's music (emulated) |
-| Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | ✓ the game's music (emulated) |
-| Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | ✓ all puzzles of each volume, in sets of twelve (tested with Vol. 1: 120 puzzles) | ✓ the game's own music (emulated) |
-| Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and Illust Logic + Nihon no Mukashi Banashi (DSiWare) | DS / DSiWare (Hudson) | ✓ 300 / 300 / 200 / 200 puzzles with coloured solved pictures; Vol. 6 with the answers' names (colour puzzles: later) | ✓ the game's music |
-| DS Puzzler: Nanpure Fan & Oekaki Logic, Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS (Success) | ✓ 500 picture logic puzzles each, in ten levels, with names (Challenge Me: five languages) | ✓ the game's music |
-| Illu-Logi VOW | DS (Success) | ✓ the 139 normal puzzles (colour puzzles: later) | ✓ the game's music |
-| Hello Kitty no Paku Paku & Logic | DS | ✓ all 122 logic puzzles | ✓ the game's music |
-| SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle (1, 2) | DS | ✓ 1,400 puzzles each (colour pictures, played as nonograms), names | ✓ the game's music |
-| Puzzle Mate DS: Oekaki Mate | DS | ✓ 443 puzzles up to 45×50, names (the 11 colour puzzles not yet) | ✓ the game's music |
-| Puzzle Iro Iro: Gekkan Crossword House Vol. 1–6 | DSiWare | ✓ the three 30×35 picture logic puzzles of each issue | ✓ the game's music |
-| PICROSS S, S2–S9, S GENESIS & Master System, S Doraemon & F Characters, Lord of the Nazarick, LogiartGrimoire, Kemono Friends Picross, Raden's Guide for Pixel Museum | Switch (decrypted RomFS folder, or a zip of it) | ✓ the normal puzzles (150–281 per game), names in up to seven languages (Mega Picross reuses the same pictures; clip and colour puzzles: later) | ✓ the game's music (FMOD Vorbis, rebuilt as Ogg) |
-| PICROSS S+ | Switch | ✓ all of Picross e – e9, merged with the 3DS packs of the same games (your progress stays), and its own 30 puzzles | ✓ the Switch versions of the e-series music |
+The numbers below are what MomoGram reads from the games (all regions together where there are several):
 
-Other nonogram games are added one by one (see the table). To add a game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
+### Nintendo DS and DSiWare
 
-### Sound emulation (Game Boy, Super Famicom, Satellaview)
+| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
+|---|---:|---:|---|:---:|---:|---|
+| Picross DS | 351 | – | ✓ 7 languages | – | 27 | solved-picture animations, daily puzzles |
+| Picross DS demos (Download Station, Nintendo Channel) | 15 | – | ✓ JA | – | – |  |
+| Puzzle Series Vol. 6: Illust Logic | 300 | – | ✓ JA | ✓ | 11 |  |
+| Illust Logic DS + Colorful Logic | 300 | – | – | ✓ | 23 | colour puzzles: later |
+| Illust Logic (DSiWare) | 200 | – | – | ✓ | 23 |  |
+| Illust Logic + Nihon no Mukashi Banashi (DSiWare) | 200 | – | – | ✓ | 23 |  |
+| DS Puzzler: Nanpure Fan & Oekaki Logic / Challenge Me: Brain Puzzles | 500 | – | ✓ 6 languages | – | 3 |  |
+| DS Puzzler Wi-Fi Taiou | 500 | – | ✓ JA | – | 4 |  |
+| Illu-Logi VOW | 139 | – | – | – | 40 | colour puzzles: later |
+| Hello Kitty no Paku Paku & Logic | 122 | – | – | – | 4 |  |
+| SIMPLE DS Vol. 7: THE Illust Puzzle | 1,401 | – | ✓ JA | ✓ | 9 | colour pictures, played as nonograms |
+| SIMPLE DS Vol. 28: THE Illust Puzzle 2 | 1,400 | – | ✓ JA | ✓ | 8 | colour pictures, played as nonograms |
+| Puzzle Mate DS: Oekaki Mate | 443 | – | ✓ JA | – | 4 | up to 45×50; 11 colour puzzles: later |
+| Puzzle Iro Iro Vol. 1 (DSiWare) | 3 | – | – | – | 6 |  |
+| Puzzle Iro Iro Vol. 2 (DSiWare) | 3 | – | – | – | 6 |  |
+| Puzzle Iro Iro Vol. 3 (DSiWare) | 3 | – | – | – | 6 |  |
+| Puzzle Iro Iro Vol. 4 (DSiWare) | 3 | – | – | – | 6 |  |
+| Puzzle Iro Iro Vol. 5 (DSiWare) | 3 | – | – | – | 6 |  |
+| Puzzle Iro Iro Vol. 6 (DSiWare) | 3 | – | – | – | 6 |  |
+| **Total** | **5,889** | **0** | | | **215** | |
 
-The Game Boy and Super Famicom games have no recorded music, only a sound program, so MomoGram runs that
-program on emulated hardware, in an AudioWorklet (`worklet.js`, off the main thread; a ScriptProcessor fallback
-for old browsers). Everything is MomoGram's own code, written from the public hardware documentation (Pan Docs /
-gbdev.io for the Game Boy, fullsnes and anomie's documents for the SPC700, S-DSP and 65C816). No boot ROMs and
-no game data are included.
+### Nintendo 3DS (decrypted)
 
-- **Game Boy / Game Boy Color** (`src/audio/gb/`): Sharp LR35902 CPU with MBC1/3/5 banking, timer, interrupts
-  and LCD timing; the APU with both pulse channels (sweep), wave, noise, frame sequencer and the output
-  high-pass filter. Jupiter's games use Toshiyuki Ueno's "DSEQ" sound driver; MomoGram finds its two wrapper
-  routines by byte pattern and calls them like a GBS player (start song, then the update routine at 59.7 Hz).
-  A pack keeps only bank 0 and the driver banks of your ROM (32–48 KB).
-- **Super Famicom / Satellaview** (`src/audio/snes/`): SPC700 with timers and I/O, the S-DSP (BRR decoding,
-  4-point interpolation, ADSR / GAIN, noise, pitch modulation, 8-tap FIR echo, 32 kHz) and, for pack creation
-  only, a 65C816 with the parts of the console a game touches while starting. The boot-ROM upload protocol is
-  emulated instead of included. When you create a pack, your ROM boots until the game has loaded its sound
-  driver, then the game's own play-song routine is called for every song of the game, and a compressed snapshot
-  of the sound system (about 1 MB) is stored with the pack. Playback runs the SPC700 / S-DSP from there.
+| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
+|---|---:|---:|---|:---:|---:|---|
+| Picross e | 150 | 150 (with PICROSS S+) | ✓ 7 languages | – | 5 |  |
+| Picross e2 | 150 | 150 (with PICROSS S+) | ✓ 7 languages | – | 7 |  |
+| Picross e3 | 150 | 150 (30 Mega-only) (all with S+) | ✓ 7 languages | – | 4 |  |
+| Picross e4 | 150 | 150 (63 Mega-only) (all with S+) | ✓ 7 languages | – | 4 |  |
+| Picross e5 | 150 | 150 (48 Mega-only) (all with S+) | ✓ 7 languages | – | 4 |  |
+| Picross e6 | 152 | 152 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
+| Picross e7 | 150 | 165 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
+| Picross e8 | 150 | 165 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
+| Picross e9 | 150 | 165 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
+| Pokémon Picross | 311 | 313 (3 Mega-only) | ✓ JA | – | 22 |  |
+| Club Nintendo Picross | 90 | – | ✓ JA | – | 4 |  |
+| Club Nintendo Picross Plus | 105 | 48 (48 Mega-only) | ✓ JA | – | 5 |  |
+| My Nintendo Picross: Zelda TP | 50 | 45 (1 Mega-only) | ✓ JA | – | 8 |  |
+| Sanrio Characters Picross | 154 | 153 (1 Mega-only) | ✓ EN, JA | – | 5 |  |
+| **Total** | **2,062** | **1,956** | | | **88** | |
 
-All songs a game has are stored with its pack and listed in the sound test (Options); the column on the right is
-where MomoGram plays them by default. You can change that per song in the sound test, or switch songs off.
+### Nintendo Switch (decrypted RomFS folder, or a zip of it)
 
-| Game | Songs | Played by default for |
+| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
+|---|---:|---:|---|:---:|---:|---|
+| PICROSS S | 150 | 150 | ✓ 6 languages | – | 8 |  |
+| PICROSS S2 | 150 | 150 | ✓ 6 languages | – | 14 |  |
+| PICROSS S3 | 150 | 150 | ✓ 6 languages | – | 16 |  |
+| PICROSS S4 | 155 | 150 | ✓ 6 languages | – | 16 |  |
+| PICROSS S5 | 155 | 150 | ✓ 6 languages | – | 17 |  |
+| PICROSS S6 | 155 | 150 | ✓ 6 languages | – | 17 |  |
+| PICROSS S7 | 155 | 150 | ✓ 6 languages | – | 17 |  |
+| PICROSS S8 | 155 | 150 | ✓ 7 languages | – | 17 |  |
+| PICROSS S+ (own puzzles; its e1–e9 go into the e packs) | 30 | 30 | ✓ 7 languages | – | 20 |  |
+| PICROSS S GENESIS & Master System Edition | 150 | 150 | ✓ 6 languages | – | 16 |  |
+| PICROSS S Doraemon & F Characters Edition | 155 | 150 | ✓ 7 languages | – | 16 |  |
+| Kemono Friends Picross | 150 | 150 | ✓ 6 languages | – | 14 |  |
+| Picross Lord of the Nazarick | 81 | 81 | ✓ 6 languages | – | 23 |  |
+| Picross -LogiartGrimoire- | 281 | – | ✓ 7 languages | – | 14 |  |
+| Picross Juufuutei Raden’s Guide for Pixel Museum | 150 | – | ✓ EN, JA | – | 12 |  |
+| **Total** | **2,222** | **1,761** | | | **237** | |
+
+### Game Boy, Super Famicom and Satellaview
+
+| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
+|---|---:|---:|---|:---:|---:|---|
+| Mario’s Picross | 268 | – | – | – | 19 | Super Game Boy colours |
+| Picross 2 | 836 | – | – | – | 28 | as 15×15 sections; Super Game Boy colours |
+| Pokémon Picross (GBC prototype) | 490 | – | – | – | 36 | 20×20 and 30×30 as sections |
+| Mario no Super Picross | 304 | – | – | – | 24 |  |
+| Picross NP Vol. 1 | 120 | – | – | – | 21 |  |
+| Picross NP Vol. 2 | 120 | – | – | – | 21 |  |
+| Picross NP Vol. 3 | 120 | – | – | – | 21 |  |
+| Picross NP Vol. 4 | 120 | – | – | – | 21 |  |
+| Picross NP Vol. 5 | 120 | – | – | – | 21 |  |
+| Picross NP Vol. 6 | 240 | – | – | – | 21 |  |
+| Picross NP Vol. 7 | 240 | – | – | – | 21 |  |
+| Picross NP Vol. 8 | 240 | – | – | – | 21 |  |
+| Tamori no Picross | 93 | – | – | – | 17 | broadcasts merged into one pack |
+| **Total** | **3,311** | **0** | | | **292** | |
+
+**All supported games together: 13,484 nonograms, 3,717 Mega puzzles with the games' own Mega numbers (Mega-only puzzles included), and 832 songs.** Every other puzzle can be played as Mega too, with Mega numbers chosen by MomoGram.
+
+To add another game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
+
+### Music
+
+Every song a game has is stored with its pack and listed in the sound test (Options), where you choose which songs play on the title, in the menus, while solving and on the clear screen, or switch songs off. How the music is played:
+
+| Platform | Source | How MomoGram plays it |
 |---|---|---|
-| Mario's Picross | 19 (1–$13) | title, menu, two puzzle tracks, clear jingle |
-| Picross 2 | 28 (1–$1C) | title, menu, two puzzle tracks, clear jingle |
-| Pokémon Picross (prototype) | 36 ($01–$19, $81–$8B) | title, menu, puzzle, clear jingle |
-| Mario no Super Picross | 24 ($00–$19, bit 6 = looping) | title, menu, puzzle, clear jingle |
-| Picross NP Vol. 1–8 | 17–24 (same engine; silent numbers left out) | title, menu, two puzzle tracks, clear jingle |
-| Tamori no Picross | 17 (same engine) | title, menu, two puzzle tracks, clear jingle |
+| DS / DSiWare | the game's SDAT sound archive | MomoGram's own SSEQ sequencer with the game's instruments |
+| 3DS | BCSTM streams | DSP-ADPCM decoded in the browser |
+| Switch | FMOD sound banks (FSB5) | the Vorbis streams rebuilt as Ogg files |
+| Game Boy / Game Boy Color | the game's sound program | emulated sound hardware (CPU and APU), only the sound banks are kept |
+| Super Famicom / Satellaview | the game's sound program | emulated SPC700 and S-DSP, from a snapshot taken when the pack is made |
 
-Which song plays where was found by tracing the songs each game requests on its own screens (and its puzzle
-music table); clear jingles were picked by their length where the game could not be traced to that screen.
-Audio was checked numerically only (level, silence, loop and end detection). Known gaps: the combined Satellaview dump
-"Tamori no Picross (8-13) + Bakushow …" has its sound library in an unexpected place and gets no music; the
-S-DSP is sample-accurate rather than cycle-accurate and its interpolation kernel is computed, not the console's
-table, so it sounds very close but not bit-identical.
+The Game Boy and Super Famicom games have no recorded music, only a sound program, so MomoGram runs that program on emulated hardware, in an AudioWorklet off the main thread. Everything is MomoGram's own code, written from the public hardware documentation (Pan Docs / gbdev.io, fullsnes and anomie's documents); no boot ROMs and no game data are included.
+
+<details>
+<summary>Details of the sound emulation</summary>
+
+- **Game Boy / Game Boy Color** (`src/audio/gb/`): Sharp LR35902 CPU with MBC1/3/5 banking, timer, interrupts and LCD timing; the APU with both pulse channels (sweep), wave, noise, frame sequencer and the output high-pass filter. Jupiter's games use Toshiyuki Ueno's "DSEQ" sound driver; MomoGram finds its wrapper routines by byte pattern and calls them like a GBS player. A pack keeps only bank 0 and the driver banks of your ROM (32–48 KB).
+- **Super Famicom / Satellaview** (`src/audio/snes/`): SPC700 with timers and I/O, the S-DSP (BRR decoding, 4-point interpolation, ADSR / GAIN, noise, pitch modulation, 8-tap FIR echo, 32 kHz) and, for pack creation only, a 65C816 with the parts of the console a game touches while starting. When you create a pack, your ROM boots until the game has loaded its sound driver, then the game's own play-song routine is called for every song, and a compressed snapshot of the sound system (about 1 MB) is stored with the pack.
+- Which song plays where was found by tracing the songs each game requests on its own screens. The S-DSP is sample-accurate rather than cycle-accurate, so it sounds very close but not bit-identical.
+</details>
 
 ### Why puzzles can be recognised by their picture
 
@@ -223,7 +265,7 @@ If you want to, you can run a small server on your own web space (PHP with MySQL
 | Fill | tap / drag (stays on its row or column) | `Z` / Space, hold and move to paint | A |
 | Cross out | ✕ tool, or right click | `X` | B |
 | Move | | arrows / WASD | D-pad |
-| Zoom | pinch, wheel, 🔍 | `C` | Y |
+| Zoom / move | pinch (stepless), two fingers to move, wheel, 🔍 (hold and move to look around) | `C` | Y |
 | Mark | ⬚ (third tool) | | |
 | Undo | ↶ | `U`, Ctrl+Z | L |
 | Try it out (Hard) | ✎ | | R |
