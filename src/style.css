@@ -666,3 +666,4 @@ body.dark .player-card { border-color: #4a5563; }
 .ms-dots { display: inline-flex; gap: 3px; }
 .ms-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); }
 .ms-dots i.on { background: #fff; }
+.fastest .medal { width: 1em; height: 1em; margin-left: .3em; vertical-align: -2px; display: inline-block; }

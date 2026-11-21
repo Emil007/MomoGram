@@ -316,7 +316,7 @@ export function formatTime(ms: number): string {
 export interface LineInfo {
   /** the marks fit the clue at all */
   feasible: boolean;
-  /** per clue number: its block is certainly in place, completely filled and closed off (or the line is complete) */
+  /** per clue number: its block is certainly in place, the only place left and completely filled (or the line is complete) */
   done: boolean[];
   /** some empty cell is forced (filled or crossed) by this line's clue and marks alone */
   progress: boolean;
@@ -385,9 +385,9 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
       starts++; only = s;
       for (let i = s; i < s + c; i++) canFill[i] = 1;
     }
-    // certain: the only place left, completely filled, and closed off on both sides (edge or ✕), so no
-    // fill added next to it could still belong to it
-    done[k] = starts === 1 && pf[only + c] - pf[only] === c && (only === 0 || cross(only - 1)) && (only + c === n || cross(only + c));
+    // certain: the only place this block can still be, and it is completely filled (like Picross DS, no ✕ needed
+    // around it: the cells next to it can only stay empty)
+    done[k] = starts === 1 && pf[only + c] - pf[only] === c;
   }
   // the filled cells are exactly the clue: the whole line is done (the open cells can only stay empty)
   {
@@ -417,13 +417,12 @@ export function analyzeColorLine(clues: ColorClue[], cells: number[], colors: nu
   const done = clues.map(() => false);
   if (!r.ok) return { feasible: false, done, progress: false };
   const filledAs = (i: number, c: number) => cells[i] === FILL && colors[i] === c;
-  const closed = (i: number, c: number) => i < 0 || i >= n || cells[i] === CROSS || (cells[i] === FILL && colors[i] !== c);
   clues.forEach((cl, k) => {
     const s = r.only[k];
     if (s < 0) return;
     let full = true;
     for (let i = s; i < s + cl.n; i++) if (!filledAs(i, cl.c)) full = false;
-    done[k] = full && closed(s - 1, cl.c) && closed(s + cl.n, cl.c);
+    done[k] = full;
   });
   // the filled cells are exactly the clue: the whole line is done
   const got = colorClues(cells.map((v, i) => (v === FILL ? colors[i] + 1 : 0)));

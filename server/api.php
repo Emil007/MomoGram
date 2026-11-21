@@ -211,7 +211,9 @@ switch ($a) {
           // the best time under the strictest rules it was played with
           $pick = null;
           foreach (($v['times'] ?? []) as $rules => $ms) if (is_numeric($ms) && isset($rank[$rules]) && ($pick === null || [$rank[$rules], $ms] < [$rank[$pick[1]], $pick[0]])) $pick = [(int)$ms, $rules];
-          if ($pick === null && isset($v['best']) && is_numeric($v['best'])) $pick = [(int)$v['best'], ''];
+          // older progress has no times per rules: its medal tells which rules it was played with
+          $byMedal = ['bronze' => 'easy', 'silver' => 'normal', 'gold' => 'free', 'platinum' => 'free'];
+          if ($pick === null && isset($v['best']) && is_numeric($v['best'])) $pick = [(int)$v['best'], $byMedal[$v['medal'] ?? ''] ?? ''];
           $medal = (!empty($v['medal']) && isset($x['medals'][$v['medal']])) ? $v['medal'] : '';
           if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1], $medal]; $x['time'] += $pick[0]; }
           unset($x);

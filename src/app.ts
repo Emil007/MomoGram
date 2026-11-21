@@ -841,16 +841,18 @@ function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
   // times under stricter rules come first: a fast Easy time doesn't beat a Hard one
   list.sort((a, b) => (RULE_RANK[a[2] ?? ''] ?? 3) - (RULE_RANK[b[2] ?? ''] ?? 3) || a[1] - b[1]);
   return h('p', { class: 'fastest' }, '🏆 ' + t('fastest') + ': ',
-    ...list.slice(0, 3).map(([n, ms, r, m], k) => h('span', { class: n === me.name ? 'me' : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
-      r ? h('i', { class: 'rule-tag r-' + r, title: rulesName(r as PlayRules) }, rulesName(r as PlayRules).slice(0, 1)) : null,
-      m ? medalEl(m as Medal) : null)));
+    // the medal says how it was played (bronze Easy, silver Normal, gold and platinum Hard)
+    ...list.slice(0, 3).map(([n, ms, r, m], k) => h('span', { class: n === me.name ? 'me' : '', title: r ? rulesName(r as PlayRules) : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
+      m ? medalEl(m as Medal) : r ? h('i', { class: 'rule-tag r-' + r }, rulesName(r as PlayRules).slice(0, 1)) : null)));
 }
 const RULE_RANK: Record<string, number> = { free: 0, hard: 0, normal: 1, easy: 2 };
 /** a puzzle's best time under the strictest rules it was solved with (older progress: its best time, rules unknown) */
 function strictestTime(p: { best?: number; times?: Partial<Record<string, number>> }): [number, string] | null {
   let pick: [number, string] | null = null;
   for (const [r, ms] of Object.entries(p.times ?? {})) if (ms !== undefined && (!pick || (RULE_RANK[r] ?? 3) < (RULE_RANK[pick[1]] ?? 3) || ((RULE_RANK[r] ?? 3) === (RULE_RANK[pick[1]] ?? 3) && ms < pick[0]))) pick = [ms, r];
-  return pick ?? (p.best !== undefined ? [p.best, ''] : null);
+  // older progress has no times per rules: its medal tells which rules it was played with
+  const medal = (p as { medal?: string }).medal;
+  return pick ?? (p.best !== undefined ? [p.best, medal ? RULES_OF[medal] ?? '' : ''] : null);
 }
 
 /**
