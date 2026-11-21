@@ -68,10 +68,12 @@ export class BoardView {
   cursorY = 0;
   showCursor = false;
   private mistakeFlash = new Map<number, number>();
+  /** mark every wrong cell (a fill outside the picture, a ✕ on it) while this is on */
+  showWrong = false;
   // stroke state
   private stroke: null | { x0: number; y0: number; axis: 0 | 1 | 2; value: Cell; erase: Cell; pointer: number } = null;
   private pointers = new Map<number, { x: number; y: number }>();
-  private pinch: null | { d: number; cell: number; cx: number; cy: number; sx: number; sy: number } = null;
+  private pinch: null | { d: number; cell: number; cx: number; cy: number; sx: number; sy: number; gx?: number; gy?: number } = null;
   private raf = 0;
   private dirty = true;
 
@@ -299,7 +301,10 @@ export class BoardView {
       // second finger: cancel the stroke, start pinch / pan
       if (this.stroke) { this.board.undo(); this.stroke = null; this.dirty = true; }
       const [a, b] = [...this.pointers.values()];
-      this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cell: this.cell, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, sx: this.scrollX, sy: this.scrollY };
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      // the grid point between the fingers stays between them while they move apart, together or around
+      this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cell: this.cell, cx, cy, sx: this.scrollX, sy: this.scrollY,
+        gx: (cx - this.padX - this.clueW + this.scrollX) / this.cell, gy: (cy - this.padY - this.clueH + this.scrollY) / this.cell };
       return;
     }
     if (this.pointers.size > 2) return;
@@ -328,9 +333,13 @@ export class BoardView {
         const [a, b] = [...this.pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-        this.scrollX = this.pinch.sx - (cx - this.pinch.cx);
-        this.scrollY = this.pinch.sy - (cy - this.pinch.cy);
-        this.setZoom(this.pinch.cell * (d / Math.max(1, this.pinch.d)), cx, cy);
+        // stepless: the cell size follows the finger distance exactly
+        this.cell = Math.max(this.fitCell, Math.min(64, this.pinch.cell * (d / Math.max(1, this.pinch.d))));
+        this.updateClueArea();
+        this.scrollX = (this.pinch.gx ?? 0) * this.cell - (cx - this.padX - this.clueW);
+        this.scrollY = (this.pinch.gy ?? 0) * this.cell - (cy - this.padY - this.clueH);
+        this.clampScroll();
+        this.dirty = true;
       } else {
         this.scrollX = this.pinch.sx - (p.x - this.pinch.cx);
         this.scrollY = this.pinch.sy - (p.y - this.pinch.cy);
@@ -356,6 +365,17 @@ export class BoardView {
     this.cursorX = tx; this.cursorY = ty;
     if (this.zoomed) this.ensureVisible(tx, ty); // follow a stroke that leaves the visible part
     this.dragLen = Math.abs(b - a) + 1;
+    // filling: count the whole block in this line the stroke is part of (filled cells already next to it too)
+    if (s.value === FILL && this.stroke) {
+      const at = (i: number) => s.axis === 1 ? this.board.at(i, s.y0) : this.board.at(s.x0, i);
+      const n = s.axis === 1 ? this.board.w : this.board.h;
+      let lo = Math.min(a, b), hi = Math.max(a, b);
+      if ([...Array(hi - lo + 1)].every((_, k) => at(lo + k) === FILL)) {
+        while (lo > 0 && at(lo - 1) === FILL) lo--;
+        while (hi < n - 1 && at(hi + 1) === FILL) hi++;
+        this.dragLen = hi - lo + 1;
+      }
+    }
     this.dragAt = { x: p.x, y: p.y };
     this.dirty = true;
   }
@@ -470,8 +490,10 @@ export class BoardView {
     const dp = Math.max(1, Math.round(cs * dpr / 14));
     const pat = (a: string, c: string) => { const p = this.dither(a, c, dp); if (typeof p !== 'string') p.setTransform(new DOMMatrix().scale(1 / dpr)); return p; };
     const now = performance.now();
-    const cueX = this.showCursor || this.spin ? (this.spin ? this.spin.col : this.cursorX) : -1;
-    const cueY = this.showCursor || this.spin ? (this.spin ? this.spin.row : this.cursorY) : -1;
+    // the row and column being drawn in (or where the cursor is) are marked, clues included, like on the DS
+    const cue = this.showCursor || this.spin || this.stroke;
+    const cueX = cue ? (this.spin ? this.spin.col : this.cursorX) : -1;
+    const cueY = cue ? (this.spin ? this.spin.row : this.cursorY) : -1;
 
     // ---- clue areas: flat (with a line every 5, like the grid) or alternating stripes that fade out
     if (T.clueBands === 'flat' || T.clueBands === 'stripes') {
@@ -577,6 +599,18 @@ export class BoardView {
     const g5 = Math.max(1.5, cs * (T.grid5Width ?? 1 / 12));
     for (let x = vx0; x <= vx1; x++) if (x % 5 === 0 && x > 0 && x < b.w) ctx.fillRect(ox + x * cs - g5 / 2, oy + vy0 * cs, g5, (vy1 - vy0) * cs);
     for (let y = vy0; y <= vy1; y++) if (y % 5 === 0 && y > 0 && y < b.h) ctx.fillRect(ox + vx0 * cs, oy + y * cs - g5 / 2, (vx1 - vx0) * cs, g5);
+    if (this.showWrong) {
+      ctx.save();
+      ctx.strokeStyle = T.mistake; ctx.lineWidth = Math.max(2, cs / 8);
+      for (let y = vy0; y < vy1; y++) for (let x = vx0; x < vx1; x++) {
+        const i = y * b.w + x, v = b.cells[i];
+        if ((v === FILL && !b.solution[i]) || (v === CROSS && b.solution[i])) {
+          ctx.fillStyle = T.mistake; ctx.globalAlpha = 0.35; ctx.fillRect(ox + x * cs, oy + y * cs, cs, cs);
+          ctx.globalAlpha = 1; ctx.strokeRect(ox + x * cs + ctx.lineWidth / 2, oy + y * cs + ctx.lineWidth / 2, cs - ctx.lineWidth, cs - ctx.lineWidth);
+        }
+      }
+      ctx.restore();
+    }
     // roulette / cursor beams over the grid
     if (cueY >= 0) {
       ctx.fillStyle = this.spin?.flash ? 'rgba(255, 200, 60, 0.7)' : this.spin ? T.roulette : T.hl;

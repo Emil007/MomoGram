@@ -364,12 +364,19 @@ function libraryPacks(includeHidden = false): Pack[] {
   return allPacks().filter(p => includeHidden || !pr.hidden.includes(p.id)).sort((a, b) => idx(a.id) - idx(b.id));
 }
 
+/** Mega mode: a small glowing dot on games (and folders) whose Mega puzzles come from the game itself */
+const hasGameMega = (p: Pack) => p.levels.some(l => l.puzzles.some(z => z.mega));
+function megaOrb(packs: Pack[]): HTMLElement | null {
+  if (curMode() !== 'mega' || !packs.some(hasGameMega)) return null;
+  return h('span', { class: 'mega-orb', title: t('megaFromGameHelp'), 'aria-label': t('megaFromGame') });
+}
+
 function gameCard(p: Pack, onOpen: () => void): HTMLElement {
   const [a, b] = countPack(p);
   const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
   // the icon sits in a row with the system and year (like the icons of a folder), so the title has the full width
   return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
-    h('b', {}, pickAny(p.title, packLang())),
+    h('b', {}, pickAny(p.title, packLang()), megaOrb([p])),
     h('div', { class: 'game-meta' }, hasIcon(p) ? iconCanvas(p.icon!) : null,
       h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : ''))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
@@ -424,7 +431,7 @@ function renderLibrary(el: HTMLElement, folder: string | null) {
     }
     el.append(wrap);
   }
-  if (libEdit && folder === null) el.append(h('div', { class: 'lib-group' }, h('span', {}, t('groupBy')),
+  if (libEdit && folder === null) el.prepend(h('div', { class: 'lib-group' }, h('span', {}, t('groupBy')),
     ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))),
     h('div', { class: 'lib-group' }, h('span', {}, t('viewAs')),
       ...(['cards', 'tiles', 'list'] as const).map(m => h('button', { class: 'tab' + ((pr.view ?? 'cards') === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, view: m }); renderLibrary(el, folder); } }, t('view_' + m)))));
@@ -462,7 +469,7 @@ function folderCard(key: string, packs: Pack[]): HTMLElement {
   let a = 0, b = 0;
   for (const p of packs) { const [x, y] = countPack(p); a += x; b += y; }
   return h('button', { class: 'btn game folder', onClick: () => folderScreen(key) },
-    h('b', {}, key), h('small', {}, t('gamesCount', { n: packs.length })),
+    h('b', {}, key, megaOrb(packs)), h('small', {}, t('gamesCount', { n: packs.length })),
     h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => hasIcon(p) ? iconCanvas(p.icon!) : h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })));
@@ -624,7 +631,9 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     h('div', { class: 'stats' },
       stat(t('size'), `${pz.width}×${pz.height}`),
       stat(t('level'), h('span', { class: 'diff d' + puzzleLevel(pz) }, t('diff' + puzzleLevel(pz)))),
-      stat(t('best'), pr.best !== undefined ? formatTime(pr.best) : '–'),
+      // the par time: what a 1000 PixElo player needs (beating it raises your PixElo and gives the speed bonus)
+      h('div', { class: 'stat', title: t('parHelp') }, h('small', {}, t('best')), h('b', {}, pr.best !== undefined ? formatTime(pr.best) : '–'),
+        h('small', { class: 'par' }, 'Par ' + formatTime(puzzleRating(pz.rows, curMode() === 'mega').par * 1000))),
       stat(t('medal'), pr.medal ? medalEl(pr.medal, true) : '–')),
     fastestRow(pack.id, pz.id),
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
@@ -1195,6 +1204,9 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // medal: bronze on Easy, silver on Normal, gold on Hard, platinum on Hard without logic hints. Whether hints
   // were on at any moment of this puzzle is kept (with the saved board too), not only whether they are on at the end.
   let usedHints = logicOn || !!restore?.usedHints;
+  // "show mistakes" (Normal and Hard): marks wrong cells, the medal is bronze from then on
+  let usedWrong = !!(restore as any)?.usedWrong;
+  view.showWrong = usedWrong && !!(restore as any)?.wrongOn;
   // roulette spins (PixElo counts each as extra time)
   let roulette = (restore as any)?.roulette ?? 0;
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
@@ -1281,7 +1293,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // keyboard & gamepad
   let held: number | null = null; // painting value while A/B is held
   const key = (e: KeyboardEvent) => {
-    if (document.querySelector('.modal')) return;
+    // Esc that just closed a window (the menu) must not open the menu again
+    if (e.defaultPrevented || document.querySelector('.modal')) return;
     const k = e.key;
     const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
     if (dirs[k]) { e.preventDefault(); view.moveCursor(dirs[k][0], dirs[k][1], held as any); return; }
@@ -1308,7 +1321,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   /** keep the board as it is, to come back to (pause menu, or when the app is put away) */
   function keepBoard() {
     if (finished) return;
-    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints, roulette } as any,
+    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints, roulette, usedWrong, wrongOn: view.showWrong } as any,
       puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title });
   }
   const onHide = () => { if (document.visibilityState === 'hidden' && board.elapsedMs > 0) keepBoard(); };
@@ -1353,6 +1366,11 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
           }),
           btn('⏭ ' + t('musicNext'), () => { if (!settings.music) { settings.music = true; saveSettings(); } playMusicFor(pack); setTimeout(draw, 30); })));
         box.append(btn('💡 ' + (logicOn ? t('logicOff') : t('logicOnBtn')) + (rules === 'free' && !usedHints && !logicOn ? ' · ' + t('noPlatinum') : ''), async () => { await setLogic(!logicOn); draw(); }));
+        if (rules !== 'easy') box.append(btn('🔍 ' + (view.showWrong ? t('wrongOff') : t('wrongOn')) + (!usedWrong ? ' · ' + t('onlyBronze') : ''), async () => {
+          if (!view.showWrong && !usedWrong && !(await confirmBox(t('wrongAsk'), t('wrongYes')))) return;
+          view.showWrong = !view.showWrong; if (view.showWrong) usedWrong = true;
+          view.invalidate(); draw();
+        }));
         box.append(btn(t('restart'), () => { end(); cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }));
         box.append(btn(t('endGame'), async () => {
           end();
@@ -1394,19 +1412,21 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     if (roleSongs(pack.theme, 'clear').length && settings.packMusic) usePack(pack, 'clear', false);
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
-    const medal: Medal = rules === 'easy' ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
+    const medal: Medal = rules === 'easy' || usedWrong ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
     // points and PixElo (the first solve under these rules is rated); a daily puzzle counts in its own game
     const mode = curMode(), mega = pz.id.endsWith(MEGA);
+    // shown mistakes: counts like Easy (bronze, rated and timed under Easy)
+    const rr = usedWrong ? 'easy' : rules;
     const { pr, par } = puzzleRating(pz.rows, mega);
     const before = localStats(mode);
     const extra = {
-      rated: { pr, s: perfScore(board.totalMs, par, rules as RatedRules, { logic: usedHints, roulette }) },
+      rated: { pr, s: perfScore(board.totalMs, par, rr as RatedRules, { logic: usedHints, roulette }) },
       pts: (p: { medal?: Medal; times?: Partial<Record<string, number>> }) => points(pz.rows, mega, p.medal, p.times?.[RULES_OF[p.medal ?? 'bronze']], par),
     };
     const target = pz.origin ? [pz.origin.slice(0, pz.origin.lastIndexOf('/')), pz.origin.slice(pz.origin.lastIndexOf('/') + 1)] : [pack.id, pz.id];
-    const wasRated = !!getProgress(target[0], target[1]).rated?.[rules as RatedRules];
-    let newMedal = recordClear(target[0], target[1], board.totalMs, under, medal, rules, extra);
-    if (pz.origin) newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rules) || newMedal;
+    const wasRated = !!getProgress(target[0], target[1]).rated?.[rr as RatedRules];
+    let newMedal = recordClear(target[0], target[1], board.totalMs, under, medal, rr, extra);
+    if (pz.origin) newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rr) || newMedal;
     const after = localStats(mode);
     clearBoard(pack.id, lv.id, pz.id);
     cleanup();

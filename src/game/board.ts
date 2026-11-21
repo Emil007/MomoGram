@@ -261,7 +261,7 @@ export function formatTime(ms: number): string {
 export interface LineInfo {
   /** the marks fit the clue at all */
   feasible: boolean;
-  /** per clue number: its block is certainly in place and completely filled */
+  /** per clue number: its block is certainly in place, completely filled and closed off (or the line is complete) */
   done: boolean[];
   /** some empty cell is forced (filled or crossed) by this line's clue and marks alone */
   progress: boolean;
@@ -330,7 +330,17 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
       starts++; only = s;
       for (let i = s; i < s + c; i++) canFill[i] = 1;
     }
-    done[k] = starts === 1 && pf[only + c] - pf[only] === c;
+    // certain: the only place left, completely filled, and closed off on both sides (edge or ✕), so no
+    // fill added next to it could still belong to it
+    done[k] = starts === 1 && pf[only + c] - pf[only] === c && (only === 0 || cross(only - 1)) && (only + c === n || cross(only + c));
+  }
+  // the filled cells are exactly the clue: the whole line is done (the open cells can only stay empty)
+  {
+    const runs: number[] = [];
+    let r = 0;
+    for (let i = 0; i < n; i++) { if (fill(i)) r++; else if (r) { runs.push(r); r = 0; } }
+    if (r) runs.push(r);
+    if (runs.length === K && runs.every((v, i) => v === cl[i])) done.fill(true);
   }
   for (let i = 0; i < n; i++) {
     if (fill(i)) continue;

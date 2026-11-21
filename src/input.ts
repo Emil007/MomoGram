@@ -120,7 +120,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     moveFocus(...m[e.key]);
   }
-  if (e.key === 'Escape' && (!play || document.querySelector('.modal'))) Gamepads.back();
+  if (e.key === 'Escape' && (!play || document.querySelector('.modal'))) { Gamepads.back(); e.preventDefault(); }
 });
 window.addEventListener('pointerdown', () => document.body.classList.remove('kbd'));
 window.addEventListener('gamepadconnected', () => document.body.classList.add('kbd'));

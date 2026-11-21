@@ -316,6 +316,7 @@ body { background: #fff; }
 .stat { background: #fff; border: 2px solid var(--line); border-radius: 10px; padding: .4rem .2rem; display: flex; flex-direction: column; align-items: center; gap: .15rem; min-width: 0; }
 .stat small { color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
 .stat b { font-size: .95rem; font-variant-numeric: tabular-nums; }
+.stat small.par { text-transform: none; letter-spacing: 0; font-size: .68rem; color: var(--accent); }
 .stat .medal.big { font-size: .75rem; padding: .05em .55em; box-shadow: none; }
 .diff { padding: .05em .5em; border-radius: 999px; color: #fff; font-size: .8rem; }
 .diff.d1 { background: var(--easy); } .diff.d2 { background: var(--daily); } .diff.d3 { background: var(--hard); }
@@ -359,7 +360,7 @@ body { background: #fff; }
 .game.folder::before { background: repeating-linear-gradient(180deg, var(--accent) 0 10px, var(--accent2) 10px 20px); }
 .folder-tabs { display: flex; gap: 3px; padding-left: .2rem; }
 .folder-tabs i { width: 14px; height: 6px; border-radius: 3px; background: var(--game, var(--accent)); }
-.lib-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-weight: 800; padding-top: .3rem; }
+.lib-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-weight: 800; padding-bottom: .2rem; }
 .puzzle .excl { position: absolute; bottom: -2px; right: -2px; font-size: .55rem; font-weight: 900; color: #fff; background: var(--free); padding: 0 .3em; border-radius: 5px 0 5px 0; }
 .zipmusic { margin: 0; }
 .game-meta { display: flex; align-items: center; gap: .4rem; padding-left: .2rem; min-width: 0; }
@@ -550,3 +551,9 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .update-banner small { font-weight: 700; opacity: .92; }
 .update-slot:empty { display: none; }
 .home .menu.small .btn { font-size: .88rem; padding-left: .3em; padding-right: .3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Mega mode: games with Mega puzzles from the game itself (same orange as the "Mega from the game" chip) */
+.mega-orb { display: inline-block; vertical-align: .12em; margin-left: .4em; width: .55rem; height: .55rem; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffe2b0, #ff9a1f 55%, #c85a00); box-shadow: 0 0 6px 2px rgba(255, 150, 30, .55);
+  animation: orb-glow 2.4s ease-in-out infinite; pointer-events: none; }
+@keyframes orb-glow { 50% { box-shadow: 0 0 10px 4px rgba(255, 150, 30, .8); } }
+@media (prefers-reduced-motion: reduce) { .mega-orb { animation: none; } }
