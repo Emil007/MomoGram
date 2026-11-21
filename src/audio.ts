@@ -14,7 +14,7 @@ let getSdat: () => Uint8Array | null = () => null;
 let sdatFor: Uint8Array | null = null;
 let current = '';
 const listeners: Array<(id: string) => void> = [];
-const changed = () => { for (const f of listeners) f(current); };
+const changed = () => { for (const f of [...listeners]) f(current); };
 let pending: (() => void) | null = null;
 
 // pack music: decoded streams are cached (a few per session); sound archives get their own sequencer
@@ -161,6 +161,7 @@ export const Audio = {
   stop() { current = ''; changed(); player?.stop(0.1); stopPackMusic(0.1); },
   /** called whenever the track changes ("packId/ref", or '' when silent) */
   onChange(f: (id: string) => void) { listeners.push(f); },
+  offChange(f: (id: string) => void) { const i = listeners.indexOf(f); if (i >= 0) listeners.splice(i, 1); },
   /** "packId/ref" of the track playing (or queued) */
   current: () => current,
   setVolume(v: number) { if (master) master.gain.value = v; },

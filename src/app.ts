@@ -188,6 +188,7 @@ export function home() {
   applyThemeCss(root(), null);
   // whatever plays keeps playing; only a silent start picks a random track from all games
   if (!Snd.current()) menuMusic(null, true);
+  void hashTracks();
   const q = getQuickSave();
   const qPack = q ? quickTarget(q)?.pack : null;
   const packs = allPacks();
@@ -641,6 +642,50 @@ function packTracks(pack: Pack): Track[] {
   const refs = pack.theme?.tracks?.length ? pack.theme.tracks : [...new Set([m.play, m.play2].filter((r): r is string => !!r))];
   return refs.map(ref => ({ pack, ref }));
 }
+// ---- the same song in several games (every 3DS game has the same title music …) counts as one track ----
+// A music file's content hash, per pack and file; computed once in the background, kept on this device.
+const HASH_KEY = 'momogram.trackHash';
+let fileHash: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem(HASH_KEY) || '{}'); } catch { return {}; } })();
+let hashing = false;
+/** hash the music files not hashed yet (one at a time, so the app stays responsive) */
+async function hashTracks() {
+  if (hashing || !crypto.subtle) return;
+  hashing = true;
+  try {
+    for (const p of allPacks()) {
+      const m = p.theme?.music;
+      const files = new Set([...Object.values(m ?? {}), ...(p.theme?.tracks ?? [])].filter((r): r is string => typeof r === 'string').map(r => r.split('#')[0]));
+      for (const f of files) {
+        const k = p.id + '/' + f;
+        const rev = String(packRev(p));
+        if (fileHash[k]?.startsWith(rev + '|')) continue; // a new version of a pack may have other music
+        const d = await storage.loadAsset(p.id, f).catch(() => undefined);
+        if (!d) continue;
+        const sum = new Uint8Array(await crypto.subtle.digest('SHA-1', d as BufferSource));
+        fileHash[k] = rev + '|' + Array.from(sum.subarray(0, 8), b => b.toString(16).padStart(2, '0')).join('') + ':' + d.length;
+        try { localStorage.setItem(HASH_KEY, JSON.stringify(fileHash)); } catch { /* full */ }
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+  } finally { hashing = false; }
+}
+/** what a track sounds like: equal for the same song in different games */
+function trackKey(packId: string, ref: string): string {
+  const [file, seq] = ref.split('#');
+  return (fileHash[packId + '/' + file]?.split('|')[1] ?? packId + '/' + file) + (seq ? '#' + seq : '');
+}
+const idKey = (id: string) => { const i = id.indexOf('/'); return i < 0 ? id : trackKey(id.slice(0, i), id.slice(i + 1)); };
+/** one entry per song (the first game that has it) */
+function uniqTracks(list: Track[]): Track[] {
+  const seen = new Set<string>();
+  return list.filter(x => { const k = trackKey(x.pack.id, x.ref); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+/** the games that have this song */
+function gamesWith(id: string): Pack[] {
+  const k = idKey(id);
+  return allPacks().filter(p => [...menuTracks(p), ...packTracks(p)].some(x => trackKey(p.id, x.ref) === k));
+}
+
 let lastTrack = '';
 /** music while playing: random from this game (default), random from all games, or the game's main track */
 function playMusicFor(pack: Pack) {
@@ -649,10 +694,11 @@ function playMusicFor(pack: Pack) {
   if (settings.musicMode === 'fixed') pool = packTracks(pack).slice(0, 1);
   else if (settings.musicMode === 'random-all' || !packTracks(pack).length) pool = allPacks().flatMap(packTracks); // games without music borrow
   else pool = packTracks(pack);
+  pool = uniqTracks(pool);
   if (!pool.length) { Snd.stop(); return; }
-  const choices = pool.length > 1 ? pool.filter(x => x.pack.id + x.ref !== lastTrack) : pool;
+  const choices = pool.length > 1 ? pool.filter(x => trackKey(x.pack.id, x.ref) !== lastTrack) : pool;
   const tr = choices[Math.floor(Math.random() * choices.length)];
-  lastTrack = tr.pack.id + tr.ref;
+  lastTrack = trackKey(tr.pack.id, tr.ref);
   Snd.playPack(tr.pack.id, tr.ref);
 }
 
@@ -680,20 +726,24 @@ function trackName(ref: string): string {
 /** "♪ track · game" on the home screen; tapping it skips to another track from all games */
 function nowPlaying(): HTMLElement {
   const el = h('button', { class: 'now-playing', title: t('skipTrack'), onClick: () => {
-    const pool = allPacks().flatMap(p => [...menuTracks(p), ...packTracks(p)]).filter(x => x.pack.id + '/' + x.ref !== Snd.current());
+    const cur = idKey(Snd.current());
+    const pool = uniqTracks(allPacks().flatMap(p => [...menuTracks(p), ...packTracks(p)])).filter(x => trackKey(x.pack.id, x.ref) !== cur);
     if (!pool.length) return;
     const tr = pool[Math.floor(Math.random() * pool.length)];
     Snd.playPack(tr.pack.id, tr.ref);
   } });
   const show = (id: string) => {
-    if (!el.isConnected && el.dataset.on) return;
     const i = id.indexOf('/'), pack = allPacks().find(p => p.id === id.slice(0, i));
     el.hidden = !id || !pack;
-    el.replaceChildren(h('span', { class: 'np-note' }, '♪'), h('b', {}, id ? trackName(id.slice(i + 1)) : ''), h('small', {}, pack ? pickAny(pack.title, packLang()) : ''), h('span', { class: 'np-skip' }, '⏭'));
+    // the same song in other games: "PICROSS e2 +4"
+    const others = id && pack ? gamesWith(id).filter(p => p.id !== pack.id).length : 0;
+    el.title = id && pack && others ? t('skipTrack') + '\n' + gamesWith(id).map(p => pickAny(p.title, packLang())).join(', ') : t('skipTrack');
+    el.replaceChildren(h('span', { class: 'np-note' }, '♪'), h('b', {}, id ? trackName(id.slice(i + 1)) : ''), h('small', {}, pack ? pickAny(pack.title, packLang()) + (others ? ` +${others}` : '') : ''), h('span', { class: 'np-skip' }, '⏭'));
   };
-  el.dataset.on = '1';
+  // drawn at once (the element isn't on the page yet), then on every change while it is shown
   show(Snd.current());
-  Snd.onChange(show);
+  const on = (id: string) => { if (el.isConnected) show(id); else Snd.offChange(on); };
+  queueMicrotask(() => Snd.onChange(on));
   return el;
 }
 
@@ -712,8 +762,11 @@ function menuMusic(pack: Pack | null = null, fresh = false) {
   let pool = pack && settings.musicMode !== 'random-all' ? menuTracks(pack) : [];
   if (!pool.length) pool = allPacks().flatMap(menuTracks);
   if (!pool.length) { Snd.stop(); return; }
-  if (!fresh && pool.some(x => x.pack.id + '/' + x.ref === Snd.current())) return;
-  if (fresh && pool.length > 1) pool = pool.filter(x => x.pack.id + '/' + x.ref !== Snd.current());
+  // the same song from another game also fits: it keeps playing
+  const cur = idKey(Snd.current());
+  if (!fresh && pool.some(x => trackKey(x.pack.id, x.ref) === cur)) return;
+  pool = uniqTracks(pool);
+  if (fresh && pool.length > 1) pool = pool.filter(x => trackKey(x.pack.id, x.ref) !== cur);
   const tr = pool[Math.floor(Math.random() * pool.length)];
   Snd.playPack(tr.pack.id, tr.ref);
 }
