@@ -1,5 +1,6 @@
 // Minimal Nintendo DS ROM reader: header, file system, ARM9 and overlays (with BLZ decompression).
 // Works on the user's own ROM at runtime; no game data ships with MomoGram.
+import type { PackAsset, PackTheme } from '../packs/format';
 
 export interface Overlay {
   id: number;
@@ -157,3 +158,21 @@ export class NdsRom {
 }
 
 export { u16, u32 };
+
+/** a DS colour (BGR555) as CSS hex */
+export function bgr555Hex(v: number): string {
+  const c = (x: number) => Math.round((x & 31) * 255 / 31).toString(16).padStart(2, '0');
+  return '#' + c(v) + c(v >> 5) + c(v >> 10);
+}
+
+/**
+ * A DS game's own music: its sound archive becomes the pack asset "sound.sdat", the roles and tracks name
+ * sequences in it (missing names are left out, so a revision with other names still imports).
+ */
+export function ndsMusic(rom: NdsRom, file: string, roles: Partial<Record<'menu' | 'title' | 'play' | 'clear', string>>, tracks: string[]): { theme: PackTheme; assets: PackAsset[] } {
+  const sdat = rom.fileByName(file);
+  if (!sdat) return { theme: {}, assets: [] };
+  const music: PackTheme['music'] = {};
+  for (const [k, v] of Object.entries(roles)) if (v) music[k as keyof typeof roles] = 'sound.sdat#' + v;
+  return { theme: { music, tracks: tracks.map(s => 'sound.sdat#' + s) }, assets: [{ name: 'sound.sdat', data: sdat.slice() }] };
+}

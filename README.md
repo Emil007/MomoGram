@@ -76,9 +76,13 @@ language's names. Do it once, keep the files, import them anywhere.
 | Mario no Super Picross (also the Virtual Console release) | Super Famicom | ✓ all 300 puzzles | ✓ the game's music (emulated) |
 | Tamori no Picross | Satellaview (.bs) | ✓ standard, daily and weekly puzzles; broadcasts are merged into one pack | ✓ the game's music (emulated) |
 | Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | ✓ all puzzles of each volume, in sets of twelve (tested with Vol. 1: 120 puzzles) | ✓ the game's own music (emulated) |
+| Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and Illust Logic + Nihon no Mukashi Banashi (DSiWare) | DS / DSiWare (Hudson) | ✓ 300 / 300 / 200 / 200 puzzles with coloured solved pictures; Vol. 6 with the answers' names (colour puzzles: later) | ✓ the game's music |
+| DS Puzzler: Nanpure Fan & Oekaki Logic, Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS (Success) | ✓ 500 picture logic puzzles each, in ten levels, with names (Challenge Me: five languages) | ✓ the game's music |
+| Illu-Logi VOW | DS (Success) | ✓ the 139 normal puzzles (colour puzzles: later) | ✓ the game's music |
+| Hello Kitty no Paku Paku & Logic | DS | ✓ all 122 logic puzzles | ✓ the game's music |
 | Picross S series | Switch | later | later |
 
-Only puzzles from Jupiter / Nintendo releases are supported. To add a game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
+Other nonogram games are added one by one (see the table). To add a game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
 ### Sound emulation (Game Boy, Super Famicom, Satellaview)
 

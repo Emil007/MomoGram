@@ -3,8 +3,8 @@
 // Prints what each file became; with --json, writes each pack's pack.json (assets left out) to <folder>.
 import { build } from 'esbuild';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { basename, join } from 'path';
-import { pathToFileURL } from 'url';
+import { basename, dirname, join } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const args = process.argv.slice(2);
 const j = args.indexOf('--json');
@@ -13,7 +13,7 @@ if (!args.length) { console.log('usage: node tools/import.mjs <game file>... [--
 
 // the importers, bundled for Node (build.mjs keeps all.ts up to date; run it once after adding a file)
 const entry = `import './src/packs/importers/all'; export { importGameFile } from './src/packs/importers/index';`;
-const res = await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
+const res = await build({ stdin: { contents: entry, resolveDir: join(dirname(fileURLToPath(import.meta.url)), '..'), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
 const tmp = join(process.env.TMPDIR || '/tmp', `momogram-import-${process.pid}.mjs`);
 writeFileSync(tmp, res.outputFiles[0].text);
 const { importGameFile } = await import(pathToFileURL(tmp).href);

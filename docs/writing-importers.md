@@ -13,6 +13,10 @@ src/packs/importers/
   sfc-picross.ts
   sfc-picross-np.ts
   nds-picross-ds.ts
+  nds-hudson-illust-logic.ts
+  nds-ds-puzzler.ts
+  nds-illu-logi-vow.ts
+  nds-hello-kitty-logic.ts
   ctr-picross.ts
 src/rom/                    shared readers for the systems: headers, containers, compression, music
   gb.ts  sfc.ts  nds.ts  ctr.ts  picrossds.ts  jtex.ts  dsgfx.ts
@@ -78,7 +82,7 @@ Use the types in `src/packs/format.ts`; the [format description](momopack-format
 |---|---|
 | `gb.ts` | `isGb`, `gbTitle` (cartridge header), `gbWithMusic` |
 | `sfc.ts` | `sfcHeaderTitle`, `sfcWithMusic` |
-| `nds.ts` | `NdsRom` (file system, overlays), `blzDecompress` |
+| `nds.ts` | `NdsRom` (file system, overlays; DSiWare too), `blzDecompress`, `ndsMusic` (the game's sound archive as pack music), `bgr555Hex` |
 | `ctr.ts` | `readCtr` (CIA / CCI / CXI → files of the RomFS, titles, icon), `ctrCode` (code.bin), `lz11`, `ctrEncrypted` |
 | `picrossds.ts` | the Picross DS data, sound and animations |
 | `jtex.ts` | 3DS textures, `packPictures` for coloured solved pictures |
