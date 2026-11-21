@@ -1,6 +1,6 @@
 // Pack manager: the installed packs, adding games and pack files, exporting .momopack files, and the packs on the
 // MomoGram server (download, update, upload).
-import { Pack, pickAny, mergePacks } from '../packs/format';
+import { Pack, PackTheme, pickAny, mergePacks, songsOf, roleSongs, setRoleSongs, SongRole } from '../packs/format';
 import { readEntries, momopackOf, momopackName, packRev, newRev } from '../packs/io';
 import { importFileSet } from '../packs/importers/index';
 import { storage } from '../store';
@@ -242,6 +242,40 @@ export function openPackManager(pm: PM) {
  * Save new packs (from games, pack files or the command line): the same game from several regions (or imported
  * twice) becomes one pack with all names; music and other binaries go to their own store. Returns the new list.
  */
+/**
+ * A game read from two releases with the same recordings (PICROSS e on 3DS: .bcstm, in PICROSS S+ on Switch:
+ * .ogg, "Ga_B_00" = "e1_ga_b_00"): each song is kept once, the smaller file. Where the dropped copy was tagged
+ * (title, puzzle, switched off, …), the kept one takes it over. Returns the files to drop.
+ */
+export async function oneRelease(p: Pack): Promise<Set<string>> {
+  const drop = new Set<string>();
+  const th = p.theme;
+  if (!th) return drop;
+  const songs = songsOf(th).filter(r => !r.includes('#'));
+  if (!songs.some(r => /\.bcstm$/i.test(r)) || !songs.some(r => /\.ogg$/i.test(r))) return drop;
+  const norm = (r: string) => r.toLowerCase().replace(/\.(bcstm|ogg)$/, '').replace(/^e\d_/, '').replace(/^strm_/, '');
+  const size = async (f: string) => p.assets?.find(a => a.name === f)?.data.length ?? (await storage.loadAsset(p.id, f).catch(() => undefined))?.length ?? Infinity;
+  const groups = new Map<string, string[]>();
+  for (const r of songs) groups.set(norm(r), [...(groups.get(norm(r)) ?? []), r]);
+  const swap = new Map<string, string>();
+  for (const g of groups.values()) {
+    if (g.length < 2 || !g.some(r => /\.bcstm$/i.test(r)) || !g.some(r => /\.ogg$/i.test(r))) continue;
+    const sized = await Promise.all(g.map(async r => [r, await size(r)] as const));
+    sized.sort((a, b) => a[1] - b[1]);
+    for (const [r] of sized.slice(1)) { swap.set(r, sized[0][0]); drop.add(r); }
+  }
+  if (!swap.size) return drop;
+  const to = (r: string) => swap.get(r) ?? r;
+  const uniq = (l: string[] | undefined) => (l ? [...new Set(l.map(to))] : l);
+  const t2: PackTheme = { ...th, songs: uniq(th.songs), tracks: uniq(th.tracks), off: uniq(th.off) };
+  for (const role of ['title', 'menu', 'play', 'clear'] as SongRole[]) setRoleSongs(t2, role, [...new Set(roleSongs(th, role).map(to))]);
+  if (!t2.tracks?.length) delete t2.tracks;
+  if (!t2.off?.length) delete t2.off;
+  p.theme = t2;
+  if (p.assets) p.assets = p.assets.filter(a => !drop.has(a.name));
+  return drop;
+}
+
 export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
   const merged = new Map<string, Pack>();
   // a game added again is read fresh: the new import is the base of the merge (so everything newer versions of
@@ -254,8 +288,10 @@ export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pa
   }
   const ps = [...merged.values()];
   for (const p of ps) {
+    const drop = await oneRelease(p);
     const { assets, ...rest } = p;
-    for (const a of assets ?? []) await storage.saveAsset(p.id, a.name, a.data);
+    for (const a of assets ?? []) if (!drop.has(a.name)) await storage.saveAsset(p.id, a.name, a.data);
+    for (const f of drop) await storage.deleteAsset(p.id, f).catch(() => {});
     delete (p as any).assets;
     await storage.savePack(rest as Pack);
   }

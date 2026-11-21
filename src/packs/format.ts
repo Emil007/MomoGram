@@ -65,6 +65,8 @@ export interface PackTheme {
   songs?: string[];
   /** songs the player switched off: never played */
   off?: string[];
+  /** several songs for a role (the first is also in `music`, for older versions of MomoGram) */
+  roles?: Partial<Record<'title' | 'menu' | 'clear', string[]>>;
   /** when the player last changed where songs are played (sound test): such a pack keeps its tags on a new import */
   edited?: number;
 }
@@ -196,6 +198,7 @@ function mergeThemes(a: PackTheme | undefined, b: PackTheme | undefined): PackTh
     out.music = newer.music && { ...newer.music };
     out.tracks = newer.tracks?.slice();
     out.off = newer.off?.slice();
+    out.roles = newer.roles && JSON.parse(JSON.stringify(newer.roles));
   }
   return out;
 }
@@ -203,8 +206,26 @@ function mergeThemes(a: PackTheme | undefined, b: PackTheme | undefined): PackTh
 /** every song of a theme: its song list, then the songs it plays */
 export function songsOf(th: PackTheme | undefined): string[] {
   if (!th) return [];
+  const m = th.music ?? {}, r = th.roles ?? {};
+  return [...new Set([...(th.songs ?? []), m.title, m.menu, ...(r.title ?? []), ...(r.menu ?? []), ...(th.tracks ?? []), m.play, m.play2, m.clear, ...(r.clear ?? [])].filter((x): x is string => !!x))];
+}
+
+export type SongRole = 'title' | 'menu' | 'play' | 'clear';
+/** the songs a game plays in a role (puzzle music: the playlist) */
+export function roleSongs(th: PackTheme | undefined, role: SongRole): string[] {
+  if (!th) return [];
   const m = th.music ?? {};
-  return [...new Set([...(th.songs ?? []), m.title, m.menu, ...(th.tracks ?? []), m.play, m.play2, m.clear].filter((r): r is string => !!r))];
+  if (role === 'play') return th.tracks?.length ? th.tracks : [...new Set([m.play, m.play2].filter((x): x is string => !!x))];
+  return th.roles?.[role]?.length ? th.roles[role]! : m[role] ? [m[role]!] : [];
+}
+/** set the songs of a role (keeps `music` filled for older versions) */
+export function setRoleSongs(th: PackTheme, role: SongRole, list: string[]) {
+  const m = th.music = { ...(th.music ?? {}) };
+  if (role === 'play') { th.tracks = list; m.play = list[0]; delete m.play2; if (!m.play) delete m.play; return; }
+  th.roles = { ...(th.roles ?? {}), [role]: list };
+  if (!list.length) delete th.roles[role];
+  if (list[0]) m[role] = list[0]; else delete m[role];
+  if (!Object.keys(th.roles).length) delete th.roles;
 }
 
 /** for pack and level titles: any language is better than nothing */

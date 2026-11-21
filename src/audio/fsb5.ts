@@ -134,3 +134,16 @@ export function oggInfo(d: Uint8Array): { rate: number; loop?: [number, number] 
   const a = head.match(/LOOPSTART=(\d+)/), b = head.match(/LOOPEND=(\d+)/);
   return { rate, loop: a && b ? [+a[1], +b[1]] : undefined };
 }
+
+/** length of an Ogg Vorbis file: the last page's granule position (samples), and its loop points */
+export function oggLength(d: Uint8Array): { sec: number; loop?: [number, number] } | null {
+  const info = oggInfo(d);
+  if (!info) return null;
+  for (let i = d.length - 27; i >= Math.max(0, d.length - 65536); i--) {
+    if (d[i] !== 0x4f || d[i + 1] !== 0x67 || d[i + 2] !== 0x67 || d[i + 3] !== 0x53) continue;
+    const v = new DataView(d.buffer, d.byteOffset + i + 6, 8);
+    const samples = v.getUint32(0, true) + v.getUint32(4, true) * 2 ** 32;
+    return { sec: samples / info.rate, loop: info.loop ? [info.loop[0] / info.rate, info.loop[1] / info.rate] : undefined };
+  }
+  return null;
+}

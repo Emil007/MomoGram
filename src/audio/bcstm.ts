@@ -91,3 +91,18 @@ function decodeDsp(src: Uint8Array, off: number, samples: number, k: Int16Array,
   }
   h[0] = h1; h[1] = h2;
 }
+
+/** length of a stream without decoding it: seconds, and the loop (start, end) when it loops */
+export function bcstmLength(data: Uint8Array): { sec: number; loop?: [number, number] } | null {
+  try {
+    if (!isBcstm(data)) return null;
+    const d = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const nBlocks = d.getUint16(0x10, true);
+    let info = -1;
+    for (let i = 0; i < nBlocks; i++) if (d.getUint16(0x14 + i * 12, true) === 0x4000) info = d.getUint32(0x14 + i * 12 + 4, true);
+    if (info < 0) return null;
+    const ib = info + 8, si = ib + d.getUint32(ib + 4, true);
+    const loop = d.getUint8(si + 1) !== 0, rate = d.getUint32(si + 4, true), start = d.getUint32(si + 8, true), count = d.getUint32(si + 12, true);
+    return rate ? { sec: count / rate, loop: loop ? [start / rate, count / rate] : undefined } : null;
+  } catch { return null; }
+}
