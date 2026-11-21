@@ -497,7 +497,9 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     const name = pr.cleared ? pickText(p.name, packLang()) : '';
     info.replaceChildren(pr.cleared ? thumbnail(p, pck, 48, pack.id) : h('span', { class: 'qmark' }, '?'),
       h('b', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
-      h('small', {}, `${p.width}×${p.height}` + (pr.best !== undefined ? ` · ${t('best')} ${formatTime(pr.best)}` : '') + (pr.underLimit ? ' ★' : '')));
+      h('small', {}, `${p.width}×${p.height}` + (pr.best !== undefined ? ` · ${t('best')} ${formatTime(pr.best)}` : '') + (pr.underLimit ? ' ★' : '')),
+      // the same small chip as the level summary, so the strip keeps its height
+      ...(megaLevelBadge({ ...lv, puzzles: [p] }) ? [megaLevelBadge({ ...lv, puzzles: [p] })!] : []));
   };
   showLevel();
   lv.puzzles.forEach((p, i) => {

@@ -120,6 +120,7 @@ body { background: #fff; }
 .puzzle-info .ring { grid-row: span 2; width: 2.8rem; height: 2.8rem; border-radius: 50%; display: grid; place-items: center;
   background: conic-gradient(var(--lcd) var(--p), rgba(255,255,255,.18) 0); }
 .puzzle-info .ring span { width: 2.1rem; height: 2.1rem; border-radius: 50%; background: #2a2f35; display: grid; place-items: center; font-weight: 900; color: #fff; }
+.puzzle-info .mega-src { grid-column: 2; justify-self: start; margin-top: 0; }
 .seg { display: flex; max-width: 560px; width: calc(100% - 1.6rem); margin: .4rem auto 0; padding: 3px; gap: 3px; background: #fff; border: 2px solid var(--line); border-radius: 12px; box-shadow: 0 3px 0 var(--line); }
 .segbtn { flex: 1; font: inherit; font-weight: 900; padding: .5em .4em; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .segbtn.on { color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.3); }

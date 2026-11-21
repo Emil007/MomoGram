@@ -185,7 +185,7 @@ const AB = 'StreamingAssets/AssetBundles/';
 
 registerSetImporter({
   name: 'Picross S (Switch)',
-  version: 3, // raise when the importer reads more or reads differently
+  version: 4, // raise when the importer reads more or reads differently
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {
@@ -256,9 +256,10 @@ registerSetImporter({
       const m = b.name.match(/(\d+)x(\d+)/);
       const dpc = parseDpc(b.bytes, m ? [+m[1], +m[2]] : undefined);
       if (!dpc) continue;
-      const r = raws.get(b.name);
+      // PICROSS S and S2 name them dpc_… next to prs_…, later games use the same key for both
+      const key = b.name.replace(/^dpc_/i, 'prs_'), r = raws.get(key);
       if (r && r.w === dpc.w && r.h === dpc.h && r.cells.every((c, i) => c === dpc.cells[i])) r.mega = { rows: dpc.rows, cols: dpc.cols };
-      else if (!r) raws.set(b.name, { key: b.name, w: dpc.w, h: dpc.h, cells: dpc.cells, title: dpc.title.replace(/\0.*$/, '').trim(), mega: { rows: dpc.rows, cols: dpc.cols }, megaOnly: true } as Raw);
+      else if (!r) raws.set(key, { key, w: dpc.w, h: dpc.h, cells: dpc.cells, title: dpc.title.replace(/\0.*$/, '').trim(), mega: { rows: dpc.rows, cols: dpc.cols }, megaOnly: true } as Raw);
     }
     const tutorials = [...raws.keys()].some(k => /_T\d+_/i.test(k)) || blobs.some(b => /^prs_T\d/i.test(b.name));
     // names: Text_PuzzleTitle (S2 and later) or PuzzleList_Title (PICROSS S), by puzzle key
