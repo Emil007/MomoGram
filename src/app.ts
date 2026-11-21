@@ -291,7 +291,7 @@ function seriesOf(p: Pack): string {
     [/mario|^picross 2$/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my ?nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
     // the picture logic games of other makers (Hudson, Success, …)
     [/sanrio|hello kitty/i, 'Sanrio'],
-    [/illust logic|illu-logi|ds puzzler|challenge me|oekaki/i, 'Illust Logic'],
+    [/illust logic|illu-logi|ds puzzler|challenge me|oekaki|illust puzzle/i, 'Illust Logic'],
   ];
   for (const [re, name] of rules) if (re.test(n)) return name;
   return n;

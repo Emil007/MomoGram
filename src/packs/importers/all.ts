@@ -7,6 +7,8 @@ import './nds-hello-kitty-logic';
 import './nds-hudson-illust-logic';
 import './nds-illu-logi-vow';
 import './nds-picross-ds';
+import './nds-puzzle-mate-oekaki';
+import './nds-simple-illust-puzzle';
 import './nsw-picross-s';
 import './sfc-picross-np';
 import './sfc-picross';
