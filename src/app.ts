@@ -831,7 +831,23 @@ function syncChip(): HTMLElement | null {
 }
 
 /** the best times of everyone on the server for one puzzle (this profile's own time from here, it may be newer) */
+/**
+ * The three fastest players on a puzzle. Shown at once from the scores kept on the device, then redrawn when fresh
+ * ones arrive from the server (fetched at most once a minute), so others' new times show without opening the scores.
+ */
 function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
+  if (!Sync.account()) return null;
+  const box = h('div', { class: 'fastest-box' });
+  const draw = () => box.replaceChildren(...[fastestList(packId, puzzleId)].filter((x): x is HTMLElement => !!x));
+  draw();
+  if (Date.now() - scoresFetched > 60_000) {
+    scoresFetched = Date.now();
+    Sync.refreshScores().then(() => { if (box.isConnected) draw(); }).catch(() => { scoresFetched = 0; });
+  }
+  return box;
+}
+let scoresFetched = 0;
+function fastestList(packId: string, puzzleId: string): HTMLElement | null {
   const sc = Sync.scores(), me = Sync.account();
   if (!sc || !me) return null;
   // older progress (and an older server) gives no rules with a time: the medal tells which rules it was played with
@@ -935,7 +951,7 @@ async function scoresScreen() {
   };
   draw();
   if (!Sync.account()) return;
-  try { await Sync.sync(); sc = await Sync.refreshScores(); note = ''; } catch { note = t('scoresOffline'); }
+  try { await Sync.sync(); sc = await Sync.refreshScores(); scoresFetched = Date.now(); note = ''; } catch { note = t('scoresOffline'); }
   if (body.isConnected) draw();
 }
 
