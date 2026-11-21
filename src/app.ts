@@ -1,5 +1,6 @@
 // MomoGram UI: home, level/puzzle selection, play screen, solved screen, packs and options.
 import { solutionCount } from './game/unique';
+import { MegaPairs, generateMega, megaSolutionCount, MEGA_GEN } from './game/mega';
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
@@ -168,7 +169,18 @@ function logo(): HTMLElement {
   const rows = ['#######', '.#####.', '..###..', '...#...', '..#.#..', '.#...#.', '#######'];
   const g = h('div', { class: 'logo-grid', 'aria-hidden': 'true' });
   rows.forEach(r => [...r].forEach(c => g.append(h('i', { class: c === '#' ? 'on' : '' }))));
-  return h('div', { class: 'logo' }, g, h('div', {}, h('div', { class: 'logo-name' }, 'MomoGram'), h('div', { class: 'tagline' }, t('tagline'))));
+  return h('div', { class: 'logo' + (settings.mega ? ' mega' : '') }, g, h('div', {},
+    h('div', { class: 'logo-name' }, settings.mega ? h('span', { class: 'logo-mega' }, 'Mega ') : null, 'MomoGram'),
+    h('div', { class: 'tagline' }, settings.mega ? t('megaTagline') : t('tagline'))));
+}
+
+/** the switch between normal and Mega puzzles for the whole game */
+function megaSwitch(): HTMLElement {
+  const b = h('button', { class: 'mega-switch' + (settings.mega ? ' on' : ''), role: 'switch', 'aria-checked': String(settings.mega), title: t('megaHelp'),
+    onClick: () => { settings.mega = !settings.mega; saveSettings(); home(); } },
+    h('span', { class: 'ms-opt' + (settings.mega ? '' : ' cur') }, t('megaOff')),
+    h('span', { class: 'ms-opt' + (settings.mega ? ' cur' : '') }, t('megaOn')));
+  return b;
 }
 
 // ---------------------------------------------------------------- home: the game library
@@ -202,6 +214,7 @@ export function home() {
       h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
       syncChip()),
     logo(),
+    megaSwitch(),
     h('div', { class: 'home-progress' },
       h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (solved / total) * 100 : 0}%` })),
       h('small', {}, t('solvedCount', { a: solved, b: total }))));
@@ -215,13 +228,14 @@ export function home() {
   renderLibrary(lib, null);
   const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { libEdit = !libEdit; renderLibrary(lib, null); arrange.classList.toggle('on', libEdit); } }, t('arrange'));
 
-  screen(h('div', { class: 'home' }, nowPlaying(), top, quick,
+  screen(h('div', { class: 'home' }, top, quick,
     h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, t('library')), arrange), lib,
     h('div', { class: 'menu small' },
       Sync.account() ? h('button', { class: 'btn', onClick: () => scoresScreen() }, '🏆 ' + t('scores')) : null,
       h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
       h('button', { class: 'btn', onClick: () => editorScreen() }, '✎ ' + t('editor')),
       h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))),
+    nowPlaying(),
     h('footer', { class: 'fine' }, t('noGameData'))));
 }
 
@@ -237,6 +251,8 @@ let libEdit = false;
 /** series of a game, from its title (all Picross e games together, the Mario games, …) */
 function seriesOf(p: Pack): string {
   const n = pickAny(p.title, 'en');
+  // Jupiter's other Switch games (special editions, LogiartGrimoire, Nazarick, Kemono Friends, …): a folder of their own
+  if (p.source.platform === 'Nintendo Switch' && !/^picross (s\d*\+?|e\d*)$/i.test(n.trim())) return 'Picross S Specials';
   const rules: Array<[RegExp, string]> = [
     [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
     [/mario/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
@@ -461,10 +477,10 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
 
 /** whether a puzzle has more than one solution (worked out once per pattern) */
 const solutionCounts = new Map<string, 0 | 1 | 2>();
-function solutionCountOf(rows: string[]): 0 | 1 | 2 {
-  const k = rows.join('/');
+function solutionCountOf(rows: string[], mega: MegaPairs | null = null): 0 | 1 | 2 {
+  const k = rows.join('/') + (mega ? '|' + JSON.stringify(mega) : '');
   let c = solutionCounts.get(k);
-  if (c === undefined) { c = solutionCount(rows, 400); solutionCounts.set(k, c); }
+  if (c === undefined) { c = mega ? megaSolutionCount(rows, mega, 400) : solutionCount(rows, 400); solutionCounts.set(k, c); }
   return c;
 }
 
@@ -495,7 +511,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     fastestRow(pack.id, pz.id),
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
-    solutionCountOf(pz.rows) === 2 ? h('p', { class: 'warn-multi' }, '⚠ ' + t('multiSolution')) : null,
+    solutionCountOf(pz.rows, megaPairsOf(pz)) === 2 ? h('p', { class: 'warn-multi' }, '⚠ ' + t('multiSolution')) : null,
     h('button', { class: 'btn primary big start', onClick: go }, icon('play'), saved ? t('continue') + ' · ' + formatTime(saved.state.elapsedMs + saved.state.penaltyMs) : t('start')),
     saved ? h('button', { class: 'btn ghost', onClick: () => { clearBoard(pack.id, lv.id, pz.id); play(pack, lv, i, back, undefined, true); } }, t('restart')) : null));
 }
@@ -647,7 +663,48 @@ function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
 }
 
 /** every game in the library: MomoGram's starter puzzles first, then the imported games */
-function allPacks(): Pack[] { return [STARTER, ...ctx.packs]; }
+function allPacks(): Pack[] { const ps = [STARTER, ...ctx.packs]; return ps.map(settings.mega ? megaView : plainView); }
+
+// ---------------------------------------------------------------- Mega mode
+// The whole game switches: every game shows its puzzles as Mega puzzles. A puzzle's Mega version is the game's
+// own (PICROSS e6–e9, the Switch games, S+ for every e game) or chosen by MomoGram (game/mega.ts: the same on
+// every device). Mega puzzles are puzzles of their own for progress and scores: their ids end in "@mega".
+const MEGA = '@mega';
+const views = new WeakMap<Pack, Pack>(), megaViews = new WeakMap<Pack, Pack>(), originals = new WeakMap<Pack, Pack>();
+const keep = (levels: PackLevel[]) => levels.filter(l => l.puzzles.length);
+function plainView(p: Pack): Pack {
+  if (!p.levels.some(l => l.puzzles.some(z => z.megaOnly))) return p;
+  let v = views.get(p);
+  if (!v) { v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.megaOnly) }))) }; views.set(p, v); originals.set(v, p); }
+  return v;
+}
+function megaView(p: Pack): Pack {
+  let v = megaViews.get(p);
+  if (!v) {
+    v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.map(z => ({ ...z, id: z.id + MEGA, origin: z.origin && z.origin + MEGA })) }))) };
+    megaViews.set(p, v); originals.set(v, p);
+  }
+  return v;
+}
+/** the stored pack behind a view (for changes that are saved) */
+const original = (p: Pack) => originals.get(p) ?? p;
+
+/** the pairs a puzzle is played with in Mega mode: the game's own, else MomoGram's (kept on this device) */
+const MEGA_KEY = 'momogram.megaPairs';
+let megaCache: Record<string, MegaPairs | null> = (() => { try { return JSON.parse(localStorage.getItem(MEGA_KEY) || '{}'); } catch { return {}; } })();
+function megaPairsOf(pz: PackPuzzle): MegaPairs | null {
+  if (!pz.id.endsWith(MEGA)) return null;
+  if (pz.mega) return pz.mega;
+  // keyed by the picture (and the version of the choice), so it is shared by every game with this picture
+  let hsh = 2166136261;
+  for (const c of pz.rows.join('/')) { hsh ^= c.charCodeAt(0); hsh = Math.imul(hsh, 16777619); }
+  const k = `${MEGA_GEN}:${pz.width}x${pz.height}:${(hsh >>> 0).toString(36)}`;
+  if (!(k in megaCache)) {
+    megaCache[k] = generateMega(pz.rows);
+    try { localStorage.setItem(MEGA_KEY, JSON.stringify(megaCache)); } catch { /* full */ }
+  }
+  return megaCache[k];
+}
 
 // ---------------------------------------------------------------- music & colours of a game
 
@@ -894,7 +951,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // a board left earlier is picked up again
   if (!restore && !fresh) restore = getBoard(pack.id, lv.id, pz.id)?.state;
   const rules = rulesFor(lv);
-  const board = new Board(pz.rows, rules);
+  const board = new Board(pz.rows, rules, megaPairsOf(pz));
   if (restore) board.restore(restore); else board.crossEmptyLines();
   playMusicFor(pack);
 
@@ -1348,13 +1405,15 @@ function songPlatform(ref: string): string {
 }
 
 /** change where a game plays its songs (sound test): saved in the pack as a new revision, so it goes to the server */
-async function editSongs(p: Pack, fn: (th: PackTheme) => void) {
+async function editSongs(view: Pack, fn: (th: PackTheme) => void) {
+  const p = original(view);
   const th: PackTheme = p.theme = { ...(p.theme ?? {}) };
   th.music = { ...(th.music ?? {}) };
   fn(th);
   for (const k of Object.keys(th.music) as Array<keyof NonNullable<PackTheme['music']>>) if (!th.music[k]) delete th.music[k];
   th.edited = Date.now();
   p.rev = newRev();
+  view.theme = th; view.rev = p.rev;
   await storage.savePack(p);
 }
 

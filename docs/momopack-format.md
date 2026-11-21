@@ -75,7 +75,10 @@ Texts (`title`, names) are objects with one entry per language: `en`, `de`, `fr`
   "rows": ["..####....", "…"],         // one string per row: '#' filled, '.' empty
   "name": { "ja": "きゃたつ", "en": "Stepladder" },   // optional, only shown once the puzzle is solved
   "exclusive": "JPN",                 // optional: only in this region's release (set when regions merge)
-  "color": { "palette": ["#ff0000", …], "rows": ["0011..", …] }   // optional coloured solved picture
+  "color": { "palette": ["#ff0000", …], "rows": ["0011..", …] },  // optional coloured solved picture
+  "mega": { "rows": [2, 5], "cols": [0, 7] },   // optional: the game's Mega version, first line of each paired
+                                                 // pair of lines; the mega clues follow from these and the picture
+  "megaOnly": true                              // optional: a puzzle of the game's Mega mode only
 }
 ```
 

@@ -147,12 +147,13 @@ export interface Settings {
   logicHints: boolean;
   toolsRight: boolean;
   musicMode: 'random-pack' | 'random-all' | 'fixed'; // in-game music
+  mega: boolean; // the whole game in Mega mode
 }
 
 const DEFAULTS: Settings = {
   lang: '', music: true, musicVolume: 0.7, sfx: true, hints: 'ask', unlockAll: false,
   normalStyle: 'stage_jazz_SEQ', freeStyle: 'stage_musicbox_SEQ', lefty: false, showTimer: true,
-  packMusic: true, packColors: true, difficulty: 'auto', logicHints: false, toolsRight: false, musicMode: 'random-pack',
+  packMusic: true, packColors: true, difficulty: 'auto', logicHints: false, toolsRight: false, musicMode: 'random-pack', mega: false,
 };
 
 function readJson<T>(k: string, def: T): T {

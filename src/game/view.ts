@@ -1,4 +1,5 @@
 // Canvas view of a puzzle: clues pinned to the edges, zoom/pan for large grids, mouse/touch/keyboard/gamepad input.
+import { bandSlots } from './mega';
 import { Board, CROSS, EMPTY, FILL, MARK, Cell, blank } from './board';
 
 export type Tool = 'fill' | 'cross' | 'mark';
@@ -143,7 +144,9 @@ export class BoardView {
 
   private maxClues() {
     const b = this.board;
-    return { r: Math.max(1, ...b.rowClues.map(c => c.length)), c: Math.max(1, ...b.colClues.map(c => c.length)) };
+    // a pair of lines (Mega) needs one place per slot of its clue
+    const len = (band: ReturnType<Board['rowBand']>, c: number[], wide: boolean) => (band ? Math.ceil(slotUnits(bandSlots(band), wide).total) : c.length);
+    return { r: Math.max(1, ...b.rowClues.map((c, y) => len(b.rowBand(y), c, true))), c: Math.max(1, ...b.colClues.map((c, x) => len(b.colBand(x), c, false))) };
   }
 
   /** Fit the whole puzzle; on small screens the cell size is clamped and the view becomes pannable. */
@@ -584,7 +587,32 @@ export class BoardView {
     ctx.beginPath(); ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH - frameW); ctx.clip();
     if (cueX >= 0 && (this.spin || !T.clueFocusBg)) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
     const stepV = Math.min(cc * 0.66, 28, fs * 1.15);
+    // a mega number: drawn over both lines of its pair, in a rounded box
+    const megaBox = (cx: number, cy: number, bw: number, bh: number, n: number, col: string) => {
+      ctx.save();
+      ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.2, cs / 14);
+      ctx.fillStyle = T.clueArea ?? T.bg; ctx.globalAlpha = 0.9;
+      const r = Math.min(bw, bh) * 0.28;
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, r); ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+      ctx.restore();
+      text(String(n), cx, cy + 1, col);
+    };
     for (let x = vx0; x < vx1; x++) {
+      const band = b.colBand(x);
+      if (band) {
+        if (b.colPair[x] !== x && x !== vx0) continue; // drawn with the pair's first column
+        const x0 = b.colPair[x], done = b.colDone(x0)[0] ?? true, blue = this.logicHints && b.colCanProgress(x0);
+        const col = done ? T.clueDone : x0 === cueX || x0 + 1 === cueX ? T.cursor : blue ? T.hint : T.clue;
+        const slots = bandSlots(band);
+        slots.forEach((sl, k) => {
+          const y = this.clueH - gap - (slots.length - k - 0.5) * stepV + 1;
+          if (sl.m !== undefined) megaBox(ox + (x0 + 1) * cs, y, cs * 1.7, stepV * 0.95, sl.m, col);
+          if (sl.a !== undefined) text(String(sl.a), ox + x0 * cs + cs / 2, y, col);
+          if (sl.b !== undefined) text(String(sl.b), ox + (x0 + 1) * cs + cs / 2, y, col);
+        });
+        if (!slots.length) text('0', ox + (x0 + 1) * cs, this.clueH - gap - stepV / 2 + 1, col);
+        continue;
+      }
       const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
       for (let k = 0; k < clues.length; k++) {
         const col = done[k] ? T.clueDone : x === cueX ? T.cursor : blue ? T.hint : T.clue;
@@ -597,6 +625,22 @@ export class BoardView {
     if (cueY >= 0 && (this.spin || !T.clueFocusBg)) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
     const stepH = Math.min(cc * 0.62, 26, fs * 1.05);
     for (let y = vy0; y < vy1; y++) {
+      const band = b.rowBand(y);
+      if (band) {
+        if (b.rowPair[y] !== y && y !== vy0) continue;
+        const y0 = b.rowPair[y], done = b.rowDone(y0)[0] ?? true, blue = this.logicHints && b.rowCanProgress(y0);
+        const col = done ? T.clueDone : y0 === cueY || y0 + 1 === cueY ? T.cursor : blue ? T.hint : T.clue;
+        const slots = bandSlots(band), u = slotUnits(slots, true);
+        slots.forEach((sl, k) => {
+          // two-digit mega numbers get a wider place (they stand side by side in a row clue)
+          const x = this.clueW - gap - (u.total - u.start[k] - u.size[k] / 2) * stepH;
+          if (sl.m !== undefined) megaBox(x, oy + (y0 + 1) * cs, stepH * (u.size[k] - 0.05), cs * 1.7, sl.m, col);
+          if (sl.a !== undefined) text(String(sl.a), x, oy + y0 * cs + cs / 2 + 1, col);
+          if (sl.b !== undefined) text(String(sl.b), x, oy + (y0 + 1) * cs + cs / 2 + 1, col);
+        });
+        if (!slots.length) text('0', this.clueW - gap - stepH / 2, oy + (y0 + 1) * cs + 1, col);
+        continue;
+      }
       const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);
       for (let k = 0; k < clues.length; k++) {
         const col = done[k] ? T.clueDone : y === cueY ? T.cursor : blue ? T.hint : T.clue;
@@ -617,6 +661,15 @@ export class BoardView {
       ctx.fillStyle = T.outline; ctx.fillText(String(this.dragLen), bx, by + 1);
     }
   }
+}
+
+/** places of a pair's clue slots: a two-digit mega number in a row clue takes 1.6 places */
+function slotUnits(slots: ReturnType<typeof bandSlots>, wide: boolean) {
+  const size = slots.map(sl => (wide && (sl.m ?? 0) >= 10 ? 1.6 : 1));
+  const start: number[] = [];
+  let t = 0;
+  for (const s of size) { start.push(t); t += s; }
+  return { size, start, total: t };
 }
 
 /** what a tap with a tool does to a cell: set it, erase it, or nothing (null) */

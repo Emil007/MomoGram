@@ -1,4 +1,5 @@
 // Puzzle state and Picross DS rules (Normal: mistakes are caught and cost time; Free: no checks, "Try it out").
+import { MegaPairs, BandItem, bandItems, analyzeBand, pairOf } from './mega';
 
 export const EMPTY = 0, FILL = 1, CROSS = 2;
 /** a note of the player's own: counts as empty for everything, stays while the rest of the board is played */
@@ -39,7 +40,13 @@ export class Board {
   solved = false;
   private undoStack: Array<{ cells: Uint8Array; trial: Uint8Array | null }> = [];
 
-  constructor(rows: string[], rules: 'easy' | 'normal' | 'free') {
+  /** Mega puzzles: per line, the first line of its pair (-1: a plain line), and each pair's clue */
+  readonly rowPair: Int32Array;
+  readonly colPair: Int32Array;
+  readonly bands = new Map<string, BandItem[]>();
+  readonly mega: MegaPairs | null;
+
+  constructor(rows: string[], rules: 'easy' | 'normal' | 'free', mega: MegaPairs | null = null) {
     this.h = rows.length;
     this.w = rows[0].length;
     this.rules = rules;
@@ -48,7 +55,18 @@ export class Board {
     this.cells = new Uint8Array(this.w * this.h);
     this.rowClues = [...Array(this.h)].map((_, y) => lineClues(this.solution.subarray(y * this.w, y * this.w + this.w)));
     this.colClues = [...Array(this.w)].map((_, x) => lineClues([...Array(this.h)].map((_, y) => this.solution[y * this.w + x])));
+    this.mega = mega && (mega.rows.length || mega.cols.length) ? mega : null;
+    this.rowPair = pairOf(this.mega?.rows, this.h);
+    this.colPair = pairOf(this.mega?.cols, this.w);
+    for (const y of this.mega?.rows ?? []) if (this.rowPair[y] === y) this.bands.set('r' + y, bandItems(this.rowOf(this.solution, y), this.rowOf(this.solution, y + 1)));
+    for (const x of this.mega?.cols ?? []) if (this.colPair[x] === x) this.bands.set('c' + x, bandItems(this.colOf(this.solution, x), this.colOf(this.solution, x + 1)));
   }
+
+  private rowOf(a: ArrayLike<number>, y: number): number[] { return [...Array(this.w)].map((_, x) => a[y * this.w + x]); }
+  private colOf(a: ArrayLike<number>, x: number): number[] { return [...Array(this.h)].map((_, y) => a[y * this.w + x]); }
+  /** the clue of the pair a row / column belongs to (null: a plain line) */
+  rowBand(y: number): BandItem[] | null { return this.rowPair[y] < 0 ? null : this.bands.get('r' + this.rowPair[y]) ?? null; }
+  colBand(x: number): BandItem[] | null { return this.colPair[x] < 0 ? null : this.bands.get('c' + this.colPair[x]) ?? null; }
 
   /** Penalty for the n-th mistake (1-based), like Picross DS: 2, 4, then 8 minutes. */
   static penaltyFor(n: number): number {
@@ -86,7 +104,11 @@ export class Board {
   set(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
     const r = this.set0(x, y, value);
     // only this cell's row and column can change their clue state
-    if (r !== 'nochange') { this.version++; this.cache.delete('r' + y); this.cache.delete('c' + x); }
+    if (r !== 'nochange') {
+      this.version++;
+      this.cache.delete('r' + (this.rowPair[y] >= 0 ? this.rowPair[y] : y));
+      this.cache.delete('c' + (this.colPair[x] >= 0 ? this.colPair[x] : x));
+    }
     return r;
   }
   private set0(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
@@ -146,6 +168,8 @@ export class Board {
   private cache = new Map<string, LineInfo>();
   touch() { this.version++; this.cache.clear(); }
   private line(kind: 'r' | 'c', k: number): LineInfo {
+    const pair = kind === 'r' ? this.rowPair[k] : this.colPair[k];
+    if (pair >= 0) return this.band(kind, pair);
     const key = kind + k;
     let li = this.cache.get(key);
     if (!li) {
@@ -155,7 +179,20 @@ export class Board {
     }
     return li;
   }
-  /** which clue numbers are certainly done (greyed out) */
+  /** a pair of lines (Mega): one analysis for both, with one "done" per number of the pair */
+  private band(kind: 'r' | 'c', first: number): LineInfo {
+    const key = kind + first;
+    let li = this.cache.get(key);
+    if (!li) {
+      const items = this.bands.get(key) ?? [];
+      const cur = (l: number) => (kind === 'r' ? [...Array(this.w)].map((_, x) => this.at(x, l)) : [...Array(this.h)].map((_, y) => this.at(l, y)));
+      const r = analyzeBand(items, cur(first), cur(first + 1), v => v === FILL, v => v === CROSS);
+      li = { feasible: r.feasible, done: items.map(() => r.done), progress: r.progress };
+      this.cache.set(key, li);
+    }
+    return li;
+  }
+  /** which clue numbers are certainly done (greyed out); for a pair of lines: per number of the pair */
   rowDone(y: number): boolean[] { return this.line('r', y).done; }
   colDone(x: number): boolean[] { return this.line('c', x).done; }
   /** logic hint: the line allows a new cell to be deduced from its clue alone */
@@ -165,19 +202,29 @@ export class Board {
   /** Cross out every row and column whose clue is 0 (done for the player at the start, no undo step). */
   crossEmptyLines() {
     const zero = (c: number[]) => c.length === 0 || (c.length === 1 && c[0] === 0);
-    for (let y = 0; y < this.h; y++) if (zero(this.rowClues[y])) for (let x = 0; x < this.w; x++) if (blank(this.at(x, y))) this.cells[y * this.w + x] = CROSS;
-    for (let x = 0; x < this.w; x++) if (zero(this.colClues[x])) for (let y = 0; y < this.h; y++) if (blank(this.at(x, y))) this.cells[y * this.w + x] = CROSS;
+    // a pair of lines without any number counts as empty too
+    const z = (c: number[], band: BandItem[] | null) => (band ? band.length === 0 : zero(c));
+    for (let y = 0; y < this.h; y++) if (z(this.rowClues[y], this.rowBand(y))) for (let x = 0; x < this.w; x++) if (blank(this.at(x, y))) this.cells[y * this.w + x] = CROSS;
+    for (let x = 0; x < this.w; x++) if (z(this.colClues[x], this.colBand(x))) for (let y = 0; y < this.h; y++) if (blank(this.at(x, y))) this.cells[y * this.w + x] = CROSS;
     this.touch();
   }
 
   /** Solved when filled cells reproduce every clue (so puzzles with several solutions are fair). */
   checkSolved(): boolean {
     if (this.trial) return false;
+    const f = Uint8Array.from(this.cells, v => (v === FILL ? 1 : 0));
+    for (const [key, items] of this.bands) {
+      const k = +key.slice(1);
+      const got = key[0] === 'r' ? bandItems(this.rowOf(f, k), this.rowOf(f, k + 1)) : bandItems(this.colOf(f, k), this.colOf(f, k + 1));
+      if (got.map(i => i.kind + i.n).join() !== items.map(i => i.kind + i.n).join()) return false;
+    }
     for (let y = 0; y < this.h; y++) {
+      if (this.rowPair[y] >= 0) continue;
       const c = lineClues([...Array(this.w)].map((_, x) => this.cells[y * this.w + x] === FILL));
       if (c.join() !== this.rowClues[y].join()) return false;
     }
     for (let x = 0; x < this.w; x++) {
+      if (this.colPair[x] >= 0) continue;
       const c = lineClues([...Array(this.h)].map((_, y) => this.cells[y * this.w + x] === FILL));
       if (c.join() !== this.colClues[x].join()) return false;
     }

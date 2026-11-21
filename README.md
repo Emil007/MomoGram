@@ -41,6 +41,7 @@ Nonograms do that too.
 ## What you get
 
 - **All your nonogram games in one library.** Each game you add becomes a card with its own modes and levels, puzzle names (shown once a puzzle is solved), solved pictures, music and colours. Games of a series form a folder (all Picross e games, Picross NP, Illust Logic, …); sort them by series or system, rearrange and hide them.
+- **Mega mode:** one switch on the home screen turns the whole game into *Mega MomoGram*. Mega numbers span two rows or columns and count a connected group of cells that reaches into both. PICROSS e6–e9 and the Switch games bring their own Mega puzzles (PICROSS S+ adds them for every e game, and the Mega-only puzzles come along); for every other game MomoGram chooses the pairs itself, checks that each puzzle still has exactly one solution, and makes the same choice on every device, so times and medals stay comparable. Mega puzzles keep their own progress and scores.
 - **A daily nonogram:** 15 puzzles a day, five per difficulty, drawn from all your games. Solving one counts in its own game too. And a **Random** button for one puzzle from anywhere.
 - **Every puzzle on every difficulty**, with medals:
 
@@ -55,7 +56,7 @@ Nonograms do that too.
 - **Logic hints** (💡): clue numbers turn blue when their line lets you deduce a new cell, like in the newer 3DS and Switch games. And the **hint roulette**, spinning over rows and columns like the original.
 - **Made for one hand on a phone:** portrait layout, the tools at the bottom, pinch to zoom, drags that stay on their row or column. Landscape puts the tools beside the board.
 - **Your progress is never lost:** every puzzle you start is kept and continues where you left it, best times per difficulty, medals, profiles with their own saves.
-- **The games' own music:** a music bar on the home screen shows what plays and skips to the next song; the same song from several games counts once.
+- **The games' own music:** every song of each game, a sound test to retag or switch songs off, a music bar at the bottom of the home screen shows what plays and skips to the next song; the same song from several games counts once.
 - **An editor** for your own puzzles and packs.
 - **Your own server (optional):** sync progress, settings and paused puzzles between your devices, share packs within your family or friends, and see each other's high scores (puzzles solved, medals, fastest times).
 - Offline after the first start; English and German, with the games' puzzle names in every language they have.

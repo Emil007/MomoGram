@@ -34,6 +34,7 @@
 //            in resources.resource: FSB5 Vorbis, rebuilt as Ogg (src/audio/fsb5.ts).
 import { registerSetImporter, GameFiles } from './index';
 import { Lang, Pack, PackAsset, PackLevel, PackPuzzle, Text, rowsFromBits } from '../format';
+import { parseDpc } from './ctr-picross';
 import { serializedFiles, readSerialized, namedBlobs, audioClip } from '../../rom/unity';
 import { readFsb5, fsbVorbisToOgg } from '../../audio/fsb5';
 
@@ -140,7 +141,7 @@ function switchPalette(t: Map<string, number[][]> | null, g: string): NonNullabl
 }
 
 // ---- puzzles ----
-interface Raw { key: string; w: number; h: number; cells: Uint8Array; title: string }
+interface Raw { key: string; w: number; h: number; cells: Uint8Array; title: string; mega?: { rows: number[]; cols: number[] } }
 const td16 = new TextDecoder('utf-16le');
 function parsePuzzle(key: string, d: Uint8Array): Raw | null {
   if (td16.decode(d.subarray(0, 8)) !== '.PRS') return null;
@@ -248,6 +249,16 @@ registerSetImporter({
     const raws = new Map<string, Raw>();
     for (const b of blobs) { const r = parsePuzzle(b.name, b.bytes); if (r && !raws.has(r.key)) raws.set(r.key, r); }
     if (!raws.size) throw new Error('No puzzles found.');
+    // Mega Picross: a ".DPC" under the same key holds the pairs of lines (same format as the 3DS .bdpc); a key
+    // without a normal puzzle is a puzzle of the Mega mode only
+    for (const b of blobs) {
+      const m = b.name.match(/(\d+)x(\d+)/);
+      const dpc = parseDpc(b.bytes, m ? [+m[1], +m[2]] : undefined);
+      if (!dpc) continue;
+      const r = raws.get(b.name);
+      if (r && r.w === dpc.w && r.h === dpc.h && r.cells.every((c, i) => c === dpc.cells[i])) r.mega = { rows: dpc.rows, cols: dpc.cols };
+      else if (!r) raws.set(b.name, { key: b.name, w: dpc.w, h: dpc.h, cells: dpc.cells, title: dpc.title.replace(/\0.*$/, '').trim(), mega: { rows: dpc.rows, cols: dpc.cols }, megaOnly: true } as Raw);
+    }
     const tutorials = [...raws.keys()].some(k => /_T\d+_/i.test(k)) || blobs.some(b => /^prs_T\d/i.test(b.name));
     // names: Text_PuzzleTitle (S2 and later) or PuzzleList_Title (PICROSS S), by puzzle key
     const names = new Map<string, Text>();
@@ -317,7 +328,8 @@ function sizeLevels(list: Raw[], order: Map<string, number>, names: Map<string, 
       const own = r.title && !/^[\x00-\x7f]*$/.test(r.title) ? { ja: r.title } : undefined;
       const name = { ...own, ...names.get(r.key.toLowerCase()) };
       const rest = r.key.replace(/^.*?\d+x\d+_/i, '').replace(/^0(?=\d\d(\D|$))/, '').toLowerCase().replace(/_/g, '-');
-      return { id: `${s}-${rest}`, width: r.w, height: r.h, rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1), name: Object.keys(name).length ? name : undefined };
+      return { id: `${s}-${rest}`, width: r.w, height: r.h, rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1), name: Object.keys(name).length ? name : undefined,
+        ...(r.mega ? { mega: r.mega } : {}), ...((r as any).megaOnly ? { megaOnly: true } : {}) };
     });
     const label = s.replace('x', '×');
     for (let i = 0; i < puzzles.length; i += 15) {

@@ -21,6 +21,10 @@ export interface PackPuzzle {
   name?: Text;
   /** optional full-colour solved picture: one string per row of palette indices (base36), '.' = use default */
   color?: { palette: string[]; rows: string[] };
+  /** Mega version from the game: which lines are paired (the first line of each pair); see game/mega.ts */
+  mega?: { rows: number[]; cols: number[] };
+  /** a puzzle the game has only as a Mega puzzle: shown in Mega mode only */
+  megaOnly?: boolean;
 }
 
 export interface PackLevel {
@@ -160,7 +164,8 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   const region = b.source.region || 'other';
   for (const l of b.levels) for (const p of l.puzzles) {
     const q = byRows.get(p.rows.join('/'));
-    if (q) { q.name = { ...p.name, ...q.name }; continue; }
+    // the Mega version of a puzzle may come from the other release (PICROSS S+ has one for every e game)
+    if (q) { q.name = { ...p.name, ...q.name }; if (!q.mega && p.mega) q.mega = p.mega; continue; }
     // exclusive to the other version: into the level it has there, or a level of its own
     const x: PackPuzzle = JSON.parse(JSON.stringify(p));
     delete (x as any).anim; // animation data belongs to the other version's files

@@ -24,6 +24,29 @@ import { isBcstm } from '../../audio/bcstm';
 
 interface Raw { file: string; w: number; h: number; cells: Uint8Array; title: string }
 
+/**
+ * Mega Picross (.bdpc, ".DPC" header, LZ11): like .bprs2 (title, w, h, one byte per cell), then one byte per
+ * column and per row: 1 = this line and the next form a pair. Then the clues (per plain line: count, numbers; per
+ * pair: count, then type (1 = mega), number in the first line, number in the second line, 0xFF = none) and more
+ * data MomoGram doesn't need: the clues follow from the picture and the pairs (game/mega.ts).
+ */
+export function parseDpc(d: Uint8Array, sizeHint?: [number, number]): { w: number; h: number; cells: Uint8Array; title: string; rows: number[]; cols: number[] } | null {
+  if (!(d[0] === 0x2e && d[2] === 0x44 && d[4] === 0x50 && d[6] === 0x43)) return null;
+  const n = u16(d, 10), p = 12 + n * 2;
+  for (let q = p; q < p + 8; q++) {
+    const w = d[q], h = d[q + 1];
+    if (sizeHint ? w !== sizeHint[0] || h !== sizeHint[1] : w < 5 || h < 5 || w > 40 || h > 40) continue;
+    const cells = d.subarray(q + 2, q + 2 + w * h);
+    if (cells.length !== w * h || !cells.every(c => c <= 1)) continue;
+    const f = q + 2 + w * h;
+    const flags = d.subarray(f, f + w + h);
+    if (flags.length !== w + h || !flags.every(c => c <= 1)) continue;
+    const pairs = (a: Uint8Array) => [...a].flatMap((v, i) => (v ? [i] : []));
+    return { w, h, cells, title: new TextDecoder('utf-16le').decode(d.subarray(12, p)), cols: pairs(flags.subarray(0, w)), rows: pairs(flags.subarray(w)) };
+  }
+  return null;
+}
+
 function parseBprs(f: CtrFile): Raw | null {
   const d = lz11(f.data);
   const td = new TextDecoder('utf-16le');
@@ -121,6 +144,7 @@ export function read3ds(data: Uint8Array): Pack[] {
       levels.push(...chunk(`s${s}-`, { en: label }, s, list));
     }
   }
+  addMega(t.files, raws, levels);
   addNames(t, data, raws, levels);
   const title: Text = {};
   t.names.forEach((n, i) => { const l = SMDH_LANGS[i] as Lang; if (n && ['ja', 'en', 'fr', 'de', 'it', 'es', 'ko'].includes(l)) title[l] = n; });
@@ -156,6 +180,28 @@ export function read3ds(data: Uint8Array): Pack[] {
     source: { game: title.en ?? title.ja ?? t.productCode, platform: 'Nintendo 3DS', region: t.productCode.slice(-1), developer: 'Jupiter' },
     levels,
   }];
+}
+
+// ---- Mega Picross (PICROSS e6 and later): the pairs of each puzzle, and the puzzles that exist only as Mega ----
+function addMega(files: CtrFile[], raws: Raw[], levels: PackLevel[]) {
+  const byRows = new Map<string, PackPuzzle>();
+  for (const l of levels) for (const p of l.puzzles) byRows.set(p.rows.join('/'), p);
+  const only: Array<{ size: string; p: PackPuzzle }> = [];
+  for (const f of files.filter(f => /\.bdpc$/i.test(f.path)).sort((a, b) => a.path.localeCompare(b.path, 'en', { numeric: true }))) {
+    const m = f.path.match(/(\d+)x(\d+)/);
+    const dpc = parseDpc(lz11(f.data), m ? [+m[1], +m[2]] : undefined);
+    if (!dpc) continue;
+    const rows = rowsFromBits(dpc.w, dpc.h, (x, y) => dpc.cells[y * dpc.w + x] === 1);
+    const mega = { rows: dpc.rows, cols: dpc.cols };
+    const known = byRows.get(rows.join('/'));
+    if (known) { known.mega = mega; continue; }
+    // Dpc_15x15_s03: a puzzle of the Mega mode only
+    const size = `${dpc.w}x${dpc.h}`;
+    const n = only.filter(o => o.size === size).length + 1;
+    only.push({ size, p: { id: `mega-${size}-${String(n).padStart(2, '0')}`, width: dpc.w, height: dpc.h, rows, name: ownTitle(dpc.title), mega, megaOnly: true } });
+  }
+  if (only.length) levels.push(...chunk('mega-', { en: 'Mega', de: 'Mega', fr: 'Méga', it: 'Mega', es: 'Mega', ja: 'デカ' }, 'mega', only.map(o => o.p)));
+  void raws;
 }
 
 // ---- the board's look: the colours a game's textures don't give, measured from screenshots ----
