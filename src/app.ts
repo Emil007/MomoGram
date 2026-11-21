@@ -130,7 +130,7 @@ const DS_GROUPS: Record<string, Pack['title']> = {
 async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>): Promise<Pack[]> {
   const found: Pack[] = [];
   for (const f of files) {
-    try { found.push(...(await readEntries(await filesToEntries(f), lang(), t)).made); }
+    try { found.push(...(await readEntries(await filesToEntries(f), lang(), t, ctx.packs)).made); }
     catch (e) { console.warn('import', f.name, e); }
   }
   if (found.length) ctx.packs = await storePacks(ctx.packs, found);

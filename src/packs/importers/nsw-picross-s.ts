@@ -185,6 +185,7 @@ const AB = 'StreamingAssets/AssetBundles/';
 
 registerSetImporter({
   name: 'Picross S (Switch)',
+  version: 3, // raise when the importer reads more or reads differently
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {

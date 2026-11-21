@@ -107,12 +107,14 @@ function readPicross2(d: Uint8Array): Pack {
 
 registerImporter({
   name: 'Picross 2 (Game Boy)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => isGb(d) && /^PICROSS 2/.test(gbTitle(d)),
   read: d => [gbWithMusic(readPicross2(d), d)],
 });
 
 registerImporter({
   name: "Mario's Picross (Game Boy)",
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => isGb(d) && /MARIO.?S PICROSS/i.test(gbTitle(d)) && findMarioRecords(d) >= 0,
   read: d => [gbWithMusic(readMario(d, gbTitle(d).includes("'") ? 'USA/EUR' : 'JPN'), d)],
 });

@@ -28,6 +28,10 @@ packs (the same title music in every game of a series). Each pack file stands on
 - A higher `rev` is a newer version. The app offers an update when a server has a pack with a higher `rev` than the installed one, and the server keeps only the newest.
 - A pack without `rev` counts as revision 1.
 
+`source.scan` (`{ "by": importer name, "v": its version, "file": file name, "size": bytes }`) notes which importer
+read the pack from which file. Importing the same file again with the same importer version is skipped, and an
+import that brings nothing new (same puzzles, names, music, pictures) leaves the pack and its revision as they were.
+
 The bare `.momopack.json` files of early versions are no longer read.
 
 ## pack.json

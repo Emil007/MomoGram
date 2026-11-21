@@ -12,6 +12,7 @@ import { readPicrossDs, readPicrossDsDemo, dsToPack } from '../../rom/picrossds'
 
 registerImporter({
   name: 'Picross DS',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('AXP') || (NdsRom.looksLike(d) && new NdsRom(d).title.startsWith('PICROSS')),
   read: d => {
     const px = new NdsRom(d).icon();

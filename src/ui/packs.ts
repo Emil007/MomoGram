@@ -8,7 +8,7 @@ import { t, lang } from '../i18n';
 import { h, pickFiles, serverError } from '../app';
 import { confirmBox, message } from './dialog';
 import * as Sync from '../sync';
-import { download, makeZip, unzipAll } from '../util/files';
+import { download, makeZip, unzipAll, sha1 } from '../util/files';
 import { extractAll, isArchive } from '../util/archive';
 
 interface PM {
@@ -53,10 +53,13 @@ export function openPackManager(pm: PM) {
 
   const status = h('div', { class: 'status' });
 
-  async function addPacks(incoming: Pack[]) {
+  /** stores the packs; returns the titles of those that brought nothing new */
+  async function addPacks(incoming: Pack[]): Promise<string[]> {
     pm.setPacks(await storePacks(pm.packs(), incoming));
+    const same = incoming.filter(p => unchanged.has(p.id)).map(p => pickAny(p.title, lang()));
     render();
     renderOnline();
+    return [...new Set(same)];
   }
 
   /** one button for everything: games, archives of games, .momopack files and older pack files */
@@ -74,12 +77,13 @@ export function openPackManager(pm: PM) {
       let entries: Array<{ name: string; data: Uint8Array }>;
       try { entries = await filesToEntries({ name: f.name, file: f }); }
       catch (e: any) { li.textContent = f.name + ': ✕ ' + (e.message || e); continue; }
-      const r = await readEntries(entries, lang(), t);
+      const r = await readEntries(entries, lang(), t, pm.packs());
       made.push(...r.made); fromPackFiles += r.fromPackFiles;
       li.textContent = f.name + ': ' + (r.msgs.join(' · ') || '✕ ' + t('unsupported'));
     }
     if (made.length) {
-      await addPacks(made);
+      const same = await addPacks(made);
+      for (const n of same) results.append(h('li', {}, `= ${n}: ${t('noNewData')}`));
       const ids = new Set(made.map(p => p.id));
       const unique = pm.packs().filter(p => ids.has(p.id));
       // offering an export only makes sense for packs made from games
@@ -112,18 +116,20 @@ export function openPackManager(pm: PM) {
     const step = (what: string) => { progress.textContent = `${t('analyzing')} ${what}`; };
     step('');
     await importFileSet({ names, get: async n => { const f = byName.get(n); return f ? new Uint8Array(await f.arrayBuffer()) : undefined; } }, async r => {
-      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; } await addPacks(r.packs); added += r.packs.length; }
-      results.insertBefore(h('li', {}, r.file + ': ' + (r.ok ? '✓ ' + r.packs.map(p => pickAny(p.title, lang())).join(', ') : '✕ ' + (r.message === 'unsupported' ? t('unsupported') : r.message))), progress);
-    }).then(s => { for (let i = loose.length - 1; i >= 0; i--) if (s.used(loose[i])) loose.splice(i, 1); });
+      let same: string[] = [];
+      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; } same = await addPacks(r.packs); added += r.packs.length - same.length; }
+      results.insertBefore(h('li', {}, r.file + ': ' + (r.ok ? (same.length === r.packs.length ? '= ' + t('noNewData') : '✓ ' + r.packs.map(p => pickAny(p.title, lang())).join(', ')) : r.message === 'uptodate' ? '= ' + t('upToDate') : '✕ ' + (r.message === 'unsupported' ? t('unsupported') : r.message))), progress);
+    }, pm.packs()).then(s => { for (let i = loose.length - 1; i >= 0; i--) if (s.used(loose[i])) loose.splice(i, 1); });
     for (const n of loose) {
       const f = byName.get(n)!;
       step(`${++done}/${loose.length} · ${n}`);
       const line = h('li', {}, n + ' … ');
       results.insertBefore(line, progress);
       try {
-        const r = await readEntries(await filesToEntries({ name: f.name, file: f }), lang(), t);
-        if (r.made.length) { await addPacks(r.made); added += r.made.length; }
-        line.textContent = n + ': ' + (r.msgs.join(' · ') || '✕ ' + t('unsupported'));
+        const r = await readEntries(await filesToEntries({ name: f.name, file: f }), lang(), t, pm.packs());
+        let same: string[] = [];
+        if (r.made.length) { same = await addPacks(r.made); added += r.made.length - same.length; }
+        line.textContent = n + ': ' + (same.length && same.length === r.made.length ? '= ' + t('noNewData') : r.msgs.join(' · ') || '✕ ' + t('unsupported'));
       } catch (e: any) { line.textContent = n + ': ✕ ' + (e.message || e); }
     }
     progress.textContent = t('folderDone', { n: added });
@@ -154,42 +160,68 @@ export function openPackManager(pm: PM) {
       const a = packRev(mine), b = sp.meta?.rev ?? 1;
       return b > a ? 'update' : a > b ? 'newer-here' : 'same';
     };
-    // download (install or update) one or several: one after the other, with the progress in the button
-    const fetchPacks = async (sps: Sync.ServerPack[], btn: HTMLButtonElement) => {
+    // download (install or update) one or several: one after the other, with the progress in the button.
+    // Split packs: files this device has already (any pack's) aren't downloaded; music can be left out.
+    const fetchPacks = async (sps: Sync.ServerPack[], btn: HTMLButtonElement, music = true) => {
       const label = btn.textContent;
       btn.disabled = true;
       try {
         for (let i = 0; i < sps.length; i++) {
           btn.textContent = `${i + 1}/${sps.length} …`;
-          const r = await readEntries(unzipAll(await Sync.downloadPack(sps[i].id)), lang(), t);
+          const split = sps[i].split ? await Sync.packSplit(sps[i].id) : null;
+          let made: Pack[];
+          if (split) {
+            const p = split.pack as Pack;
+            p.assets = [];
+            const want = split.assets.filter(a => music || !a.music);
+            for (let k = 0; k < want.length; k++) {
+              const a = want[k];
+              btn.textContent = `${i + 1}/${sps.length} · ${k + 1}/${want.length}`;
+              const data = (await storage.loadBlob(a.hash).catch(() => undefined)) ?? await Sync.downloadBlob(a.hash);
+              p.assets.push({ name: a.name, data });
+            }
+            made = [p];
+          } else made = (await readEntries(unzipAll(await Sync.downloadPack(sps[i].id)), lang(), t)).made;
           // a pack from the server keeps its revision (old uploads without one count as 1)
-          for (const p of r.made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
-          if (r.made.length) pm.setPacks(await storePacks(pm.packs(), r.made));
+          for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
+          if (made.length) pm.setPacks(await storePacks(pm.packs(), made));
         }
         render(); renderOnline();
       } catch (e) { bad(e); btn.disabled = false; btn.textContent = label; }
     };
+    const withMusic = h('input', { type: 'checkbox', checked: true }) as HTMLInputElement;
+    const mb = (n: number) => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
+    // installed packs whose music was left out
+    const musicMissing = async (p: Pack) => {
+      const have = new Set(await storage.assetNames(p.id).catch(() => [] as string[]));
+      return songsOf(p.theme).some(r => !have.has(r.split('#')[0]));
+    };
     const missing = list.filter(s => state(s) === 'new'), updates = list.filter(s => state(s) === 'update');
     if (list.length) {
       const all = h('button', { class: 'btn' + (missing.length + updates.length ? ' primary' : ''), disabled: missing.length + updates.length ? undefined : true }, `⤓ ${t('downloadAll')} (${missing.length + updates.length})`) as HTMLButtonElement;
-      all.onclick = () => fetchPacks([...updates, ...missing], all);
+      all.onclick = () => fetchPacks([...updates, ...missing], all, withMusic.checked);
       const upd = h('button', { class: 'btn', disabled: updates.length ? undefined : true }, `⟳ ${t('updateAll')} (${updates.length})`) as HTMLButtonElement;
-      upd.onclick = () => fetchPacks(updates, upd);
-      online.append(h('div', { class: 'row wrap' }, all, upd));
+      upd.onclick = () => fetchPacks(updates, upd, withMusic.checked);
+      online.append(h('div', { class: 'row wrap' }, all, upd), h('label', { class: 'with-music' }, withMusic, ' ♪ ' + t('withMusic')));
     } else online.append(h('p', { class: 'fine' }, t('serverEmpty')));
     for (const sp of list) {
       const title = pickAny(sp.meta?.title, lang()) || sp.id;
       const st = state(sp);
       const dl = h('button', { class: 'btn ghost', title: st === 'update' ? t('update') : t('download') }, st === 'update' ? '⟳' : '⤓') as HTMLButtonElement;
-      dl.onclick = () => fetchPacks([sp], dl);
+      dl.onclick = () => fetchPacks([sp], dl, withMusic.checked);
+      // installed without its music: get it now (only the music files are downloaded)
+      const addMusic = h('button', { class: 'btn ghost', title: t('addMusic'), hidden: true }, '♪+') as HTMLButtonElement;
+      addMusic.onclick = () => fetchPacks([sp], addMusic, true);
+      const mine0 = local.get(sp.id);
+      if (sp.split && sp.music && mine0 && (st === 'same' || st === 'newer-here')) musicMissing(mine0).then(m => { addMusic.hidden = !m; });
       const acc = Sync.account();
       const mine = sp.by === acc?.name || acc?.admin;
       const note = st === 'same' ? '✓ ' + t('installed') : st === 'update' ? '⬆ ' + t('updateAvailable') : st === 'newer-here' ? '⇧ ' + t('newerHere') : '';
       online.append(h('div', { class: 'pack' + (st === 'update' ? ' has-update' : '') },
         h('div', { class: 'btn packbtn static' },
           h('b', {}, title),
-          h('small', {}, [sp.meta?.platform, sp.meta?.puzzles !== undefined ? `${sp.meta.puzzles} ${t('puzzles')}` : '', sp.size < 1048576 ? `${Math.max(1, Math.round(sp.size / 1024))} KB` : `${(sp.size / 1048576).toFixed(1)} MB`, sp.by ? t('uploadedBy', { name: sp.by }) : '', note].filter(Boolean).join(' · '))),
-        st === 'same' || st === 'newer-here' ? null : dl,
+          h('small', {}, [sp.meta?.platform, sp.meta?.puzzles !== undefined ? `${sp.meta.puzzles} ${t('puzzles')}` : '', mb(sp.size) + (sp.music ? ` (♪ ${mb(sp.music)})` : ''), sp.by ? t('uploadedBy', { name: sp.by }) : '', note].filter(Boolean).join(' · '))),
+        st === 'same' || st === 'newer-here' ? addMusic : dl,
         mine ? h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
           if (!(await confirmBox(t('delete') + ' (' + t('onServer') + '): ' + title + '?', t('delete'), true))) return;
           try { await Sync.deleteServerPack(sp.id); } catch (e) { await message(serverError(e)); }
@@ -215,8 +247,21 @@ export function openPackManager(pm: PM) {
         try {
           for (let i = 0; i < pick.length; i++) {
             const p = pick[i];
-            await Sync.uploadPack(p.id, { title: p.title, puzzles: count(p), platform: p.source.platform, rev: packRev(p) }, await momopackOf(p),
-              d => { bar.style.width = ((i + d) / pick.length) * 100 + '%'; });
+            const meta = { title: p.title, puzzles: count(p), platform: p.source.platform, rev: packRev(p) };
+            const prog = (d: number) => { bar.style.width = ((i + d) / pick.length) * 100 + '%'; };
+            if (await Sync.serverApi() >= 2) {
+              // pack.json + files by hash: files the server has (from other packs) aren't sent again
+              const { assets: _a, ...json } = p;
+              const musicFiles = new Set(songsOf(p.theme).map(r => r.split('#')[0]));
+              const files = [];
+              for (const name of await storage.assetNames(p.id)) {
+                let hash = await storage.assetHash(p.id, name);
+                let cached: Uint8Array | undefined;
+                if (!hash) { cached = await storage.loadAsset(p.id, name); if (!cached) continue; hash = await sha1(cached); }
+                files.push({ name, hash, size: cached?.length ?? 0, music: musicFiles.has(name), data: async () => cached ?? await storage.loadAsset(p.id, name) });
+              }
+              await Sync.uploadPackSplit(p.id, meta, json, files, prog);
+            } else await Sync.uploadPack(p.id, meta, await momopackOf(p), prog);
           }
           renderOnline();
         } catch (e) { bad(e); go.disabled = false; }
@@ -276,6 +321,22 @@ export async function oneRelease(p: Pack): Promise<Set<string>> {
   return drop;
 }
 
+/** what a pack holds, for "did this import bring anything new" (revision, import stamp and file list aside) */
+async function contentKey(p: Pack, files: Map<string, string>): Promise<string> {
+  const { rev: _r, assets: _a, source, ...rest } = p as Pack & { assets?: unknown };
+  const { scan: _s, file: _f, ...src } = source;
+  // empty name lists (older merges wrote them) count as no names
+  return JSON.stringify({ ...rest, source: src, files: [...files].sort() }, (k, v) => (k === 'name' && v && typeof v === 'object' && !Object.keys(v).length ? undefined : v));
+}
+async function storedFiles(id: string): Promise<Map<string, string>> {
+  const m = new Map<string, string>();
+  for (const n of await storage.assetNames(id).catch(() => [] as string[])) m.set(n, (await storage.assetHash(id, n)) ?? '?');
+  return m;
+}
+
+/** packs that an import left as they were (it brought nothing new), filled by storePacks */
+export const unchanged = new Set<string>();
+
 export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
   const merged = new Map<string, Pack>();
   // a game added again is read fresh: the new import is the base of the merge (so everything newer versions of
@@ -287,8 +348,28 @@ export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pa
     merged.set(p.id, m ? mergePacks(m, p) : p);
   }
   const ps = [...merged.values()];
-  for (const p of ps) {
+  unchanged.clear();
+  for (let i = 0; i < ps.length; i++) {
+    const p = ps[i];
     const drop = await oneRelease(p);
+    // a game read again that brings nothing new (same puzzles, names, music, pictures, …) is left alone: no new
+    // revision (so nothing is uploaded again); only the note of which importer read it is updated
+    const old = existing.find(x => x.id === p.id);
+    if (old) {
+      const before = await storedFiles(p.id);
+      const after = new Map(before);
+      for (const a of (p as Pack & { assets?: Array<{ name: string; data: Uint8Array }> }).assets ?? []) if (!drop.has(a.name)) after.set(a.name, await sha1(a.data));
+      for (const f of drop) after.delete(f);
+      const ka = await contentKey({ ...p, rev: old.rev }, after), kb = await contentKey(old, before);
+      const same = ka === kb;
+      if (same) {
+        const kept: Pack = { ...old, source: { ...old.source, scan: p.source.scan ?? old.source.scan } };
+        await storage.savePack(kept);
+        unchanged.add(p.id);
+        ps[i] = kept;
+        continue;
+      }
+    }
     const { assets, ...rest } = p;
     for (const a of assets ?? []) if (!drop.has(a.name)) await storage.saveAsset(p.id, a.name, a.data);
     for (const f of drop) await storage.deleteAsset(p.id, f).catch(() => {});

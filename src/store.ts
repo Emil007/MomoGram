@@ -90,6 +90,11 @@ export const storage = {
     if (typeof d === 'string') d = await tx<Uint8Array | undefined>('assets', 'readonly', s => s.get(d as string));
     return d && decompressAsset(d);
   },
+  /** a stored file by its content hash (any pack's), or undefined */
+  loadBlob: async (sha1hex: string) => {
+    const d = await tx<Uint8Array | undefined>('assets', 'readonly', s => s.get('@' + sha1hex));
+    return d && decompressAsset(d);
+  },
   /** the content hash of a stored file (without loading it); undefined for files stored before linking */
   assetHash: async (packId: string, name: string) => {
     const d = await tx<Uint8Array | string | undefined>('assets', 'readonly', s => s.get(packId + '/' + name));

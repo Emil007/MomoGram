@@ -18,7 +18,8 @@ It's a single PHP file. You need PHP 7.4 or newer and a MySQL/MariaDB database, 
    'password' => 'its password',
    'invite' => 'something only your family knows',
    ```
-   Accounts can only be created with the invite code. Without one, nobody can register.
+   Accounts can only be created with the invite code. Without one, nobody can register. A server takes at most
+   10 players (high scores and the app's layouts are made for that many).
 3. **Upload the folder.** Use **Files** in Plesk (or FTP) to upload the `server` folder into your web space, e.g. as `httpdocs/momogram`. The `data` folder inside must be writable by PHP, which it is by default on Plesk. If you can, set `data_dir` in `config.php` to a folder outside `httpdocs`.
 4. **Turn on HTTPS.** Use **SSL/TLS Certificates → Let's Encrypt**. The web version of MomoGram can only connect over HTTPS.
 5. **Connect the app.** In MomoGram, go to **Options → Server**, enter the address (e.g. `https://example.com/momogram`) and tap **Connect**. Then create an account with the invite code. On your other devices, log in with the same name and password.
@@ -31,3 +32,10 @@ The first account created is the admin. The admin can delete any pack on the ser
 - **Big packs:** they're uploaded in parts that fit the host's `post_max_size`, so big ones with music work too.
 - **Playing offline:** progress is joined puzzle by puzzle. The best time and best medal from either device count, so playing offline on two devices loses nothing.
 - **Backups:** back up the database and the `data` folder. Uploaded packs are files in `data/<random name>/packs/`.
+
+## How packs are stored
+
+Packs uploaded by MomoGram 0.22 or later are kept as their `pack.json` plus their files, each file once by its
+SHA-1 in `blobs/`: the same title song in nine packs takes the space of one, and a file the server has already is
+not uploaded again. Downloading can leave out the music (and fetch it later). Packs uploaded by older versions stay
+single zip files until they are uploaded again.

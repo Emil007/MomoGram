@@ -59,6 +59,7 @@ const NP_STRIPES: Record<number, string> = { 1: '#70d8a8', 2: '#e0c878', 3: '#f0
 
 registerImporter({
   name: 'Picross NP (Super Famicom)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => d.length >= 0x10000 && /^PICROSS NP VOL\.\d/.test(sfcHeaderTitle(d)),
   read: async (d, f) => [await sfcWithMusic(readPicrossNp(d, +sfcHeaderTitle(d).match(/VOL\.(\d)/)![1], /rev ?1/i.test(f)), d)],
 });

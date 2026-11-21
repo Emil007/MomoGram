@@ -53,6 +53,8 @@ import { Pack } from '../format';
 
 registerImporter({
   name: 'My Game (System)',          // shown when a file is read, and in error messages
+  version: 1,                        // raise it whenever the importer reads more or differently: a file read by
+                                     // the same version is skipped on the next import ("already read")
   detect(data, fileName) {           // fast: header bytes or a title, never a full parse
     return …;
   },

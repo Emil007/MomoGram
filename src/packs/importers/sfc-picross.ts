@@ -168,12 +168,14 @@ const isTamori = (d: Uint8Array) => d.length >= 0x10000 && d[0xffc1] === 0xc0 &&
 
 registerImporter({
   name: 'Mario no Super Picross (Super Famicom)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => d.length >= 0x10000 && sfcHeaderTitle(d).startsWith('SUPER PICROSS'),
   read: async (d, f) => [await sfcWithMusic(readMarioSuper(d, f), d)],
 });
 
 registerImporter({
   name: 'Tamori no Picross (Satellaview)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => isTamori(d),
   read: async d => [await sfcWithMusic(readTamori(d), d)],
 });

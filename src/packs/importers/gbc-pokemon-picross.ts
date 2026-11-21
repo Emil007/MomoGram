@@ -83,6 +83,7 @@ function withSuffix(t: Text, suffix: string): Text {
 
 registerImporter({
   name: 'Pokémon Picross (Game Boy Color)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => isGb(d) && /^POKEPICROSS/.test(gbTitle(d)),
   read: d => [gbWithMusic(readPokemonPicross(d), d)],
 });

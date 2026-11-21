@@ -99,6 +99,7 @@ function readB(rom: NdsRom): PackLevel[] {
 
 registerImporter({
   name: 'Illust Logic (Hudson, DS / DSiWare)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.slice(0, 4) in GAMES,
   read: d => {
     const rom = new NdsRom(d), g = GAMES[rom.gameCode];

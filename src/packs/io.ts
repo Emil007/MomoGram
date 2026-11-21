@@ -1,7 +1,7 @@
 // Reading and writing packs: the .momopack file (one zip with the pack and all its files) and the user's game
 // files, from loose files or archives.
 import { Pack, PackAsset, validatePack, pickAny, Lang } from './format';
-import { importGameFile, importFileSet } from './importers/index';
+import { alreadyRead, importGameFile, importFileSet } from './importers/index';
 import './importers/all';
 import { storage } from '../store';
 import { makeZip, unzipAll } from '../util/files';
@@ -35,14 +35,14 @@ export interface ReadResult { made: Pack[]; msgs: string[]; fromPackFiles: numbe
  * What's in a set of files (already taken out of an archive): MomoGram packs (pack.json + assets/), with their
  * files, and games. .momopack files inside are opened too (an "export all" zip holds one per pack).
  */
-export async function readEntries(entries: Array<{ name: string; data: Uint8Array }>, lang: Lang, t: (k: string) => string): Promise<ReadResult> {
+export async function readEntries(entries: Array<{ name: string; data: Uint8Array }>, lang: Lang, t: (k: string) => string, known: Pack[] = []): Promise<ReadResult> {
   const out: ReadResult = { made: [], msgs: [], fromPackFiles: 0 };
   const count = (p: Pack) => p.levels.reduce((a, l) => a + l.puzzles.length, 0);
   entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png|md)$/i.test(e.name) && !/(^|\/)(__MACOSX|\.)/.test(e.name));
   for (const e of entries.filter(e => /\.momopack$/i.test(e.name))) {
     let inner: Array<{ name: string; data: Uint8Array }>;
     try { inner = unzipAll(e.data); } catch { out.msgs.push(`✕ ${e.name}`); continue; }
-    const r = await readEntries(inner, lang, t);
+    const r = await readEntries(inner, lang, t, known);
     out.made.push(...r.made); out.msgs.push(...r.msgs); out.fromPackFiles += r.fromPackFiles;
   }
   const used = new Set<string>();
@@ -61,18 +61,21 @@ export async function readEntries(entries: Array<{ name: string; data: Uint8Arra
   }
   // games that are folders (Switch): handed over as a whole
   const byName = new Map(entries.map(e => [e.name, e]));
-  const sets = await importFileSet({ names: entries.map(e => e.name), get: async n => byName.get(n)?.data });
+  const sets = await importFileSet({ names: entries.map(e => e.name), get: async n => byName.get(n)?.data }, undefined, known);
   for (const r of sets.results) {
     if (r.ok) {
       const rev = newRev();
       for (const p of r.packs) { p.source.file = r.file; p.rev = rev; out.made.push(p); }
       out.msgs.push(`✓ ${r.packs.map(p => `${pickAny(p.title, lang)} (${count(p)})`).join(', ')}`);
-    } else out.msgs.push(`✕ ${r.file}: ${r.message === 'unsupported' ? t('unsupported') : r.message}`);
+    } else out.msgs.push(r.message === 'uptodate' ? `= ${r.file}: ${t('upToDate')}` : `✕ ${r.file}: ${r.message === 'unsupported' ? t('unsupported') : r.message}`);
   }
   for (const e of entries) if (sets.used(e.name)) used.add(e.name);
   // everything else is read as a game
   for (const e of entries) {
     if (used.has(e.name) || /\.(json|momopack)$/i.test(e.name)) continue;
+    // read before by the same version of its importer: nothing new can come out of it
+    const seen = alreadyRead(known, e.name, e.data.length);
+    if (seen) { out.msgs.push(`= ${pickAny(seen.title, lang)}: ${t('upToDate')}`); continue; }
     const r = await importGameFile(e.name, e.data);
     if (r.ok) {
       // read from the game just now: a new revision of this pack

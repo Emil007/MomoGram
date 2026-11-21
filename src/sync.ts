@@ -3,7 +3,12 @@
 import { activeProfile, makeSave, mergeSave, onLocalChange, isSaveFile, profiles, switchProfile, createProfile, rekeyProfile, SaveFile, setServerTime } from './store';
 
 export interface Account { name: string; token: string; admin: boolean; rev: number; synced?: string }
-export interface ServerPack { id: string; size: number; updated: string; by: string | null; meta: { title?: any; puzzles?: number; platform?: string; icon?: any; rev?: number } }
+export interface ServerPack {
+  id: string; size: number; updated: string; by: string | null; meta: { title?: any; puzzles?: number; platform?: string; icon?: any; rev?: number };
+  /** stored as pack.json + files (servers from API 2 on): `music` bytes of `size` can be left out */
+  split?: boolean; music?: number;
+}
+export interface SplitAsset { name: string; hash: string; size: number; music: boolean }
 
 const SKEY = 'momogram.server';
 const akey = (id = activeProfile().id) => `momogram.account.${id}`;
@@ -212,6 +217,41 @@ export function knownServerRevs(): Map<string, number> {
   catch { return new Map(); }
 }
 export async function downloadPack(id: string): Promise<Uint8Array> { return call('pack', { args: { id }, raw: true }); }
+/** a split pack: its pack.json and file list, or null when the server keeps it as one zip (older uploads) */
+export async function packSplit(id: string): Promise<{ pack: any; assets: SplitAsset[] } | null> {
+  const r = await call('pack_split', { args: { id } });
+  return r.kind === 'split' ? { pack: r.pack, assets: r.assets } : null;
+}
+export async function downloadBlob(hash: string): Promise<Uint8Array> { return call('blob', { args: { hash }, raw: true }); }
+
+/**
+ * Upload as pack.json + files: only the files the server doesn't have yet are sent (the same song in nine packs
+ * goes up once). `files` gives each file's data on demand, so they aren't all in memory together.
+ */
+export async function uploadPackSplit(id: string, meta: ServerPack['meta'], pack: unknown, files: Array<{ name: string; hash: string; size: number; music: boolean; data: () => Promise<Uint8Array | undefined> }>, progress?: (done: number) => void) {
+  const { missing } = await call('blobs_missing', { json: { hashes: [...new Set(files.map(f => f.hash))] } }) as { missing: string[] };
+  const need = files.filter((f, i) => missing.includes(f.hash) && files.findIndex(g => g.hash === f.hash) === i);
+  const part = 4 << 20;
+  for (let k = 0; k < need.length; k++) {
+    const f = need[k];
+    const d = await f.data();
+    if (!d) throw new ServerError('missing', 0);
+    const n = Math.max(1, Math.ceil(d.length / part));
+    for (let i = 0; i < n; i++) {
+      await call('blob_part', { method: 'POST', body: d.slice(i * part, (i + 1) * part), args: { hash: f.hash, i, n } });
+      progress?.(Math.min(0.99, (k + (i + 1) / n) / need.length));
+    }
+  }
+  try { await call('pack_put', { json: { id, meta, pack, assets: files.map(({ name, hash, music }) => ({ name, hash, music })) } }); }
+  catch (e) { if (e instanceof ServerError && e.code === 'have') { progress?.(1); return; } throw e; }
+  progress?.(1);
+}
+/** the server's API version (2: split packs) */
+let apiVersion = 0;
+export async function serverApi(): Promise<number> {
+  if (!apiVersion) { try { apiVersion = (await call('info')).api ?? 1; } catch { apiVersion = 1; } }
+  return apiVersion;
+}
 export async function deleteServerPack(id: string) { await call('pack_delete', { method: 'POST', args: { id } }); }
 export async function uploadPack(id: string, meta: ServerPack['meta'], zip: Uint8Array, progress?: (done: number) => void) {
   let b: any;

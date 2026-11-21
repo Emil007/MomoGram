@@ -44,6 +44,7 @@ function locNames(rom: NdsRom): Map<Lang, string[]> {
 
 registerImporter({
   name: 'DS Puzzler / Challenge Me (DS)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.slice(0, 4) in GAMES,
   read: d => {
     const rom = new NdsRom(d), g = GAMES[rom.gameCode];

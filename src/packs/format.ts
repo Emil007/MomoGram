@@ -89,7 +89,11 @@ export interface Pack {
   id: string;
   title: Text;
   /** where the puzzles came from, shown in the pack manager */
-  source: { game: string; platform: string; region?: string; developer?: string; year?: number; file?: string; sha1?: string };
+  source: {
+    game: string; platform: string; region?: string; developer?: string; year?: number; file?: string; sha1?: string;
+    /** the last import: importer, its version, the file (name and size) */
+    scan?: { by: string; v: number; file: string; size: number };
+  };
   levels: PackLevel[];
   createdBy?: string;
   theme?: PackTheme;
@@ -149,11 +153,22 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   // puzzles are matched by their pattern, not their id: regions number some puzzles differently and some
   // puzzles exist in one region only
   const all = out.levels.flatMap(l => l.puzzles);
-  const byRows = new Map(all.map(p => [p.rows.join('/'), p]));
+  // a game can have the same picture twice (in two levels): such puzzles are matched by id first, then in order
+  const byRows = new Map<string, PackPuzzle[]>();
+  for (const p of all) byRows.set(p.rows.join('/'), [...(byRows.get(p.rows.join('/')) ?? []), p]);
+  const matched = new Map<PackPuzzle, PackPuzzle>(); // b's puzzle → out's
+  const used = new Set<PackPuzzle>();
+  const bAll = b.levels.flatMap(l => l.puzzles);
+  for (const pass of [0, 1]) for (const p of bAll) {
+    if (matched.has(p)) continue;
+    const c = (byRows.get(p.rows.join('/')) ?? []).filter(q => !used.has(q));
+    const q = pass === 0 ? c.find(q => q.id === p.id) : c[0];
+    if (q) { matched.set(p, q); used.add(q); }
+  }
   // a puzzle both versions have keeps the id of the other version (b: the copy stored so far), so progress saved
   // under it stays (a game read again, another region or the Switch release of a 3DS game numbers it differently)
   const keep = new Map<PackPuzzle, string>();
-  for (const l of b.levels) for (const p of l.puzzles) { const q = byRows.get(p.rows.join('/')); if (q && q.id !== p.id) keep.set(q, p.id); }
+  for (const [p, q] of matched) if (q.id !== p.id) keep.set(q, p.id);
   if (keep.size) {
     const taken = new Set([...keep.values()]);
     for (const q of all) {
@@ -165,16 +180,16 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   const ids = new Set(all.map(p => p.id));
   const region = b.source.region || 'other';
   for (const l of b.levels) for (const p of l.puzzles) {
-    const q = byRows.get(p.rows.join('/'));
+    const q = matched.get(p);
     // the Mega version of a puzzle may come from the other release (PICROSS S+ has one for every e game)
-    if (q) { q.name = { ...p.name, ...q.name }; if (!q.mega && p.mega) q.mega = p.mega; continue; }
+    if (q) { const n = { ...p.name, ...q.name }; if (Object.keys(n).length) q.name = n; else delete q.name; if (!q.mega && p.mega) q.mega = p.mega; continue; }
     // exclusive to the other version: into the level it has there, or a level of its own
     const x: PackPuzzle = JSON.parse(JSON.stringify(p));
     delete (x as any).anim; // animation data belongs to the other version's files
     x.exclusive = x.exclusive ?? region;
     let id = x.id;
     for (let n = 2; ids.has(id); n++) id = `${x.id}~${region.toLowerCase()}${n > 2 ? n : ''}`;
-    x.id = id; ids.add(id); byRows.set(x.rows.join('/'), x);
+    x.id = id; ids.add(id);
     const mine = out.levels.find(v => v.id === l.id);
     if (mine) mine.puzzles.push(x);
     else {

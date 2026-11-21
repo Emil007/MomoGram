@@ -23,6 +23,7 @@ const LEVELS = [
 
 registerImporter({
   name: 'Illu-Logi VOW (DS)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('A8I'),
   read: d => {
     const rom = new NdsRom(d);

@@ -3,8 +3,9 @@
 // One file, no dependencies. Needs PHP 7.4+ with PDO (MySQL/MariaDB or SQLite). Settings: config.php.
 declare(strict_types=1);
 
-const API_VERSION = 1;
+const API_VERSION = 2;
 const PART_MAX = 8 * 1024 * 1024; // the app uploads packs in 4 MB parts (below the usual post_max_size)
+const MAX_USERS = 10; // one household or a few friends: high scores and layouts are made for up to ten players
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
@@ -40,6 +41,8 @@ if (!is_file("$base/key.php")) {
 }
 $dataDir = $base . '/' . (require "$base/key.php");
 if (!is_dir("$dataDir/packs")) @mkdir("$dataDir/packs", 0770, true);
+// the files of packs, stored once by their SHA-1 (the same title song in nine packs is one file here)
+if (!is_dir("$dataDir/blobs")) @mkdir("$dataDir/blobs", 0770, true);
 if (!is_file("$base/index.php")) @file_put_contents("$base/index.php", "<?php http_response_code(403);\n");
 $dsn = ($cfg['dsn'] ?? '') !== '' ? $cfg['dsn'] : "sqlite:$dataDir/momogram.sqlite";
 $db = new PDO($dsn, $cfg['user'] ?? '', $cfg['password'] ?? '', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
@@ -55,6 +58,21 @@ foreach ([
   "CREATE TABLE IF NOT EXISTS momo_uploads (id CHAR(32) PRIMARY KEY, pack_id VARCHAR(190) NOT NULL, meta $big NOT NULL, user_id INTEGER NOT NULL, parts INTEGER NOT NULL, created VARCHAR(32) NOT NULL)$tail",
   "CREATE TABLE IF NOT EXISTS momo_fails (ip VARCHAR(64) NOT NULL, at INTEGER NOT NULL)$tail",
 ] as $sql) $db->exec($sql);
+// packs stored as pack.json + files by hash ("split") instead of one zip: their file list (name, hash, size, music)
+try { $db->exec("ALTER TABLE momo_packs ADD COLUMN assets $big"); } catch (Throwable $e) { /* there already */ }
+
+/** remove stored files no pack refers to any more */
+function sweepBlobs(): void {
+  global $dataDir;
+  $used = [];
+  foreach (q('SELECT assets FROM momo_packs WHERE assets IS NOT NULL')->fetchAll() as $r) foreach ((json_decode((string)$r['assets'], true) ?: []) as $f) $used[$f['hash'] ?? ''] = true;
+  foreach (glob("$dataDir/blobs/*") ?: [] as $f) {
+    $h = basename($f);
+    if (substr($h, -5) === '.part') { if (filemtime($f) < time() - 86400) @unlink($f); continue; }
+    if (!isset($used[$h])) @unlink($f);
+  }
+}
+const HASH_RE = '/^[0-9a-f]{40}$/';
 
 $now = gmdate('Y-m-d\TH:i:s\Z');
 function q(string $sql, array $args = []): PDOStatement { global $db; $s = $db->prepare($sql); $s->execute($args); return $s; }
@@ -97,6 +115,7 @@ switch ($a) {
     if ($name === '' || mb_strlen($name) > 64) fail('name');
     if (strlen($pass) < 6) fail('password');
     if (q('SELECT id FROM momo_users WHERE LOWER(name) = LOWER(?)', [$name])->fetch()) fail('taken', 409);
+    if ((int)q('SELECT COUNT(*) AS n FROM momo_users')->fetch()['n'] >= MAX_USERS) fail('full', 403, ['max' => MAX_USERS]);
     $first = !q('SELECT id FROM momo_users LIMIT 1')->fetch();
     q('INSERT INTO momo_users (name, pass, admin, created) VALUES (?, ?, ?, ?)', [$name, password_hash($pass, PASSWORD_DEFAULT), $first ? 1 : 0, $now]);
     $u = q('SELECT * FROM momo_users WHERE name = ?', [$name])->fetch();
@@ -204,8 +223,12 @@ switch ($a) {
   case 'packs': {
     user();
     $list = [];
-    foreach (q('SELECT p.pack_id, p.meta, p.size, p.updated, u.name FROM momo_packs p LEFT JOIN momo_users u ON u.id = p.user_id ORDER BY p.updated DESC')->fetchAll() as $r)
-      $list[] = ['id' => $r['pack_id'], 'size' => (int)$r['size'], 'updated' => $r['updated'], 'by' => $r['name'], 'meta' => json_decode($r['meta'])];
+    foreach (q('SELECT p.pack_id, p.meta, p.size, p.updated, p.assets, u.name FROM momo_packs p LEFT JOIN momo_users u ON u.id = p.user_id ORDER BY p.updated DESC')->fetchAll() as $r) {
+      $e = ['id' => $r['pack_id'], 'size' => (int)$r['size'], 'updated' => $r['updated'], 'by' => $r['name'], 'meta' => json_decode($r['meta'])];
+      // split packs: how much of it is music (it can be left out when downloading)
+      if ($r['assets'] !== null) { $m = 0; foreach ((json_decode((string)$r['assets'], true) ?: []) as $f) if (!empty($f['music'])) $m += (int)($f['size'] ?? 0); $e['music'] = $m; $e['split'] = true; }
+      $list[] = $e;
+    }
     out(['packs' => $list]);
   }
 
@@ -274,10 +297,88 @@ switch ($a) {
     $old = q('SELECT file FROM momo_packs WHERE pack_id = ?', [$up['pack_id']])->fetch();
     $db->beginTransaction();
     q('DELETE FROM momo_packs WHERE pack_id = ?', [$up['pack_id']]);
-    q('INSERT INTO momo_packs (pack_id, file, meta, size, user_id, updated) VALUES (?, ?, ?, ?, ?, ?)', [$up['pack_id'], $file, $up['meta'], filesize("$dataDir/packs/$file"), $u['id'], $now]);
+    q('INSERT INTO momo_packs (pack_id, file, meta, size, user_id, updated, assets) VALUES (?, ?, ?, ?, ?, ?, NULL)', [$up['pack_id'], $file, $up['meta'], filesize("$dataDir/packs/$file"), $u['id'], $now]);
     q('DELETE FROM momo_uploads WHERE id = ?', [$up['id']]);
     $db->commit();
     if ($old && $old['file'] !== $file) @unlink("$dataDir/packs/{$old['file']}");
+    out(['ok' => true]);
+  }
+
+  // ---- split packs: pack.json and its files by hash; a file the server has already is not sent again ----
+  case 'pack_split': {
+    user();
+    $r = q('SELECT file, assets FROM momo_packs WHERE pack_id = ?', [(string)($_GET['id'] ?? '')])->fetch();
+    if (!$r) fail('missing', 404);
+    if ($r['assets'] === null) out(['kind' => 'zip']);
+    $f = "$dataDir/packs/{$r['file']}";
+    if (!is_file($f)) fail('missing', 404);
+    out(['kind' => 'split', 'pack' => json_decode((string)file_get_contents($f)), 'assets' => json_decode((string)$r['assets'])]);
+  }
+
+  case 'blobs_missing': {
+    user(); $b = body();
+    $miss = [];
+    foreach ((array)($b['hashes'] ?? []) as $h) if (is_string($h) && preg_match(HASH_RE, $h) && !is_file("$dataDir/blobs/$h")) $miss[] = $h;
+    out(['missing' => $miss]);
+  }
+
+  // one file in parts: ?hash=&i=&n= (raw bytes); the last part checks the hash
+  case 'blob_part': {
+    user();
+    $h = (string)($_GET['hash'] ?? ''); $i = (int)($_GET['i'] ?? -1); $n = (int)($_GET['n'] ?? 0);
+    if (!preg_match(HASH_RE, $h) || $i < 0 || $n < 1 || $i >= $n) fail('args');
+    if (is_file("$dataDir/blobs/$h")) out(['ok' => true]);
+    $data = (string)file_get_contents('php://input');
+    if (strlen($data) > PART_MAX) fail('part', 413);
+    $part = "$dataDir/blobs/$h.part";
+    if ($i > 0 && !is_file($part)) fail('order', 409, ['next' => 0]);
+    if (file_put_contents($part, $data, $i ? FILE_APPEND : 0) === false) fail('disk', 507);
+    if ($i === $n - 1) {
+      if (sha1_file($part) !== $h) { unlink($part); fail('hash'); }
+      rename($part, "$dataDir/blobs/$h");
+    }
+    out(['ok' => true]);
+  }
+
+  case 'blob': {
+    user();
+    $h = (string)($_GET['hash'] ?? '');
+    if (!preg_match(HASH_RE, $h) || !is_file("$dataDir/blobs/$h")) fail('missing', 404);
+    header('Content-Type: application/octet-stream');
+    header('Content-Length: ' . filesize("$dataDir/blobs/$h"));
+    while (ob_get_level()) ob_end_clean();
+    readfile("$dataDir/blobs/$h");
+    exit;
+  }
+
+  // a split pack: its pack.json and file list; every file must be on the server already
+  case 'pack_put': {
+    $u = user(); $b = body();
+    $id = (string)($b['id'] ?? '');
+    if ($id === '' || strlen($id) > 190 || !is_array($b['pack'] ?? null)) fail('id');
+    $meta = (array)($b['meta'] ?? []);
+    $rev = (int)($meta['rev'] ?? 1);
+    $have = q('SELECT p.meta, p.user_id, p.file, u.name FROM momo_packs p LEFT JOIN momo_users u ON u.id = p.user_id WHERE p.pack_id = ?', [$id])->fetch();
+    if ($have && strncmp($id, 'my-', 3) === 0 && (int)$have['user_id'] !== (int)$u['id']) fail('owner', 403, ['by' => $have['name']]);
+    if ($have && (int)(json_decode($have['meta'], true)['rev'] ?? 1) >= $rev) fail('have', 409, ['rev' => (int)(json_decode($have['meta'], true)['rev'] ?? 1)]);
+    $assets = []; $size = 0;
+    foreach ((array)($b['assets'] ?? []) as $f) {
+      $h = (string)($f['hash'] ?? '');
+      if (!preg_match(HASH_RE, $h) || !is_file("$dataDir/blobs/$h")) fail('blob', 409, ['hash' => $h]);
+      $sz = filesize("$dataDir/blobs/$h");
+      $assets[] = ['name' => (string)($f['name'] ?? ''), 'hash' => $h, 'size' => $sz, 'music' => !empty($f['music'])];
+      $size += $sz;
+    }
+    $json = json_encode($b['pack'], JSON_UNESCAPED_UNICODE);
+    $file = bin2hex(random_bytes(16)) . '.json';
+    if (file_put_contents("$dataDir/packs/$file", $json) === false) fail('disk', 507);
+    $size += strlen($json);
+    $db->beginTransaction();
+    q('DELETE FROM momo_packs WHERE pack_id = ?', [$id]);
+    q('INSERT INTO momo_packs (pack_id, file, meta, size, user_id, updated, assets) VALUES (?, ?, ?, ?, ?, ?, ?)', [$id, $file, json_encode($meta, JSON_UNESCAPED_UNICODE), $size, $u['id'], $now, json_encode($assets)]);
+    $db->commit();
+    if ($have && $have['file'] !== $file) @unlink("$dataDir/packs/{$have['file']}");
+    sweepBlobs();
     out(['ok' => true]);
   }
 
@@ -288,6 +389,7 @@ switch ($a) {
     if ((int)$r['user_id'] !== (int)$u['id'] && !$u['admin']) fail('owner', 403);
     q('DELETE FROM momo_packs WHERE pack_id = ?', [(string)$_GET['id']]);
     @unlink("$dataDir/packs/{$r['file']}");
+    sweepBlobs();
     out(['ok' => true]);
   }
 }

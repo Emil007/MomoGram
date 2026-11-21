@@ -487,3 +487,4 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .soundtest .st-bar .chip { font: inherit; font-size: .78rem; font-weight: 800; padding: .3em .8em; border-radius: 999px; border: 2px solid var(--line); background: #fff; cursor: pointer; }
 .soundtest .st-bar .chip.on { background: var(--ink); color: #fff; }
 .soundtest .track .len { font-variant-numeric: tabular-nums; opacity: .8; }
+.btn[hidden] { display: none; }

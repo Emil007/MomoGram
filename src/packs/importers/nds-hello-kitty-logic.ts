@@ -23,6 +23,7 @@ function bmp(b: Uint8Array): { w: number; h: number; px: (x: number, y: number) 
 
 registerImporter({
   name: 'Hello Kitty no Paku Paku & Logic (DS)',
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('BHK'),
   read: d => {
     const rom = new NdsRom(d);
