@@ -87,6 +87,16 @@ export function makeIcon(w: number, h: number, px: Uint8Array): PackIcon {
 /** Binary file belonging to a pack (music), kept in IndexedDB and written next to the pack in zip exports. */
 export interface PackAsset { name: string; data: Uint8Array }
 
+export interface ScanStamp { by: string; v: number; file: string; size: number }
+/** the files a pack was read from (older packs only remember the last one) */
+export function scansOf(p: Pack): ScanStamp[] { return p.source.scans ?? (p.source.scan ? [p.source.scan] : []); }
+/** both lists of files, one entry per file (the newer importer version wins) */
+export function joinScans(a: ScanStamp[], b: ScanStamp[]): ScanStamp[] {
+  const m = new Map<string, ScanStamp>();
+  for (const s of [...a, ...b]) { const k = s.file + '|' + s.size, o = m.get(k); if (!o || s.v >= o.v) m.set(k, s); }
+  return [...m.values()];
+}
+
 export interface Pack {
   format: 'momogram-pack';
   version: 1;
@@ -95,8 +105,11 @@ export interface Pack {
   /** where the puzzles came from, shown in the pack manager */
   source: {
     game: string; platform: string; region?: string; developer?: string; year?: number; file?: string; sha1?: string;
-    /** the last import: importer, its version, the file (name and size) */
-    scan?: { by: string; v: number; file: string; size: number };
+    /** older packs: the last import only (see scans) */
+    scan?: ScanStamp;
+    /** every file this pack was read from (a game can come from several: regions, revisions, copies in an archive):
+     * importer, its version, the file (name and size), so reading one of them again can be skipped */
+    scans?: ScanStamp[];
   };
   levels: PackLevel[];
   createdBy?: string;
@@ -153,6 +166,10 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   out.title = { ...b.title, ...a.title };
   const regions = new Set([a.source.region, b.source.region].flatMap(r => (r ?? '').split('/')).filter(Boolean));
   out.source.region = [...regions].join('/');
+  // remember every file both were read from, so none of them is read again needlessly
+  const scans = joinScans(scansOf(a), scansOf(b));
+  delete out.source.scan;
+  if (scans.length) out.source.scans = scans;
   // puzzles are matched by their pattern, not their id: regions number some puzzles differently and some
   // puzzles exist in one region only
   const all = out.levels.flatMap(l => l.puzzles);

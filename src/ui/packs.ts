@@ -1,6 +1,6 @@
 // Pack manager: the installed packs, adding games and pack files, exporting .momopack files, and the packs on the
 // MomoGram server (download, update, upload).
-import { Pack, PackTheme, pickAny, mergePacks, songsOf, roleSongs, setRoleSongs, SongRole } from '../packs/format';
+import { Pack, PackTheme, pickAny, mergePacks, scansOf, joinScans, songsOf, roleSongs, setRoleSongs, SongRole } from '../packs/format';
 import { readEntries, momopackOf, momopackName, packRev, newRev } from '../packs/io';
 import { importFileSet } from '../packs/importers/index';
 import { storage } from '../store';
@@ -110,14 +110,17 @@ export function openPackManager(pm: PM) {
     const byName = new Map(files.map(f => [(f as any).webkitRelativePath || f.name, f]));
     const names = [...byName.keys()];
     const loose = names.filter(n => /\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|app|zip|7z|rar|momopack)$/i.test(n));
-    let done = 0, added = 0;
+    let done = 0;
+    // packs this run added or changed, each counted once (a game in several files is read several times)
+    const changed = new Set<string>();
+    const count = (ps: Pack[]) => { for (const p of ps) if (!unchanged.has(p.id)) changed.add(p.id); };
     const progress = h('li', { class: 'progress' });
     results.append(progress);
     const step = (what: string) => { progress.textContent = `${t('analyzing')} ${what}`; };
     step('');
     await importFileSet({ names, get: async n => { const f = byName.get(n); return f ? new Uint8Array(await f.arrayBuffer()) : undefined; } }, async r => {
       let same: string[] = [];
-      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; } same = await addPacks(r.packs); added += r.packs.length - same.length; }
+      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; } same = await addPacks(r.packs); count(r.packs); }
       results.insertBefore(h('li', {}, r.file + ': ' + (r.ok ? (same.length === r.packs.length ? '= ' + t('noNewData') : '✓ ' + r.packs.map(p => pickAny(p.title, lang())).join(', ')) : r.message === 'uptodate' ? '= ' + t('upToDate') : '✕ ' + (r.message === 'unsupported' ? t('unsupported') : r.message))), progress);
     }, pm.packs()).then(s => { for (let i = loose.length - 1; i >= 0; i--) if (s.used(loose[i])) loose.splice(i, 1); });
     for (const n of loose) {
@@ -128,11 +131,11 @@ export function openPackManager(pm: PM) {
       try {
         const r = await readEntries(await filesToEntries({ name: f.name, file: f }), lang(), t, pm.packs());
         let same: string[] = [];
-        if (r.made.length) { same = await addPacks(r.made); added += r.made.length - same.length; }
+        if (r.made.length) { same = await addPacks(r.made); count(r.made); }
         line.textContent = n + ': ' + (same.length && same.length === r.made.length ? '= ' + t('noNewData') : r.msgs.join(' · ') || '✕ ' + t('unsupported'));
       } catch (e: any) { line.textContent = n + ': ✕ ' + (e.message || e); }
     }
-    progress.textContent = t('folderDone', { n: added });
+    progress.textContent = t('folderDone', { n: changed.size });
   }
 
   /** several packs: one .zip holding a .momopack per pack (one pack: just its .momopack) */
@@ -352,7 +355,7 @@ export async function oneRelease(p: Pack): Promise<Set<string>> {
 /** what a pack holds, for "did this import bring anything new" (revision, import stamp and file list aside) */
 async function contentKey(p: Pack, files: Map<string, string>): Promise<string> {
   const { rev: _r, assets: _a, source, ...rest } = p as Pack & { assets?: unknown };
-  const { scan: _s, file: _f, ...src } = source;
+  const { scan: _s, scans: _ss, file: _f, ...src } = source;
   // empty name lists (older merges wrote them) count as no names
   return JSON.stringify({ ...rest, source: src, files: [...files].sort() }, (k, v) => (k === 'name' && v && typeof v === 'object' && !Object.keys(v).length ? undefined : v));
 }
@@ -443,7 +446,8 @@ export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pa
       const ka = await contentKey({ ...p, rev: old.rev }, after), kb = await contentKey(old, before);
       const same = ka === kb;
       if (same) {
-        const kept: Pack = { ...old, source: { ...old.source, scan: p.source.scan ?? old.source.scan } };
+        const { scan: _s, ...oldSrc } = old.source;
+        const kept: Pack = { ...old, source: { ...oldSrc, scans: joinScans(scansOf(old), scansOf(p)) } };
         await storage.savePack(kept);
         unchanged.add(p.id);
         ps[i] = kept;

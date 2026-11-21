@@ -1,7 +1,7 @@
 // Pack creation: identify a game file the user owns and read its puzzles into a MomoGram pack.
 // Every other file in this folder is one import method and registers itself; all.ts (written by build.mjs)
 // loads them. To support a new game, add its details to the file of the method it uses, or add a new file.
-import { Pack } from '../format';
+import { Pack, scansOf } from '../format';
 
 export interface ImportResult { file: string; ok: boolean; packs: Pack[]; message: string }
 
@@ -38,13 +38,13 @@ export function importerVersion(name: string): number { return ([...importers, .
 
 /** which importer (and version) read a pack, from which file: lets a later import of the same file be skipped */
 function stamp(packs: Pack[], imp: { name: string; version?: number }, file: string, size: number) {
-  for (const p of packs) p.source.scan = { by: imp.name, v: imp.version ?? 1, file: file.split('/').pop() ?? file, size };
+  for (const p of packs) { delete p.source.scan; p.source.scans = [{ by: imp.name, v: imp.version ?? 1, file: file.split('/').pop() ?? file, size }]; }
 }
 
 /** a file read before by the same version of its importer: nothing new can come out of it */
 export function alreadyRead(packs: Pack[], file: string, size: number): Pack | null {
   const base = file.split('/').pop() ?? file;
-  return packs.find(p => p.source.scan && p.source.scan.file === base && p.source.scan.size === size && p.source.scan.v >= importerVersion(p.source.scan.by)) ?? null;
+  return packs.find(p => scansOf(p).some(s => s.file === base && s.size === size && s.v >= importerVersion(s.by))) ?? null;
 }
 
 /** read the folder games among the files; returns the results and which files they took */
