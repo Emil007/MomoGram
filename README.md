@@ -49,13 +49,15 @@ Nonograms do that too.
   | **Normal** | caught, +2 / 4 / 8 minutes | offered | 🥈 Silver |
   | **Hard** | not checked, *Try it out* to test ideas | none | 🥇 Gold, 💠 **Platinum** without logic hints |
 
-- **Mega mode** for everything: one switch turns the whole game into *Mega MomoGram*. Mega numbers span two rows or columns. Games that have Mega puzzles bring their own (a glowing dot marks them); for all others MomoGram chooses the pairs, checks that each puzzle still has one solution, and makes the same choice on every device. Mega has its own progress and scores.
+- **Three ways to play:** the mode switch on the home screen cycles through *MomoGram*, *Mega MomoGram* and *Color MomoGram*. Each mode has its own progress, medals and high scores.
+- **Mega mode** for everything: Mega numbers span two rows or columns. Games that have Mega puzzles bring their own (a glowing dot marks them); for all others MomoGram chooses the pairs, checks that each puzzle still has one solution, and makes the same choice on every device. Mega has its own progress and scores.
+- **Colour mode:** colour nonograms, where every block has a colour and blocks of different colours may touch. The games' own colour puzzles (see below), MomoGram's own colour starter puzzles, and colour versions of the games' colour pictures where they work (few, clearly different colours and exactly one solution, checked by MomoGram's colour solver). A palette with the tools shows how many cells of each colour are still missing.
 - **Points and PixElo** – points count everything you've solved, PixElo is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixElo is shown under your name.
 - **A board that feels like the handhelds:** the row and column you draw in light up into the clues, a counter shows the length of the block you're drawing, clue numbers grey out only when their block is certainly done, logic hints (💡) turn a clue blue when its line gives away a new cell, and your own marks stay while you fill and cross the rest.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
 - **A daily nonogram** (15 a day from all your games) and a **Random** button.
 - **The games' own music**, every song of every game, with a sound test to choose where each plays.
-- **An interactive tutorial** for nonograms and Mega, an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have.
+- **Interactive tutorials** for nonograms, Mega and Colour (each offered once, all in the options), an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
 - **Your progress is never lost:** paused puzzles, best times per difficulty, medals, profiles with their own saves.
 - **Your own server (optional):** progress and settings on all your devices, packs shared within your family or friends, and high scores for up to 10 players.
 
@@ -151,6 +153,20 @@ The numbers below are what MomoGram reads from the games (all regions together w
 | **Total** | **3,311** | **0** | | | **292** | |
 
 **All supported games together: 13,484 nonograms, 3,717 Mega puzzles with the games' own Mega numbers (Mega-only puzzles included), and 832 songs.** Every other puzzle can be played as Mega too, with Mega numbers chosen by MomoGram.
+
+### Colour puzzles
+
+| Game | Colour puzzles | Colours |
+|---|---:|---|
+| PICROSS S3 – S9, S GENESIS, S Doraemon (Color Picross) | 30 each | 3–4 |
+| Picross Lord of the Nazarick (Color Picross) | 27 | 3–4 |
+| Illust Logic DS + Colorful Logic (Colorful Logic) | 100 | 2–5 |
+| Illu-Logi VOW (Colour Logic) | 166 | 2–5 |
+| SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | 1,400 each (the games' own colour pictures) | 1–5 |
+| MomoGram starter puzzles | 9 | 2–5 |
+| Hudson's Illust Logic games (pictures) | colour versions by MomoGram where they have one solution (95 in Illust Logic DS) | up to 8 |
+
+Still to come: the 11 colour puzzles of Puzzle Mate DS and Animal Color Cross (DSiWare).
 
 To add another game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
@@ -298,6 +314,10 @@ APK via Capacitor, released when `version` in `package.json` changes).
 - `src/game/`: rules, exact line analysis (clue greying and logic hints), the board renderer.
 - `src/app.ts`, `src/ui/`: screens.
 </details>
+
+## Translations
+
+Every interface language is one file in [`src/i18n/`](src/i18n): `en.json`, `de.json`, `fr.json`, `es.json`, `it.json`, `ja.json`. To add a language, copy `en.json` to the new language's code (`nl.json`, …), translate the texts and set `_name` (the language's own name) and `_textOrder` (in which languages the games' own texts – puzzle names, level and game titles – are looked for, e.g. `nl,en,ja`). The build picks the file up; a text missing in a file falls back to English.
 
 ## License
 

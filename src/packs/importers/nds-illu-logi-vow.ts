@@ -3,16 +3,17 @@
 //  Game              File (recognised by)    Puzzles
 //  Illu-Logi VOW     game code A8IJ          Data/ilNNNNNN.zil, one file per puzzle: 1-100, 1001-1100 and
 //                                              2001-2100 are the three levels (mono and colour puzzles taking
-//                                              turns), 99999x a few extra ones. 139 mono puzzles are imported;
-//                                              the colour ones (Colour Logic) need colour clues, not supported yet.
+//                                              turns), 99999x a few extra ones: 139 mono puzzles, and 166 colour
+//                                              puzzles (Colour mode).
 //
-// ZIL file: "ZIL\0", u16 3, u8 width, u8 height, u8 colours (1 = a normal puzzle), 11 bytes 0, then one row
+// ZIL file: "ZIL\0", u16 3, u8 width, u8 height, u8 colours (1 = a normal puzzle), u8 0, five BGR555 colours (the
+//   colours 1-5 of a colour puzzle), then one row
 //   after another, ceil(3 × width / 8) bytes each: 3 bits per cell, least significant bit first, 0 = empty,
 //   otherwise the cell's colour.
 // Music: Sound/sound_data.sdat (title, main menu and the ten puzzle-screen "skins").
 import { registerImporter } from './index';
 import { PackLevel, makeIcon, rowsFromBits } from '../format';
-import { NdsRom, ndsMusic } from '../../rom/nds';
+import { NdsRom, ndsMusic, bgr555Hex, u16 } from '../../rom/nds';
 
 const LEVELS = [
   { from: 1, to: 999, id: 'level-1', en: 'Level 1', ja: 'レベル1' },
@@ -23,7 +24,7 @@ const LEVELS = [
 
 registerImporter({
   name: 'Illu-Logi VOW (DS)',
-  version: 2, // raise when the importer reads more or reads differently
+  version: 3, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('A8I'),
   read: d => {
     const rom = new NdsRom(d);
@@ -31,11 +32,16 @@ registerImporter({
     const levels: PackLevel[] = LEVELS.map(l => ({ id: l.id, title: { en: l.en, ja: l.ja }, rules: 'normal', puzzles: [] }));
     for (const name of files) {
       const z = rom.fileByName(name)!, num = parseInt(name.slice(7));
-      if (z[0] !== 0x5a || z[1] !== 0x49 || z[2] !== 0x4c || z[8] !== 1) continue; // "ZIL", one colour
-      const w = z[6], h = z[7], bpr = Math.ceil(3 * w / 8);
+      if (z[0] !== 0x5a || z[1] !== 0x49 || z[2] !== 0x4c || !z[8] || z[8] > 5) continue; // "ZIL"
+      const w = z[6], h = z[7], bpr = Math.ceil(3 * w / 8), k = z[8];
       const cell = (x: number, y: number) => { const b = 3 * x, o = 0x14 + y * bpr + (b >> 3); return ((z[o] | (z[o + 1] << 8)) >> (b & 7)) & 7; };
       const li = LEVELS.findIndex(l => num >= l.from && num <= l.to);
-      levels[li].puzzles.push({ id: `il${num}`, width: w, height: h, rows: rowsFromBits(w, h, (x, y) => cell(x, y) !== 0) });
+      const rows = rowsFromBits(w, h, (x, y) => cell(x, y) !== 0);
+      // colour puzzles (Colour Logic): played in Colour mode only
+      levels[li].puzzles.push(k === 1 ? { id: `il${num}`, width: w, height: h, rows } : {
+        id: `il${num}`, width: w, height: h, rows, colorGame: true, colorOnly: true,
+        color: { palette: [...Array(k)].map((_, i) => bgr555Hex(u16(z, 10 + i * 2))), rows: [...Array(h)].map((_, y) => [...Array(w)].map((_, x) => { const c = cell(x, y); return c ? String(c - 1) : '.'; }).join('')) },
+      });
     }
     const used = levels.filter(l => l.puzzles.length);
     if (!used.length) throw new Error('Puzzles not found.');
