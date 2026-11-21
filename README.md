@@ -89,6 +89,7 @@ several games is kept only once on the device. Do it once: export the packs, or 
 | Hello Kitty no Paku Paku & Logic | DS | ✓ all 122 logic puzzles | ✓ the game's music |
 | SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle (1, 2) | DS | ✓ 1,400 puzzles each (colour pictures, played as nonograms), names | ✓ the game's music |
 | Puzzle Mate DS: Oekaki Mate | DS | ✓ 443 puzzles up to 45×50, names (the 11 colour puzzles not yet) | ✓ the game's music |
+| Puzzle Iro Iro: Gekkan Crossword House Vol. 1–6 | DSiWare | ✓ the three 30×35 picture logic puzzles of each issue | ✓ the game's music |
 | PICROSS S, S2–S9, S GENESIS & Master System, S Doraemon & F Characters, Lord of the Nazarick, LogiartGrimoire, Kemono Friends Picross, Raden's Guide for Pixel Museum | Switch (decrypted RomFS folder, or a zip of it) | ✓ the normal puzzles (150–281 per game), names in up to seven languages (Mega Picross reuses the same pictures; clip and colour puzzles: later) | ✓ the game's music (FMOD Vorbis, rebuilt as Ogg) |
 | PICROSS S+ | Switch | ✓ all of Picross e – e9, merged with the 3DS packs of the same games (your progress stays), and its own 30 puzzles | ✓ the Switch versions of the e-series music |
 

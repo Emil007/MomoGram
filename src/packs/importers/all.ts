@@ -1,5 +1,6 @@
 // Written by build.mjs: loads every import method in this folder. Do not edit.
 import './ctr-picross';
+import './dsi-puzzle-iro-iro';
 import './gb-picross';
 import './gbc-pokemon-picross';
 import './nds-ds-puzzler';
