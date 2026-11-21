@@ -1,4 +1,5 @@
 // MomoGram UI: home, level/puzzle selection, play screen, solved screen, packs and options.
+import { solutionCount } from './game/unique';
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
@@ -458,6 +459,15 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))));
 }
 
+/** whether a puzzle has more than one solution (worked out once per pattern) */
+const solutionCounts = new Map<string, 0 | 1 | 2>();
+function solutionCountOf(rows: string[]): 0 | 1 | 2 {
+  const k = rows.join('/');
+  let c = solutionCounts.get(k);
+  if (c === undefined) { c = solutionCount(rows, 400); solutionCounts.set(k, c); }
+  return c;
+}
+
 /** between the list and the board: the puzzle, its source, your results, the difficulty, Start */
 function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
   usePack(pack, 'menu');
@@ -485,6 +495,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     fastestRow(pack.id, pz.id),
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
+    solutionCountOf(pz.rows) === 2 ? h('p', { class: 'warn-multi' }, '⚠ ' + t('multiSolution')) : null,
     h('button', { class: 'btn primary big start', onClick: go }, icon('play'), saved ? t('continue') + ' · ' + formatTime(saved.state.elapsedMs + saved.state.penaltyMs) : t('start')),
     saved ? h('button', { class: 'btn ghost', onClick: () => { clearBoard(pack.id, lv.id, pz.id); play(pack, lv, i, back, undefined, true); } }, t('restart')) : null));
 }
@@ -726,7 +737,7 @@ function trackName(ref: string): string {
   const [file, seq] = ref.split('#');
   const m = seq?.match(/^(?:gb|spc|snes):(\d+)/i);
   if (m) return `Song ${m[1]}`;
-  return (seq ?? file).replace(/\.(bcstm|sdat|gbsnd|spc)$/i, '').replace(/_SEQ$/i, '').replace(/[_-]+/g, ' ').trim();
+  return (seq ?? file).replace(/\.(bcstm|sdat|gbsnd|spc|ogg)$/i, '').replace(/_SEQ$/i, '').replace(/[_-]+/g, ' ').trim();
 }
 
 /** "♪ track · game" on the home screen; tapping it skips to another track from all games */
@@ -1319,6 +1330,40 @@ function profileDialog(after: () => void) {
 
 // ---------------------------------------------------------------- options
 
+/** every game's songs, with what they play for; tap one to hear it */
+function soundTest() {
+  const body = h('div', { class: 'soundtest' });
+  screen(header(t('soundTest'), optionsScreen), body);
+  if (!settings.music || !settings.packMusic) body.append(h('p', { class: 'fine' }, t('soundTestOff')));
+  const ROLE: Record<string, string> = { title: t('roleTitle'), menu: t('roleMenu'), play: t('rolePlay'), play2: t('rolePlay'), clear: t('roleClear') };
+  const buttons: Array<[string, HTMLElement]> = [];
+  body.append(h('button', { class: 'btn ghost', onClick: () => Snd.stop() }, '■ ' + t('stop')));
+  for (const p of allPacks()) {
+    const m = p.theme?.music;
+    if (!m) continue;
+    // each song once, with every role it has
+    const roles = new Map<string, string[]>();
+    const add = (ref: string | undefined, role: string) => { if (!ref) return; const r = roles.get(ref) ?? []; if (role && !r.includes(role)) r.push(role); roles.set(ref, r); };
+    add(m.title, ROLE.title); add(m.menu, ROLE.menu); add(m.play, ROLE.play); add(m.play2, ROLE.play);
+    for (const ref of p.theme?.tracks ?? []) add(ref, ROLE.play);
+    add(m.clear, ROLE.clear);
+    const list = h('div', { class: 'tracks' });
+    for (const [ref, rs] of roles) {
+      const id = p.id + '/' + ref;
+      const b = h('button', { class: 'btn track', onClick: () => { void Snd.playPack(p.id, ref, ref !== m.clear); } },
+        h('b', {}, '▶ ' + trackName(ref)), h('small', {}, rs.join(' · ')));
+      buttons.push([id, b]);
+      list.append(b);
+    }
+    body.append(h('section', { class: 'opt-card' }, h('h2', {}, pickAny(p.title, packLang())), list));
+  }
+  if (!buttons.length) body.append(h('p', { class: 'fine' }, t('soundTestNone')));
+  const mark = (cur: string) => { for (const [id, b] of buttons) b.classList.toggle('on', id === cur); };
+  mark(Snd.current());
+  const on = (id: string) => { if (body.isConnected) mark(id); else Snd.offChange(on); };
+  queueMicrotask(() => Snd.onChange(on));
+}
+
 function optionsScreen() {
   const redraw = () => optionsScreen();
   // switch, segmented choice and slider in one consistent style
@@ -1342,7 +1387,8 @@ function optionsScreen() {
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,
       settings.music ? row(t('musicMode'), seg('musicMode', [['random-pack', t('musicRandomPack')], ['random-all', t('musicRandomAll')], ['fixed', t('musicFixed')]])) : null,
-      row(t('sfx'), toggle('sfx'))),
+      row(t('sfx'), toggle('sfx')),
+      row(t('soundTest'), h('button', { class: 'btn', onClick: () => soundTest() }, '♪ ' + t('open')))),
     card(t('secPlay'),
       row(t('hints'), seg('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
       row(t('logicDefault'), toggle('logicHints')),

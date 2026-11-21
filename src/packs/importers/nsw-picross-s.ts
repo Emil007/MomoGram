@@ -239,8 +239,15 @@ registerSetImporter({
       if (g) (byGame.get(g) ?? byGame.set(g, []).get(g)!).push(r);
     }
     const packs: Pack[] = [];
-    for (const [g, list] of byGame) {
+    for (const [g, all] of byGame) {
       const game = GAMES[g];
+      // the same picture twice (S+ has unnamed _00 copies of the first puzzle of each size): the named one stays
+      const seen = new Map<string, Raw>();
+      for (const r of all.sort((a, b) => Number(!names.has(a.key.toLowerCase())) - Number(!names.has(b.key.toLowerCase())))) {
+        const k = `${r.w}x${r.h}:${r.cells.join('')}`;
+        if (!seen.has(k)) seen.set(k, r);
+      }
+      const list = [...seen.values()];
       const levels = sizeLevels(list, order, names, game.id.startsWith('ctr-') ? 'free' : 'normal');
       const music = await gameMusic(g, sound, audio, files, clipFiles);
       packs.push({

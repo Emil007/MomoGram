@@ -286,6 +286,7 @@ body { background: #fff; }
 .pstart-pic { display: flex; align-items: center; gap: .6rem; }
 .pstart .pic-frame { width: min(46vw, 190px); display: grid; place-items: center; }
 .pstart .pic-frame canvas { width: 100%; height: auto; image-rendering: pixelated; display: block; }
+.warn-multi { margin: 0; padding: .45rem .7rem; border: 2px solid #c98a00; border-radius: 10px; background: #fff6d6; color: #5a4600; font-size: .85rem; font-weight: 700; text-align: center; max-width: 30rem; }
 .pstart button.pic-frame { cursor: pointer; font: inherit; color: inherit; }
 .pstart button.pic-frame:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--line); }
 .qbig { width: 100%; max-height: 170px; display: grid; place-items: center; font-size: 3rem; font-weight: 900; color: color-mix(in srgb, var(--accent) 50%, #fff);
@@ -431,3 +432,11 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .rule-tag { font-style: normal; font-size: .62rem; font-weight: 900; color: #fff; border-radius: 4px; padding: 0 .25em; margin-left: .25em; vertical-align: 1px; background: var(--muted); }
 .rule-tag.r-easy { background: var(--easy); } .rule-tag.r-normal { background: var(--normal); } .rule-tag.r-free, .rule-tag.r-hard { background: var(--hard); }
 .ranking .who .extra { color: var(--easy); font-weight: 800; } .ranking .who .extra:empty { display: none; }
+
+/* sound test */
+.soundtest { display: flex; flex-direction: column; gap: .8rem; padding: 1rem; max-width: 720px; margin: 0 auto; width: 100%; }
+.soundtest .tracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .45rem; }
+.soundtest .track { flex-direction: column; align-items: flex-start; text-align: left; padding: .5em .7em; }
+.soundtest .track b { font-size: .9rem; }
+.soundtest .track small { color: var(--muted); font-size: .72rem; }
+.soundtest .track.on { background: radial-gradient(circle at 35% 25%, #fff6b0 0 20%, #ffd21a 65%, #e8a800 100%); }
