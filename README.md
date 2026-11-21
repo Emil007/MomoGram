@@ -74,16 +74,16 @@ The numbers below are what MomoGram reads from the games (all regions together w
 | Picross DS | 351 | – | ✓ 7 languages | – | 27 | solved-picture animations, daily puzzles |
 | Picross DS demos (Download Station, Nintendo Channel) | 15 | – | ✓ JA | – | – |  |
 | Puzzle Series Vol. 6: Illust Logic | 300 | – | ✓ JA | ✓ | 11 |  |
-| Illust Logic DS + Colorful Logic | 300 | – | – | ✓ | 23 | colour puzzles: later |
+| Illust Logic DS + Colorful Logic | 300 | – | – | ✓ | 23 | 100 colour puzzles (Colorful Logic) |
 | Illust Logic (DSiWare) | 200 | – | – | ✓ | 23 |  |
 | Illust Logic + Nihon no Mukashi Banashi (DSiWare) | 200 | – | – | ✓ | 23 |  |
 | DS Puzzler: Nanpure Fan & Oekaki Logic / Challenge Me: Brain Puzzles | 500 | – | ✓ 6 languages | – | 3 |  |
 | DS Puzzler Wi-Fi Taiou | 500 | – | ✓ JA | – | 4 |  |
-| Illu-Logi VOW | 139 | – | – | – | 40 | colour puzzles: later |
+| Illu-Logi VOW | 139 | – | – | – | 40 | 166 colour puzzles |
 | Hello Kitty no Paku Paku & Logic | 122 | – | – | – | 4 |  |
 | SIMPLE DS Vol. 7: THE Illust Puzzle | 1,401 | – | ✓ JA | ✓ | 9 | colour pictures, played as nonograms |
 | SIMPLE DS Vol. 28: THE Illust Puzzle 2 | 1,400 | – | ✓ JA | ✓ | 8 | colour pictures, played as nonograms |
-| Puzzle Mate DS: Oekaki Mate | 443 | – | ✓ JA | – | 4 | up to 45×50; 11 colour puzzles: later |
+| Puzzle Mate DS: Oekaki Mate | 443 | – | ✓ JA | – | 4 | up to 45×50; 8 of its 10 colour puzzles |
 | Puzzle Iro Iro Vol. 1 (DSiWare) | 3 | – | – | – | 6 |  |
 | Puzzle Iro Iro Vol. 2 (DSiWare) | 3 | – | – | – | 6 |  |
 | Puzzle Iro Iro Vol. 3 (DSiWare) | 3 | – | – | – | 6 |  |
@@ -158,7 +158,7 @@ The numbers below are what MomoGram reads from the games (all regions together w
 
 | Game | Colour puzzles | Colours |
 |---|---:|---|
-| PICROSS S3 – S9, S GENESIS, S Doraemon (Color Picross) | 30 each | 3–4 |
+| PICROSS S3 – S8, S GENESIS, S Doraemon (Color Picross) | 30 each | 3–4 |
 | Picross Lord of the Nazarick (Color Picross) | 27 | 3–4 |
 | Illust Logic DS + Colorful Logic (Colorful Logic) | 100 | 2–5 |
 | Illu-Logi VOW (Colour Logic) | 166 | 2–5 |
