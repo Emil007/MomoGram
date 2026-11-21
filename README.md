@@ -20,31 +20,29 @@ Add your games once: MomoGram turns each into a pack with its levels, puzzle nam
 <img alt="No game data included" src="https://img.shields.io/badge/game%20data-not%20included-f39a2c">
 </p>
 
-| Your phone, upright | Pick a puzzle, earn medals | Solved |
-|---|---|---|
-| <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, dithered cells, orange guide lines, round tool buttons at the bottom" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="Puzzle grid with bronze, silver, gold and platinum medals and the Easy / Normal / Hard picker" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name and the time" width="100%"> |
+| Your library | Pick a puzzle | Play, one-handed | Solved |
+|---|---|---|---|
+| <img src="docs/screenshots/phone-home.png" alt="Home screen: the music bar, the daily nonogram and random buttons, the game library" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="A level: solved puzzles with their pictures and medals, the Easy / Normal / Hard picker" width="100%"> | <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, a highlighted row and column, the tools at the bottom" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name and the time" width="100%"> |
 
 <p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in landscape: the tool column beside the board" width="80%"><br>
-<em>Desktop / Steam Deck: keyboard, mouse and gamepad. Screenshots show MomoGram's own starter puzzles.</em></p>
+<em>Desktop / Steam Deck: keyboard, mouse and gamepad. The screenshots show MomoGram's own starter puzzles.</em></p>
 
-> **No game data is included.** Start with MomoGram's own starter puzzles, then add the games you own
-> (**Add games** on the home screen): MomoGram reads puzzles, names, pictures and music from your files.
-> Everything stays on your device.
+> **No game data is included.** Start with MomoGram's own starter puzzles, then add the games you own:
+> MomoGram reads the puzzles, names, pictures and music from your files. Everything stays on your device
+> (or on your own server, if you set one up).
 
-> **Disclaimer: 100% AI.** MomoGram (the game, the ROM readers, the importers, the sound code, the builds and
-> this documentation) was written entirely by an AI (Claude, by Anthropic), directed and tested by a human.
-> No line of code was written by hand. Expect AI-typical mistakes, and please report what you find.
+> **Disclaimer: 100% AI.** MomoGram (the game, the ROM readers, the importers, the sound code, the server,
+> the builds and this documentation) was written entirely by an AI (Claude, by Anthropic), directed and tested
+> by a human. No line of code was written by hand. Expect AI-typical mistakes, and please report what you find.
 
 The name: *nonogram* + **Momo**, from Michael Ende's novel about the grey men who steal people's time.
 Nonograms do that too.
 
 ## What you get
 
-- **Your games in one library:** every game you add becomes a card on the home screen, with its own modes and levels, puzzle names, solved pictures, music and colours, and its own progress.
-- **A daily nonogram:** five small puzzles a day, picked from all the games in your library.
-- **A board that feels like the handheld:** striped clue bands, dithered cells, orange guides every five cells, a cursor that lights up its row and column into the clues, a drag counter, and clue numbers that grey out only when their block is certainly in place.
-- **Made for one hand on a phone:** portrait layout, the tools at the bottom within thumb reach, pinch to zoom, drags that stay on their row or column.
-- **Every level on every difficulty**, with medals:
+- **All your nonogram games in one library.** Each game you add becomes a card with its own modes and levels, puzzle names (shown once a puzzle is solved), solved pictures, music and colours. Games of a series form a folder (all Picross e games, Picross NP, Illust Logic, …); sort them by series or system, rearrange and hide them.
+- **A daily nonogram:** 15 puzzles a day, five per difficulty, drawn from all your games. Solving one counts in its own game too. And a **Random** button for one puzzle from anywhere.
+- **Every puzzle on every difficulty**, with medals:
 
   | | Mistakes | Hint roulette | Medal |
   |---|---|---|---|
@@ -52,19 +50,22 @@ Nonograms do that too.
   | **Normal** | caught, +2 / 4 / 8 minutes | offered | 🥈 Silver |
   | **Hard** | not checked, *Try it out* to test ideas | none | 🥇 Gold, 💠 **Platinum** without logic hints |
 
-- **Logic hints** (💡): clue numbers turn blue when their line lets you deduce a new cell, like the newer 3DS and Switch games.
-- **The hint roulette**, spinning over rows and columns like the original.
-- **Random music** from the game you're playing, or from all your games.
-- **Eight starter puzzles** by MomoGram itself, so you can try it before you add a game.
-- **Profiles** with their own saves; export a save and import it on another device (only newer games are taken over).
-- Quick save, best times, offline play after the first start, English and German UI.
+- **A board that feels like the handhelds:** striped clue bands, guide lines every five cells, a cursor that lights up its row and column into the clues, a drag counter, and clue numbers that grey out only when their block is certainly in place.
+- **Three tools:** fill, cross out, and your own **marks**, which stay while you fill and cross the rest. One big button switches between fill and cross; *Tools on the right* puts it under your right thumb.
+- **Logic hints** (💡): clue numbers turn blue when their line lets you deduce a new cell, like in the newer 3DS and Switch games. And the **hint roulette**, spinning over rows and columns like the original.
+- **Made for one hand on a phone:** portrait layout, the tools at the bottom, pinch to zoom, drags that stay on their row or column. Landscape puts the tools beside the board.
+- **Your progress is never lost:** every puzzle you start is kept and continues where you left it, best times per difficulty, medals, profiles with their own saves.
+- **The games' own music:** a music bar on the home screen shows what plays and skips to the next song; the same song from several games counts once.
+- **An editor** for your own puzzles and packs.
+- **Your own server (optional):** sync progress, settings and paused puzzles between your devices, share packs within your family or friends, and see each other's high scores (puzzles solved, medals, fastest times).
+- Offline after the first start; English and German, with the games' puzzle names in every language they have.
 
 ## Supported games
 
-**Add games** (home screen) or **Puzzle packs → Create packs from your games**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
+**Puzzle packs → Add games or packs**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
 MomoGram finds the puzzles and makes one pack per game, with the original level structure and the puzzle
 names where the game has them. Regional versions of the same game become **one** pack with every
-language's names. Do it once, keep the files, import them anywhere.
+language's names. Do it once: export the packs, or keep them on your server, and use them on every device.
 
 | Game | Platform | Puzzles | Music & colours |
 |---|---|---|---|
@@ -80,7 +81,7 @@ language's names. Do it once, keep the files, import them anywhere.
 | DS Puzzler: Nanpure Fan & Oekaki Logic, Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS (Success) | ✓ 500 picture logic puzzles each, in ten levels, with names (Challenge Me: five languages) | ✓ the game's music |
 | Illu-Logi VOW | DS (Success) | ✓ the 139 normal puzzles (colour puzzles: later) | ✓ the game's music |
 | Hello Kitty no Paku Paku & Logic | DS | ✓ all 122 logic puzzles | ✓ the game's music |
-| Picross S series | Switch | later | later |
+| Picross S, S2–S9, S+ (Picross e1–e9), Genesis & Master System, Doraemon, Lord of the Nazarick, LogiartGrimoire | Switch (decrypted RomFS) | in progress | later |
 
 Other nonogram games are added one by one (see the table). To add a game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
@@ -115,38 +116,28 @@ no game data are included.
 
 Which song plays where was found by tracing the songs each game requests on its own screens (and its puzzle
 music table); clear jingles were picked by their length where the game could not be traced to that screen.
-Audio was checked numerically only (level, silence, loop and end detection). Packs made before version 0.5.0
-have no Game Boy / Super Famicom music: create them again. Known gaps: the combined Satellaview dump
+Audio was checked numerically only (level, silence, loop and end detection). Known gaps: the combined Satellaview dump
 "Tamori no Picross (8-13) + Bakushow …" has its sound library in an unexpected place and gets no music; the
 S-DSP is sample-accurate rather than cycle-accurate and its interpolation kernel is computed, not the console's
 table, so it sounds very close but not bit-identical.
 
-**Exports:** a pack is one small `.momopack.json`. Packs with music are exported as a `.zip` with the
-music in a folder next to the pack. That music comes from your game: keep those packs for your own
-devices and don't share them. Options → *Original music / colours of packs* switch both off.
+### Why puzzles can be recognised by their picture
 
-<details>
-<summary><b>Pack format</b></summary>
+MomoGram matches puzzles by their pattern: to merge the regional versions of a game, to give a daily puzzle the
+same id on every device, and to count a daily solve in its game. That is safe, because two different pictures
+practically never have the same pattern:
 
-```jsonc
-{
-  "format": "momogram-pack", "version": 1,
-  "id": "gb-marios-picross",
-  "title": { "en": "Mario's Picross" },
-  "source": { "game": "Mario's Picross", "platform": "Game Boy" },
-  "theme": { "palette": { "accent": "#4d533c", "style": "dmg" }, "music": { "menu": "…", "play": "…" } },
-  "levels": [{
-    "id": "easy-a", "title": { "en": "Easy A" }, "rules": "normal", "group": "easy",
-    "puzzles": [{ "id": "easy-a-01", "width": 5, "height": 5,
-                  "rows": ["..#..", ".###.", "#####", ".###.", "..#.."],
-                  "name": { "en": "…" } }]
-  }]
-}
-```
+| Grid | Possible patterns | About |
+|---|---|---|
+| 5 × 5 | 2<sup>25</sup> | 33,554,432 (33.6 million) |
+| 10 × 10 | 2<sup>100</sup> | 1.27 × 10<sup>30</sup> (1.27 nonillion) |
+| 15 × 15 | 2<sup>225</sup> | 5.39 × 10<sup>67</sup> (53.9 unvigintillion) |
+| 20 × 20 | 2<sup>400</sup> | 2.58 × 10<sup>120</sup> |
 
-`rows` uses `#` for filled and `.` for empty. Levels can have `unlockAfter` (cleared puzzles in the same
-`group`) and `extra`. `theme.music` names files in `<pack>.assets/` next to the pack.
-</details>
+Every cell is filled or empty, so a grid of *n* cells has 2<sup>*n*</sup> patterns. Only a part of them are good
+puzzles (one solution, a recognisable picture), but even that part is far too large for two games to hit the same
+pattern by chance. The same pattern in two games is the same puzzle, which happens when a game reuses puzzles of
+an earlier one (Picross S+ and the 3DS Picross e games, for example).
 
 ## Platforms
 
@@ -182,6 +173,7 @@ If you want to, you can run a small server on your own web space (PHP with MySQL
 | Cross out | ✕ tool, or right click | `X` | B |
 | Move | | arrows / WASD | D-pad |
 | Zoom | pinch, wheel, 🔍 | `C` | Y |
+| Mark | ⬚ (third tool) | | |
 | Undo | ↶ | `U`, Ctrl+Z | L |
 | Try it out (Hard) | ✎ | | R |
 | Menu | ☰ | Esc | Start |
@@ -207,7 +199,8 @@ APK via Capacitor, released when `version` in `package.json` changes).
 - `src/rom/dsgfx.ts`: DS OBJ cells (4bpp, 2D mapping) for the solved pictures.
 - `src/rom/ctr.ts`: decrypted 3DS containers (NCSD / NCCH / CIA), RomFS, icon, LZ11.
 - `src/audio/`: SDAT reader and SSEQ sequencer (DS music), BCSTM DSP-ADPCM decoder (3DS music); `gb/` and `snes/`: sound hardware emulation (see *Sound emulation*), `worklet.ts` / `chipplayer.ts`: playback on the audio thread.
-- `src/packs/`: pack format, importers per platform, pack colours.
+- `src/packs/`: pack format, `.momopack` files, pack colours; `src/packs/importers/`: one file per import method, each starting with a table of the games it reads ([how to add one](docs/writing-importers.md)).
+- `server/`: the optional sync / high score / pack server (PHP, MySQL or SQLite).
 - `src/game/`: rules, exact line analysis (clue greying and logic hints), the board renderer.
 - `src/app.ts`, `src/ui/`: screens.
 </details>
@@ -215,5 +208,5 @@ APK via Capacitor, released when `version` in `package.json` changes).
 ## License
 
 MIT for MomoGram's own code and its starter puzzles. Picross is a trademark of Nintendo; the game titles
-named in the table of supported games are trademarks of their owners (Nintendo, Jupiter). MomoGram is an
+named in the table of supported games are trademarks of their owners (Nintendo, Jupiter, Hudson, Success and others). MomoGram is an
 unofficial fan project, not affiliated with or endorsed by them.
