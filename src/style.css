@@ -282,6 +282,8 @@ body { background: #fff; }
 .pstart-pic { display: flex; align-items: center; gap: .6rem; }
 .pstart .pic-frame { width: min(46vw, 190px); display: grid; place-items: center; }
 .pstart .pic-frame canvas { width: 100%; height: auto; image-rendering: pixelated; display: block; }
+.pstart button.pic-frame { cursor: pointer; font: inherit; color: inherit; }
+.pstart button.pic-frame:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--line); }
 .qbig { width: 100%; max-height: 170px; display: grid; place-items: center; font-size: 3rem; font-weight: 900; color: color-mix(in srgb, var(--accent) 50%, #fff);
   background: repeating-linear-gradient(0deg, transparent 0 9px, rgba(0,0,0,.06) 9px 10px), repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.06) 9px 10px), #f2f9fe; }
 .pstart h2 { margin: .2rem 0 0; font-weight: 900; text-align: center; }
@@ -336,8 +338,9 @@ body { background: #fff; }
 .lib-group { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-weight: 800; padding-top: .3rem; }
 .puzzle .excl { position: absolute; bottom: -2px; right: -2px; font-size: .55rem; font-weight: 900; color: #fff; background: var(--free); padding: 0 .3em; border-radius: 5px 0 5px 0; }
 .zipmusic { margin: 0; }
-.game.has-icon { padding-left: 4.3rem; }
-.game .game-icon { position: absolute; left: 14px; top: 12px; width: 48px; height: 48px; image-rendering: pixelated; border-radius: 8px; border: 2px solid var(--line); background: #fff; }
+.game-meta { display: flex; align-items: center; gap: .4rem; padding-left: .2rem; min-width: 0; }
+.game-meta small { padding-left: 0; }
+.game .game-icon { flex: none; width: 26px; height: 26px; image-rendering: pixelated; border-radius: 6px; border: 1.5px solid var(--line); background: #fff; }
 .folder-tabs .game-icon { position: static; width: 22px; height: 22px; border-width: 1.5px; border-radius: 5px; }
 
 /* ---------- editor ---------- */

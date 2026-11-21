@@ -238,6 +238,8 @@ function seriesOf(p: Pack): string {
   const rules: Array<[RegExp, string]> = [
     [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
     [/mario/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
+    // the picture logic games of other makers (Hudson, Success, …)
+    [/illust logic|illu-logi|ds puzzler|challenge me|oekaki|paku paku & logic/i, 'Illust Logic'],
   ];
   for (const [re, name] of rules) if (re.test(n)) return name;
   return n;
@@ -254,10 +256,11 @@ function libraryPacks(includeHidden = false): Pack[] {
 function gameCard(p: Pack, onOpen: () => void): HTMLElement {
   const [a, b] = countPack(p);
   const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
-  return h('button', { class: 'btn game' + (p.icon ? ' has-icon' : ''), style: col ? `--game:${col}` : undefined, onClick: onOpen },
-    p.icon ? iconCanvas(p.icon) : null,
+  // the icon sits in a row with the system and year (like the icons of a folder), so the title has the full width
+  return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
     h('b', {}, pickAny(p.title, packLang())),
-    h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : '')),
+    h('div', { class: 'game-meta' }, p.icon ? iconCanvas(p.icon) : null,
+      h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : ''))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })),
     (Sync.knownServerRevs().get(p.id) ?? 0) > packRev(p) ? h('span', { class: 'update-badge', title: t('updateAvailable') }, '⬆') : null);
@@ -468,7 +471,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
   screen(header(pickAny(lv.title, packLang()), back), h('div', { class: 'pstart' },
     h('div', { class: 'pstart-pic' },
       h('button', { class: 'rbtn ghost', disabled: i === 0 ? true : undefined, 'aria-label': t('prev'), onClick: () => nav(-1) }, icon('prev')),
-      h('div', { class: 'pic-frame' }, pic),
+      h('button', { class: 'pic-frame', 'aria-label': t('start'), onClick: go }, pic),
       h('button', { class: 'rbtn ghost', disabled: i + 1 >= lv.puzzles.length ? true : undefined, 'aria-label': t('nextPuzzle'), onClick: () => nav(1) }, icon('next'))),
     h('h2', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
     h('p', { class: 'pstart-from' }, (pz.from ?? `${pickAny(pack.title, packLang())} · ${pickAny(lv.title, packLang())}`) + (pz.exclusive ? ' · ' + t('exclusive', { r: pz.exclusive }) : '')),
