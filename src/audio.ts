@@ -10,6 +10,9 @@ import { ChipPlayer } from './audio/chipplayer';
 let ac: AudioContext | null = null;
 let master: GainNode | null = null;
 let sfxGain: GainNode | null = null;
+// sound effects have a context of their own, so pausing the music (suspending its context) keeps them working
+let sfxAc: AudioContext | null = null;
+let paused = false;
 let player: SeqPlayer | null = null;
 let getSdat: () => Uint8Array | null = () => null;
 let sdatFor: Uint8Array | null = null;
@@ -36,9 +39,9 @@ function ensure(): boolean {
     const an = ac.createAnalyser();
     master.connect(an);
     (window as any).__audioLevel = () => { const b = new Float32Array(an.fftSize); an.getFloatTimeDomainData(b); return Math.sqrt(b.reduce((a, v) => a + v * v, 0) / b.length); };
-    sfxGain = ac.createGain();
-    sfxGain.gain.value = 0.25;
-    sfxGain.connect(ac.destination);
+  }
+  if (!sfxAc) {
+    try { sfxAc = new AudioContext(); sfxGain = sfxAc.createGain(); sfxGain.gain.value = 0.25; sfxGain.connect(sfxAc.destination); } catch { sfxAc = null; }
   }
   const d = getSdat();
   if (d && d !== sdatFor) {
@@ -51,16 +54,18 @@ function ensure(): boolean {
 const unlock = () => {
   if (!ensure()) return;
   // resume() is asynchronous: start the queued track once the context really runs (it was lost before)
+  sfxAc?.resume().catch(() => {});
+  if (paused) return;
   ac!.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } });
 };
 window.addEventListener('pointerdown', unlock);
 // app in the background (other app, locked phone, hidden tab): pause all sound, continue when it comes back
 document.addEventListener('visibilitychange', () => {
   if (!ac) return;
-  if (document.hidden) ac.suspend().catch(() => {});
-  else ac.resume().catch(() => {});
+  if (document.hidden) { ac.suspend().catch(() => {}); sfxAc?.suspend().catch(() => {}); }
+  else { if (!paused) ac.resume().catch(() => {}); sfxAc?.resume().catch(() => {}); }
 });
-window.addEventListener('pagehide', () => { ac?.suspend().catch(() => {}); });
+window.addEventListener('pagehide', () => { ac?.suspend().catch(() => {}); sfxAc?.suspend().catch(() => {}); });
 (window as any).__music = () => current;
 window.addEventListener('keydown', unlock);
 
@@ -101,6 +106,7 @@ export const Audio = {
   /** a sequence from the Picross DS sound archive */
   play(name: string, loop = true) {
     if (!settings.music) { this.stop(); return; }
+    if (paused && name !== current) Audio.resume();
     if (name === current && player?.playing) return;
     if (!ac || ac.state !== 'running') { pending = () => Audio.play(name, loop); return; }
     ensure();
@@ -116,6 +122,7 @@ export const Audio = {
     if (!ref || !settings.packMusic) return false;
     if (!settings.music) { this.stop(); return true; }
     const id = packId + '/' + ref;
+    if (paused && id !== current) Audio.resume();
     if (id === current && (stream || packSeqPlaying?.playing || chip?.playing)) return true;
     if (!ac || ac.state !== 'running') { pending = () => Audio.playPack(packId, ref, loop); return true; }
     ensure();
@@ -168,7 +175,11 @@ export const Audio = {
       return false;
     }
   },
-  stop() { current = ''; changed(); player?.stop(0.1); stopPackMusic(0.1); },
+  stop() { current = ''; if (paused) Audio.resume(); changed(); player?.stop(0.1); stopPackMusic(0.1); },
+  /** hold the music where it is (the whole music context stops, so every kind of music continues exactly) */
+  pause() { if (!ac || paused) return; paused = true; ac.suspend().catch(() => {}); changed(); },
+  resume() { if (!paused) return; paused = false; ac?.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } }).catch(() => {}); changed(); },
+  paused: () => paused,
   /** called whenever the track changes ("packId/ref", or '' when silent) */
   onChange(f: (id: string) => void) { listeners.push(f); },
   offChange(f: (id: string) => void) { const i = listeners.indexOf(f); if (i >= 0) listeners.splice(i, 1); },
@@ -176,8 +187,8 @@ export const Audio = {
   current: () => current,
   setVolume(v: number) { if (master) master.gain.value = v; },
   sfx(kind: 'tap' | 'mistake' | 'clear') {
-    if (!settings.sfx || !ac || ac.state !== 'running' || !sfxGain) return;
-    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    if (!settings.sfx || !sfxAc || sfxAc.state !== 'running' || !sfxGain) return;
+    const o = sfxAc.createOscillator(), g = sfxAc.createGain(), t = sfxAc.currentTime;
     o.type = kind === 'mistake' ? 'sawtooth' : 'triangle';
     o.frequency.setValueAtTime(kind === 'mistake' ? 140 : kind === 'clear' ? 880 : 1320, t);
     if (kind === 'mistake') o.frequency.linearRampToValueAtTime(90, t + 0.25);

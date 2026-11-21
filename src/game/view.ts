@@ -142,6 +142,26 @@ export class BoardView {
     this.layout(true);
   }
 
+  /** the colour behind the clues of a line (stripes alternate; the cursor's line may have a bar) */
+  private clueBgOf(line: number, cue: number): string {
+    const T = this.theme;
+    if (line === cue && T.clueFocusBg) return T.clueFocusBg;
+    if (T.clueBands === 'stripes') return line % 2 === 0 ? T.clueBg : T.clueBgAlt;
+    if (T.clueBands === 'flat') return (line % 2 ? T.clueAreaAlt : undefined) ?? T.clueArea ?? T.bg;
+    return line % 2 === 0 ? T.clueBg : T.bg;
+  }
+  private inkCache = new Map<string, string>();
+  /**
+   * a clue colour that stays readable on its background: numbers at least 4.5:1, greyed-out (done) numbers at
+   * least 2.2:1, which some games' colours don't give on every stripe (the stone stripes of Tamori no Picross)
+   */
+  private ink(color: string, bg: string, done = false): string {
+    const k = color + bg + done;
+    let v = this.inkCache.get(k);
+    if (!v) { v = readable(color, bg, done ? 2.2 : 4.5); this.inkCache.set(k, v); }
+    return v;
+  }
+
   private maxClues() {
     const b = this.board;
     // a pair of lines (Mega) needs one place per slot of its clue
@@ -602,7 +622,7 @@ export class BoardView {
       if (band) {
         if (b.colPair[x] !== x && x !== vx0) continue; // drawn with the pair's first column
         const x0 = b.colPair[x], done = b.colDone(x0)[0] ?? true, blue = this.logicHints && b.colCanProgress(x0);
-        const col = done ? T.clueDone : x0 === cueX || x0 + 1 === cueX ? T.cursor : blue ? T.hint : T.clue;
+        const col = this.ink(done ? T.clueDone : x0 === cueX || x0 + 1 === cueX ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(x0, cueX), done);
         const slots = bandSlots(band);
         slots.forEach((sl, k) => {
           const y = this.clueH - gap - (slots.length - k - 0.5) * stepV + 1;
@@ -615,7 +635,7 @@ export class BoardView {
       }
       const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
       for (let k = 0; k < clues.length; k++) {
-        const col = done[k] ? T.clueDone : x === cueX ? T.cursor : blue ? T.hint : T.clue;
+        const col = this.ink(done[k] ? T.clueDone : x === cueX ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(x, cueX), done[k]);
         text(String(clues[k] || 0), ox + x * cs + cs / 2, this.clueH - gap - (clues.length - k - 0.5) * stepV + 1, col);
       }
     }
@@ -629,7 +649,7 @@ export class BoardView {
       if (band) {
         if (b.rowPair[y] !== y && y !== vy0) continue;
         const y0 = b.rowPair[y], done = b.rowDone(y0)[0] ?? true, blue = this.logicHints && b.rowCanProgress(y0);
-        const col = done ? T.clueDone : y0 === cueY || y0 + 1 === cueY ? T.cursor : blue ? T.hint : T.clue;
+        const col = this.ink(done ? T.clueDone : y0 === cueY || y0 + 1 === cueY ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(y0, cueY), done);
         const slots = bandSlots(band), u = slotUnits(slots, true);
         slots.forEach((sl, k) => {
           // two-digit mega numbers get a wider place (they stand side by side in a row clue)
@@ -643,7 +663,7 @@ export class BoardView {
       }
       const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);
       for (let k = 0; k < clues.length; k++) {
-        const col = done[k] ? T.clueDone : y === cueY ? T.cursor : blue ? T.hint : T.clue;
+        const col = this.ink(done[k] ? T.clueDone : y === cueY ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(y, cueY), done[k]);
         text(String(clues[k] || 0), this.clueW - gap - (clues.length - k - 0.5) * stepH, oy + y * cs + cs / 2 + 1, col);
       }
     }
@@ -661,6 +681,29 @@ export class BoardView {
       ctx.fillStyle = T.outline; ctx.fillText(String(this.dragLen), bx, by + 1);
     }
   }
+}
+
+// ---- contrast (WCAG relative luminance)
+function rgbOf(c: string): [number, number, number] | null {
+  const m = c.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (m) { const x = m[1].length === 3 ? [...m[1]].map(d => d + d).join('') : m[1]; return [0, 2, 4].map(i => parseInt(x.slice(i, i + 2), 16)) as [number, number, number]; }
+  const r = c.match(/rgba?\(([^)]+)\)/);
+  if (r) { const [a, b, d] = r[1].split(',').map(n => parseFloat(n)); return [a, b, d]; }
+  return null;
+}
+const lum = ([r, g, b]: [number, number, number]) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+const contrast = (a: [number, number, number], b: [number, number, number]) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const hex = (c: [number, number, number]) => '#' + c.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+/** the colour, moved toward black or white (whichever the background allows) until it has the contrast */
+export function readable(color: string, bg: string, min: number): string {
+  const c = rgbOf(color), b = rgbOf(bg);
+  if (!c || !b || contrast(c, b) >= min) return color;
+  const target: [number, number, number] = lum(b) > 0.35 ? [0, 0, 0] : [255, 255, 255];
+  for (let t = 0.05; t <= 1.001; t += 0.05) {
+    const m = c.map((v, i) => v + (target[i] - v) * t) as [number, number, number];
+    if (contrast(m, b) >= min) return hex(m);
+  }
+  return hex(target);
 }
 
 /** places of a pair's clue slots: a two-digit mega number in a row clue takes 1.6 places */

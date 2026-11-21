@@ -1,5 +1,6 @@
 // MomoGram UI: home, level/puzzle selection, play screen, solved screen, packs and options.
 import { solutionCount } from './game/unique';
+import { fullTitle } from './packs/importers/ctr-picross';
 import { MegaPairs, generateMega, megaSolutionCount, MEGA_GEN } from './game/mega';
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
@@ -8,6 +9,8 @@ import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsO
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { readEntries, packRev, newRev } from './packs/io';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
+import { choose, confirmBox, askText, message, panel } from './ui/dialog';
+export { choose };
 import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
 import { Gamepads } from './input';
 import { openPackManager, storePacks, filesToEntries } from './ui/packs';
@@ -94,6 +97,8 @@ export async function boot() {
   for (const p of ctx.packs as Array<Pack & { ds?: unknown }>) {
     if (p.ds && !p.theme?.tracks) { p.theme = dsTheme(); p.levels = p.levels.map(l => ({ ...l, groupTitle: l.groupTitle ?? (l.group ? DS_GROUPS[l.group] : undefined) })); await storage.savePack(p); }
   }
+  // My Nintendo Picross (the Zelda one) read before its title was made complete
+  for (const p of ctx.packs) if (p.id.startsWith('ctr-') && fullTitle(p.title as Record<string, string>)) await storage.savePack(p);
   // desktop app started with --rom <file> (shortcuts, RecompLauncher): import that game
   if (new URLSearchParams(location.search).has('rom')) {
     try {
@@ -133,15 +138,18 @@ async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>): P
 /** files opened with MomoGram (desktop: double click / command line; installed web app: file handler) */
 async function openedFiles(files: Array<{ name: string; data: Uint8Array }>) {
   const made = await addGameFiles(files);
-  if (made.length) { alert(t('imported', { list: made.map(p => pickAny(p.title, packLang())).join(', ') })); home(); }
+  if (made.length) { home(); void message(t('imported', { list: made.map(p => pickAny(p.title, packLang())).join(', ') })); }
 }
 
 /** extras a pack needs before its lists are shown (Picross DS: the solved-picture animations) */
 async function loadExtras(pack: Pack): Promise<void> {
   if (ctx.pcks.has(pack.id)) return;
+  // daily puzzles show the pictures of their own games
+  const origins = new Set(pack.levels.flatMap(l => l.puzzles.map(z => z.origin?.slice(0, z.origin.lastIndexOf('/')).replace(/@mega$/, ''))).filter((x): x is string => !!x && x !== pack.id));
+  for (const o of origins) { const op = ctx.packs.find(p => p.id === o); if (op) await loadExtras(op); }
   if (pack.theme?.pictures) {
     const d = await storage.loadAsset(pack.id, 'pictures.bin').catch(() => undefined);
-    if (d) addPictures(unpackPictures(d));
+    if (d) addPictures(pack.id.replace(/@mega$/, ''), unpackPictures(d));
   }
   const p = pack as Pack & { ds?: DsPackMeta };
   if (!p.ds) { ctx.pcks.set(pack.id, null); return; }
@@ -170,8 +178,10 @@ function logo(): HTMLElement {
   const g = h('div', { class: 'logo-grid', 'aria-hidden': 'true' });
   rows.forEach(r => [...r].forEach(c => g.append(h('i', { class: c === '#' ? 'on' : '' }))));
   return h('div', { class: 'logo' + (settings.mega ? ' mega' : '') }, g, h('div', {},
-    h('div', { class: 'logo-name' }, settings.mega ? h('span', { class: 'logo-mega' }, 'Mega ') : null, 'MomoGram'),
-    h('div', { class: 'tagline' }, settings.mega ? t('megaTagline') : t('tagline'))));
+    // "MEGA" is a stamp over the name: the logo keeps its size and place in both modes
+    h('div', { class: 'logo-text' }, settings.mega ? h('span', { class: 'logo-mega', 'aria-label': 'Mega' }, 'MEGA') : null,
+      h('div', { class: 'logo-name' }, 'MomoGram'),
+      h('div', { class: 'tagline' }, t('tagline')))));
 }
 
 /** the switch between normal and Mega puzzles for the whole game */
@@ -211,10 +221,11 @@ export function home() {
 
   const top = h('section', { class: 'home-top' },
     h('div', { class: 'chips' },
+      megaSwitch(),
+      h('span', { class: 'gap' }),
       h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') }, '👤 ' + activeProfile().name),
       syncChip()),
     logo(),
-    megaSwitch(),
     h('div', { class: 'home-progress' },
       h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (solved / total) * 100 : 0}%` })),
       h('small', {}, t('solvedCount', { a: solved, b: total }))));
@@ -255,7 +266,7 @@ function seriesOf(p: Pack): string {
   if (p.source.platform === 'Nintendo Switch' && !/^picross (s\d*\+?|e\d*)$/i.test(n.trim())) return 'Picross S Specials';
   const rules: Array<[RegExp, string]> = [
     [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
-    [/mario/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
+    [/mario|^picross 2$/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my ?nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
     // the picture logic games of other makers (Hudson, Success, …)
     [/sanrio|hello kitty/i, 'Sanrio'],
     [/illust logic|illu-logi|ds puzzler|challenge me|oekaki/i, 'Illust Logic'],
@@ -278,7 +289,7 @@ function gameCard(p: Pack, onOpen: () => void): HTMLElement {
   // the icon sits in a row with the system and year (like the icons of a folder), so the title has the full width
   return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
     h('b', {}, pickAny(p.title, packLang())),
-    h('div', { class: 'game-meta' }, p.icon ? iconCanvas(p.icon) : null,
+    h('div', { class: 'game-meta' }, hasIcon(p) ? iconCanvas(p.icon!) : null,
       h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : ''))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })),
@@ -334,6 +345,25 @@ function renderLibrary(el: HTMLElement, folder: string | null) {
     ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))));
 }
 
+/** an icon with a picture on it (some files have a blank one: all white, or all one colour) */
+const iconCache = new Map<string, boolean>();
+function hasIcon(p: Pack): boolean {
+  const ic = p.icon;
+  if (!ic) return false;
+  let v = iconCache.get(ic.rgba);
+  if (v === undefined) {
+    const bin = atob(ic.rgba);
+    const seen = new Set<number>();
+    for (let i = 0; i + 3 < bin.length && seen.size < 3; i += 4) {
+      if (bin.charCodeAt(i + 3) < 32) continue;
+      seen.add((bin.charCodeAt(i) >> 3) << 10 | (bin.charCodeAt(i + 1) >> 3) << 5 | bin.charCodeAt(i + 2) >> 3);
+    }
+    v = seen.size >= 3;
+    iconCache.set(ic.rgba, v);
+  }
+  return v;
+}
+
 /** a game's own icon (read from the user's file), drawn pixel-sharp */
 function iconCanvas(ic: NonNullable<Pack['icon']>): HTMLCanvasElement {
   const c = h('canvas', { class: 'game-icon', width: ic.w, height: ic.h, 'aria-hidden': 'true' });
@@ -348,7 +378,7 @@ function folderCard(key: string, packs: Pack[]): HTMLElement {
   for (const p of packs) { const [x, y] = countPack(p); a += x; b += y; }
   return h('button', { class: 'btn game folder', onClick: () => folderScreen(key) },
     h('b', {}, key), h('small', {}, t('gamesCount', { n: packs.length })),
-    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => p.icon ? iconCanvas(p.icon) : h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
+    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => hasIcon(p) ? iconCanvas(p.icon!) : h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })));
 }
@@ -396,7 +426,7 @@ function packInfo(pack: Pack): HTMLElement {
 }
 
 function packFooter(pack: Pack, rerender: () => void): HTMLElement {
-  return h('div', { class: 'row' }, h('button', { class: 'btn ghost', onClick: () => { if (confirm(t('confirmReset'))) { resetProgress(pack.id); rerender(); } } }, t('resetProgress')));
+  return h('div', { class: 'row' }, h('button', { class: 'btn ghost', onClick: async () => { if (await confirmBox(t('confirmReset'), t('resetProgress'), true)) { resetProgress(pack.id); rerender(); } } }, t('resetProgress')));
 }
 
 function groupTitle(pack: Pack, g: string) {
@@ -437,12 +467,13 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     const stars = lv.puzzles.filter(p => getProgress(pack.id, p.id).underLimit).length;
     info.replaceChildren(h('div', { class: 'ring', style: `--p:${(done / lv.puzzles.length) * 100}%` }, h('span', {}, String(done))),
       h('b', {}, `${done} / ${lv.puzzles.length} ${t('puzzles')}` + (stars ? `  ★ ${stars}` : '')),
-      h('small', {}, sizes.length === 1 ? sizes[0] : `${sizes[0]} – ${sizes[sizes.length - 1]}`));
+      h('small', {}, sizes.length === 1 ? sizes[0] : `${sizes[0]} – ${sizes[sizes.length - 1]}`),
+      ...(megaLevelBadge(lv) ? [megaLevelBadge(lv)!] : []));
   };
   const showPuzzle = (p: PackPuzzle, i: number) => {
     const pr = getProgress(pack.id, p.id);
     const name = pr.cleared ? pickText(p.name, packLang()) : '';
-    info.replaceChildren(pr.cleared ? thumbnail(p, pck, 48) : h('span', { class: 'qmark' }, '?'),
+    info.replaceChildren(pr.cleared ? thumbnail(p, pck, 48, pack.id) : h('span', { class: 'qmark' }, '?'),
       h('b', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
       h('small', {}, `${p.width}×${p.height}` + (pr.best !== undefined ? ` · ${t('best')} ${formatTime(pr.best)}` : '') + (pr.underLimit ? ' ★' : '')));
   };
@@ -452,7 +483,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => puzzleStart(pack, lv, i, () => puzzleList(pack, lv, back)),
       onMouseenter: () => showPuzzle(p, i), onFocus: () => showPuzzle(p, i), onMouseleave: () => showLevel(),
       'aria-label': `${t('puzzleNo')} ${i + 1}` });
-    if (pr.cleared) tile.append(thumbnail(p, pck, 64));
+    if (pr.cleared) tile.append(thumbnail(p, pck, 64, pack.id));
     else tile.append(h('span', { class: 'qmark' }, '?'));
     tile.append(h('small', {}, pr.cleared ? (pickText(p.name, packLang()) || `${p.width}×${p.height}`) : `${p.width}×${p.height}`));
     if (pr.best !== undefined) tile.append(h('em', {}, formatTime(pr.best)));
@@ -491,7 +522,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
   const pr = getProgress(pack.id, pz.id);
   const pck = pckOf(pack);
   const name = pr.cleared ? pickText(pz.name, packLang()) : '';
-  const pic = pr.cleared ? thumbnail(pz, pck, 160) : h('div', { class: 'qbig', style: `aspect-ratio:${pz.width}/${pz.height}` }, '?');
+  const pic = pr.cleared ? thumbnail(pz, pck, 160, pack.id) : h('div', { class: 'qbig', style: `aspect-ratio:${pz.width}/${pz.height}` }, '?');
   const saved = getBoard(pack.id, lv.id, pz.id);
   const go = () => play(pack, lv, i, back);
   const nav = (d: number) => { const j = i + d; if (j >= 0 && j < lv.puzzles.length) puzzleStart(pack, lv, j, back); };
@@ -512,6 +543,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
     solutionCountOf(pz.rows, megaPairsOf(pz)) === 2 ? h('p', { class: 'warn-multi' }, '⚠ ' + t('multiSolution')) : null,
+    megaBadge(pz),
     h('button', { class: 'btn primary big start', onClick: go }, icon('play'), saved ? t('continue') + ' · ' + formatTime(saved.state.elapsedMs + saved.state.penaltyMs) : t('start')),
     saved ? h('button', { class: 'btn ghost', onClick: () => { clearBoard(pack.id, lv.id, pz.id); play(pack, lv, i, back, undefined, true); } }, t('restart')) : null));
 }
@@ -547,8 +579,10 @@ function syncChip(): HTMLElement | null {
     }
     const ago = a.synced ? Math.round((Date.now() - Date.parse(a.synced)) / 60000) : -1;
     b.className = 'btn sync-chip' + (s.state === 'error' ? ' bad' : '');
-    b.textContent = s.state === 'syncing' ? '☁ ' + t('syncing') : s.state === 'error' ? '⚠ ' + serverError(new Sync.ServerError(s.error, 0)) : '☁ ' + (ago < 0 ? '–' : ago < 1 ? t('syncedNow') : t('syncedAgo', { n: ago < 60 ? ago + ' min' : Math.round(ago / 60) + ' h' }));
-    b.title = t('loggedIn', { name: a.name });
+    // short: "Sync", "OK", "5 min" (the details are in the tooltip)
+    const err = s.state === 'error' ? serverError(new Sync.ServerError(s.error, 0)) : '';
+    b.textContent = s.state === 'syncing' ? '☁ Sync' : s.state === 'error' ? '⚠ ' + t('syncErrShort') : '☁ ' + (ago < 0 ? '–' : ago < 1 ? 'OK' : ago < 60 ? ago + ' min' : ago < 48 * 60 ? Math.round(ago / 60) + ' h' : Math.round(ago / 1440) + ' d');
+    b.title = t('loggedIn', { name: a.name }) + (err ? '\n' + err : ago >= 0 ? '\n' + (ago < 1 ? t('syncedNow') : t('syncedAgo', { n: ago < 60 ? ago + ' min' : Math.round(ago / 60) + ' h' })) : '');
   };
   draw();
   Sync.onSyncChange(() => { if (b.isConnected) draw(); });
@@ -688,6 +722,20 @@ function megaView(p: Pack): Pack {
 }
 /** the stored pack behind a view (for changes that are saved) */
 const original = (p: Pack) => originals.get(p) ?? p;
+
+/** where a Mega puzzle's mega numbers come from: the game itself, or MomoGram */
+function megaBadge(pz: PackPuzzle): HTMLElement | null {
+  if (!pz.id.endsWith(MEGA)) return null;
+  const own = !!pz.mega, none = !own && !megaPairsOf(pz);
+  return h('p', { class: 'mega-src ' + (own ? 'game' : 'momo'), title: own ? t('megaFromGameHelp') : t('megaByMomoHelp') },
+    own ? '🎮 ' + t('megaFromGame') : none ? t('megaNone') : '✨ ' + t('megaByMomo'));
+}
+function megaLevelBadge(lv: PackLevel): HTMLElement | null {
+  if (!lv.puzzles[0]?.id.endsWith(MEGA)) return null;
+  const own = lv.puzzles.filter(z => z.mega).length;
+  const k = own === lv.puzzles.length ? 'game' : own ? 'mixed' : 'momo';
+  return h('span', { class: 'mega-src small ' + k }, k === 'game' ? '🎮 ' + t('megaFromGame') : k === 'momo' ? '✨ ' + t('megaByMomo') : `🎮 ${own} · ✨ ${lv.puzzles.length - own}`);
+}
 
 /** the pairs a puzzle is played with in Mega mode: the game's own, else MomoGram's (kept on this device) */
 const MEGA_KEY = 'momogram.megaPairs';
@@ -975,16 +1023,20 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const undoBtn = tbtn('undo', t('undo'), () => { if (board.undo()) { view.invalidate(); updateInfo(); } });
   const trialBtn = rules === 'free' ? tbtn('trial', t('tryIt'), () => trialToggle()) : null;
   const trialLabel = trialBtn?.querySelector('small') ?? h('small');
-  const logicBtn = tbtn('hint', t('logic'), () => {
-    settings.logicHints = !settings.logicHints; saveSettings(); view.logicHints = settings.logicHints; if (settings.logicHints) usedHints = true;
-    view.invalidate(); logicBtn.classList.toggle('on', settings.logicHints); logicBtn.setAttribute('aria-pressed', String(settings.logicHints));
-  });
-  logicBtn.classList.toggle('on', settings.logicHints);
-  logicBtn.setAttribute('aria-pressed', String(settings.logicHints));
+  // logic hints (blue clue numbers): switched in the game menu
+  let logicOn = settings.logicHints && (rules !== 'free' || !!restore?.usedHints);
+  async function setLogic(on: boolean) {
+    // on Hard, the first switch-on of a puzzle costs the platinum medal: asked first
+    if (on && rules === 'free' && !usedHints && !(await confirmBox(t('logicHardAsk'), t('logicHardYes')))) return false;
+    logicOn = on; view.logicHints = on; if (on) usedHints = true;
+    settings.logicHints = on; saveSettings();
+    view.invalidate();
+    return true;
+  }
   const menuBtn = h('button', { class: 'rbtn hud-menu', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, icon('menu'));
   // third tool: the player's own marks, which stay while the rest is filled and crossed
   const markBtn = h('button', { class: 'rbtn mark-tool', title: t('mark'), 'aria-label': t('mark'), 'aria-pressed': 'false', onClick: () => toggleMark() }, icon('mark'));
-  const tools = h('nav', { class: 'tools' }, h('div', { class: 'tool-main' }, toolBtn, markBtn, lensBtn), h('span', { class: 'gap' }), h('div', { class: 'tool-side' }, logicBtn, undoBtn, trialBtn));
+  const tools = h('nav', { class: 'tools' }, h('div', { class: 'tool-main' }, toolBtn, markBtn, lensBtn), h('span', { class: 'gap' }), h('div', { class: 'tool-side' }, undoBtn, trialBtn));
 
   top.append(menuBtn);
   screen(h('div', { class: 'play side-bottom' + (settings.toolsRight ? ' tools-right' : '') }, top, boardWrap, tools));
@@ -999,9 +1051,10 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   });
 
   view.setTheme(colors ? colors.board : null);
-  view.logicHints = settings.logicHints;
-  // medal: bronze on Easy, silver on Normal, gold on Hard, platinum on Hard without logic hints
-  let usedHints = settings.logicHints || !!restore?.usedHints;
+  view.logicHints = logicOn;
+  // medal: bronze on Easy, silver on Normal, gold on Hard, platinum on Hard without logic hints. Whether hints
+  // were on at any moment of this puzzle is kept (with the saved board too), not only whether they are on at the end.
+  let usedHints = logicOn || !!restore?.usedHints;
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
     board, view,
     solve() { for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS; board.touch(); view.invalidate(); if (board.checkSolved()) solved(); },
@@ -1133,22 +1186,45 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     gp();
   }
 
+  /** the game menu: stays open for music and hints; "End" asks whether to keep the board */
   async function pauseMenu() {
     running = false;
-    await choose(t('menu'), [
-      [t('resume'), () => {}],
-      ...(board.hasMarks() ? [
-        [t('fillMarks'), () => { board.pushUndo(); if (board.fillMarks()) Snd.sfx('mistake'); view.invalidate(); updateInfo(); if (board.checkSolved()) solved(); }],
-        [t('clearMarks'), () => { board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }]] as Array<[string, () => void]> : []),
-      [settings.music ? '♪ ' + t('musicOff') : '♪ ' + t('musicOn'), () => { settings.music = !settings.music; saveSettings(); if (settings.music) playMusicFor(pack); else Snd.stop(); }],
-      [t('stopSave'), () => { keepBoard(); cleanup(); back(); }],
-      [t('restart'), () => { cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }],
-      [t('quit'), async () => {
-        // giving up throws the board away: ask first (a saved board is easy to lose by a mis-tap)
-        if (board.elapsedMs > 5000 && !(await confirmChoice(t('quitAsk'), t('quitYes')))) return;
-        cleanup(); clearBoard(pack.id, lv.id, pz.id); back();
-      }],
-    ]);
+    await new Promise<void>(done => panel((box, close) => {
+      const end = () => { close(); done(); };
+      const btn = (label: string, fn: () => void, cls = 'btn') => { const b = h('button', { class: cls, onClick: fn }, label); return b; };
+      const draw = () => {
+        box.replaceChildren(h('h3', {}, t('menu')));
+        box.append(btn(t('resume'), end, 'btn primary'));
+        if (board.hasMarks()) {
+          box.append(btn(t('fillMarks'), () => { end(); board.pushUndo(); if (board.fillMarks()) Snd.sfx('mistake'); view.invalidate(); updateInfo(); if (board.checkSolved()) solved(); }));
+          box.append(btn(t('clearMarks'), () => { end(); board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }));
+        }
+        // music: pause / continue the same song, or the next one; the menu stays open
+        const playing = settings.music && !Snd.paused() && !!Snd.current();
+        box.append(h('div', { class: 'menu-row' },
+          btn(playing ? '⏸ ' + t('musicPause') : '▶ ' + t('musicPlay'), () => {
+            if (!settings.music) { settings.music = true; saveSettings(); playMusicFor(pack); }
+            else if (Snd.paused()) Snd.resume();
+            else if (!Snd.current()) playMusicFor(pack);
+            else Snd.pause();
+            setTimeout(draw, 30);
+          }),
+          btn('⏭ ' + t('musicNext'), () => { if (!settings.music) { settings.music = true; saveSettings(); } playMusicFor(pack); setTimeout(draw, 30); })));
+        box.append(btn('💡 ' + (logicOn ? t('logicOff') : t('logicOnBtn')) + (rules === 'free' && !usedHints && !logicOn ? ' · ' + t('noPlatinum') : ''), async () => { await setLogic(!logicOn); draw(); }));
+        box.append(btn(t('restart'), () => { end(); cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }));
+        box.append(btn(t('endGame'), async () => {
+          end();
+          // keep the board (continue later) or throw it away; nothing to ask about an untouched board
+          if (board.elapsedMs < 3000 && board.cells.every(v => v === 0)) { cleanup(); back(); return; }
+          let choice = 'stay' as 'save' | 'drop' | 'stay';
+          await choose(t('endAsk'), [[t('endSave'), () => { choice = 'save'; }], [t('endDrop'), () => { choice = 'drop'; }], [t('back'), () => {}]]);
+          if (choice === 'save') { keepBoard(); cleanup(); back(); }
+          else if (choice === 'drop') { cleanup(); clearBoard(pack.id, lv.id, pz.id); back(); }
+          else { last = performance.now(); running = true; }
+        }, 'btn ghost'));
+      };
+      draw();
+    }));
     last = performance.now();
     running = true;
   }
@@ -1191,7 +1267,7 @@ function medalEl(m: Medal, big = false) {
 function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, under: boolean, pck: PckGetter | null, back: () => void, medal?: Medal, newMedal = false) {
   const pz = lv.puzzles[index];
   const cv = h('canvas', { class: 'solved-pic' });
-  const anim = new PictureAnimator(pz as any, pck);
+  const anim = new PictureAnimator(pz as any, pck, pack.id);
   const best = getProgress(pack.id, pz.id).best;
   const next = index + 1 < lv.puzzles.length ? h('button', { class: 'btn primary', onClick: () => { stop(); play(pack, lv, index + 1, back); } }, t('next') + ' ›') : null;
   screen(h('div', { class: 'solved' },
@@ -1227,20 +1303,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
 // ---------------------------------------------------------------- dialogs
 
 /** yes / no */
-function confirmChoice(question: string, yes: string): Promise<boolean> {
-  return new Promise(res => { let v = false; choose(question, [[yes, () => { v = true; }], [t('back'), () => {}]]).then(() => res(v)); });
-}
-
-export function choose(title: string, options: Array<[string, () => void]>): Promise<void> {
-  return new Promise(res => {
-    const m = h('div', { class: 'modal' });
-    const box = h('div', { class: 'dialog' }, h('h3', {}, title));
-    for (const [label, fn] of options) box.append(h('button', { class: 'btn', onClick: () => { m.remove(); Gamepads.popModal(); fn(); res(); } }, label));
-    m.append(box);
-    document.body.append(m);
-    Gamepads.pushModal(box);
-  });
-}
+function confirmChoice(question: string, yes: string): Promise<boolean> { return confirmBox(question, yes); }
 
 // ---------------------------------------------------------------- packs
 
@@ -1298,9 +1361,9 @@ function saveSection(): HTMLElement {
     if (!f) return;
     let s: SaveFile | null = null;
     try { s = upgradeSave(unpackSave(new Uint8Array(await f.arrayBuffer()))); } catch { s = null; }
-    if (!s) { alert(t('notASave')); return; }
+    if (!s) { await message(t('notASave')); return; }
     const r = importSave(s);
-    alert(r.created ? t('saveNewProfile', { name: r.profile }) : t('saveMerged', { name: r.profile, a: r.packsTaken, b: r.packsKept }));
+    await message(r.created ? t('saveNewProfile', { name: r.profile }) : t('saveMerged', { name: r.profile, a: r.packsTaken, b: r.packsKept }));
     optionsScreen();
   };
   return h('div', { class: 'save-box' },
@@ -1376,11 +1439,11 @@ function serverSection(): HTMLElement {
 /** admin: the server's accounts; set a new password for someone who forgot theirs */
 async function accountsDialog() {
   let users: Array<{ name: string; admin: boolean }> = [];
-  try { users = await Sync.serverUsers(); } catch (e) { alert(serverError(e)); return; }
+  try { users = await Sync.serverUsers(); } catch (e) { await message(serverError(e)); return; }
   choose(t('accounts'), [...users.map(u => [(u.admin ? '★ ' : '') + u.name + ' · ' + t('newPassword'), async () => {
-    const pw = prompt(t('newPasswordFor', { name: u.name }), '');
+    const pw = await askText(t('newPasswordFor', { name: u.name }), '');
     if (!pw) return;
-    try { await Sync.setPassword(u.name, pw); alert(t('passwordSet', { name: u.name })); } catch (e) { alert(serverError(e)); }
+    try { await Sync.setPassword(u.name, pw); await message(t('passwordSet', { name: u.name })); } catch (e) { await message(serverError(e)); }
   }] as [string, () => void]), [t('back'), () => {}]]);
 }
 
@@ -1388,9 +1451,9 @@ async function accountsDialog() {
 function profileDialog(after: () => void) {
   const me = activeProfile();
   const opts: Array<[string, () => void]> = profiles().map(p => [(p.id === me.id ? '✓ ' : '') + p.name, () => { switchProfile(p.id); }]);
-  opts.push(['✚ ' + t('newProfile'), () => { const n = prompt(t('profileName'), ''); if (n !== null && n.trim()) createProfile(n); }]);
-  opts.push(['✎ ' + t('renameProfile'), () => { const n = prompt(t('profileName'), me.name); if (n !== null && n.trim()) renameProfile(n); }]);
-  if (profiles().length > 1) opts.push(['🗑 ' + t('deleteProfile', { name: me.name }), () => { if (confirm(t('deleteProfile', { name: me.name }) + '?')) deleteProfile(me.id); }]);
+  opts.push(['✚ ' + t('newProfile'), async () => { const n = await askText(t('profileName'), ''); if (n) createProfile(n); }]);
+  opts.push(['✎ ' + t('renameProfile'), async () => { const n = await askText(t('profileName'), me.name); if (n) renameProfile(n); }]);
+  if (profiles().length > 1) opts.push(['🗑 ' + t('deleteProfile', { name: me.name }), async () => { if (await confirmBox(t('deleteProfile', { name: me.name }) + '?', t('delete'), true)) deleteProfile(me.id); }]);
   opts.push([t('back'), () => {}]);
   choose(t('profile'), opts).then(() => { after(); if (Sync.account()) Sync.sync().then(c => { if (c) after(); }); });
 }

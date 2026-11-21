@@ -48,7 +48,13 @@ export function dominantColors(px: RGBA[], n = 4): Array<{ hex: string; rgb: [nu
  * the games: 2 RGBA8, 3 RGB8, 4 RGBA4444, 5 and 6 RGB565. Textures with the older 0x14-byte header are stored
  * bottom-up.
  */
-export function jtexImage(file: Uint8Array): { w: number; h: number; rgba: Uint8Array } | null {
+/**
+ * `upright`: textures with the old header are normally stored bottom-up; some games (Club Nintendo Picross) store
+ * them top-down in the lower part of the texture. The importer finds out which by comparing with the puzzles.
+ */
+export const jtexOldHeader = (file: Uint8Array) => { try { const d = lz11(file); return new DataView(d.buffer, d.byteOffset).getUint32(0, true) !== 0x80; } catch { return false; } };
+
+export function jtexImage(file: Uint8Array, upright = false): { w: number; h: number; rgba: Uint8Array } | null {
   let d: Uint8Array;
   try { d = lz11(file); } catch { return null; }
   const v = new DataView(d.buffer, d.byteOffset, d.byteLength);
@@ -61,7 +67,8 @@ export function jtexImage(file: Uint8Array): { w: number; h: number; rgba: Uint8
     const t = k >> 6, i = k & 63;
     const x = (t % (W / 8)) * 8 + ((i & 1) | ((i >> 1) & 2) | ((i >> 2) & 4));
     let y = Math.floor(t / (W / 8)) * 8 + (((i >> 1) & 1) | ((i >> 2) & 2) | ((i >> 3) & 4));
-    if (!newHdr) y = H - 1 - y;
+    if (!newHdr) y = upright ? y - (H - h) : H - 1 - y;
+    if (y < 0) continue;
     if (x >= w || y >= h) continue;
     const o = off + k * bpp, p = (y * w + x) * 4;
     if (fmt === 2) { out[p] = d[o + 3]; out[p + 1] = d[o + 2]; out[p + 2] = d[o + 1]; out[p + 3] = d[o]; }

@@ -22,6 +22,10 @@ function releaseTime(r: number) { return r >= 127 ? 0.005 : 0.02 + Math.pow((127
 function sustainLevel(s: number) { return s >= 127 ? 1 : Math.pow(10, (-(127 - s) * 0.72) / 20); }
 function volCurve(v: number) { return v <= 0 ? 0 : Math.pow(10, (-(127 - v) * 0.36) / 20); }
 
+/** loudness of sequenced DS music against the games' recorded music (measured) */
+export let SEQ_LEVEL = 4.5;
+export function setSeqLevel(v: number) { SEQ_LEVEL = v; }
+
 export class SeqPlayer {
   private ac: AudioContext;
   private out: GainNode;
@@ -43,7 +47,10 @@ export class SeqPlayer {
     this.ac = ac;
     this.sdat = sdat;
     this.out = ac.createGain();
-    this.out.connect(out);
+    // DS sequences come out much quieter than the recorded streams of the 3DS / Switch games: lifted to match
+    const level = ac.createGain();
+    level.gain.value = SEQ_LEVEL;
+    this.out.connect(level).connect(out);
   }
 
   play(name: string, loop = true): boolean {

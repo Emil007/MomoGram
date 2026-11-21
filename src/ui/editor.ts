@@ -5,6 +5,7 @@ import { puzzleScore, puzzleLevel, suggestFix } from '../game/difficulty';
 import { storage } from '../store';
 import { t, lang } from '../i18n';
 import { h, pickFile } from '../app';
+import { askText, confirmBox } from './dialog';
 import { icon } from './icons';
 
 interface ED {
@@ -38,7 +39,7 @@ export function editorHome(ed: ED) {
     list.append(h('button', { class: 'btn level', onClick: () => packEditor(ed, p) }, h('b', {}, pickAny(p.title, lang())), h('small', {}, `${n} ${t('puzzles')}`)));
   }
   const create = async () => {
-    const title = prompt(t('edPackName'), t('edMyPuzzles'));
+    const title = await askText(t('edPackName'), t('edMyPuzzles'));
     if (!title) return;
     const p: Pack = {
       format: 'momogram-pack', version: 1, id: newId('my-'), title: { [lang()]: title },
@@ -70,15 +71,15 @@ function packEditor(ed: ED, pack: Pack) {
     grid.append(h('button', { class: 'btn puzzle add', onClick: () => puzzleEditor(ed, pack, li, -1) }, h('span', { class: 'qmark' }, '+')));
     body.append(h('div', { class: 'ed-level' },
       h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, pickAny(lv.title, lang())),
-        h('button', { class: 'btn ghost', onClick: async () => { const n = prompt(t('edLevelName'), pickAny(lv.title, lang())); if (n) { lv.title = { [lang()]: n }; await save(ed, pack); self(); } } }, '✎')),
+        h('button', { class: 'btn ghost', onClick: async () => { const n = await askText(t('edLevelName'), pickAny(lv.title, lang())); if (n) { lv.title = { [lang()]: n }; await save(ed, pack); self(); } } }, '✎')),
       grid));
   });
   ed.screen(ed.header(pickAny(pack.title, lang()), back), body,
     h('div', { class: 'row wrap' },
       h('button', { class: 'btn', onClick: async () => { pack.levels.push({ id: newId('l'), title: { [lang()]: `${t('edLevel')} ${pack.levels.length + 1}` }, rules: 'normal', puzzles: [] }); await save(ed, pack); self(); } }, '✚ ' + t('edNewLevel')),
-      h('button', { class: 'btn', onClick: async () => { const n = prompt(t('edPackName'), pickAny(pack.title, lang())); if (n) { pack.title = { [lang()]: n }; pack.source.game = n; await save(ed, pack); self(); } } }, '✎ ' + t('edRename')),
+      h('button', { class: 'btn', onClick: async () => { const n = await askText(t('edPackName'), pickAny(pack.title, lang())); if (n) { pack.title = { [lang()]: n }; pack.source.game = n; await save(ed, pack); self(); } } }, '✎ ' + t('edRename')),
       h('button', { class: 'btn', onClick: async () => {
-        if (!confirm(t('delete') + ': ' + pickAny(pack.title, lang()) + '?')) return;
+        if (!(await confirmBox(t('delete') + ': ' + pickAny(pack.title, lang()) + '?', t('delete'), true))) return;
         await storage.deletePack(pack.id); ed.setPacks(ed.packs().filter(p => p.id !== pack.id)); back();
       } }, '🗑 ' + t('delete'))),
     h('p', { class: 'fine' }, t('edExportHelp')));

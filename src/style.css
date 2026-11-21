@@ -53,9 +53,14 @@ body { background: #fff; }
 .logo-grid i.on { background: var(--accent); }
 .logo-name { font-size: 2.2rem; font-weight: 900; letter-spacing: .01em; color: var(--ink); text-shadow: 2px 2px 0 var(--top); }
 .tagline { color: var(--muted); font-size: .88rem; font-weight: 700; }
-.logo-mega { color: var(--accent); }
-.logo.mega .logo-name { font-size: 1.85rem; white-space: nowrap; }
-.logo.mega .logo-grid i.on:nth-child(odd) { background: #ff8a00; }
+.logo-text { position: relative; }
+/* Mega mode: a tilted stamp over the name (the logo keeps its size and place) */
+.logo-mega { position: absolute; left: -.55rem; top: -1.05rem; z-index: 2; transform: rotate(-9deg); padding: .08em .45em .02em;
+  font-size: .95rem; font-weight: 900; letter-spacing: .14em; color: #fff; background: linear-gradient(135deg, #ff4f2e, #ff9a00);
+  border: 2px solid var(--line); border-radius: 7px; box-shadow: 2px 2px 0 var(--line); text-shadow: 1px 1px 0 rgba(0,0,0,.35);
+  animation: mega-in .35s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes mega-in { from { transform: rotate(-30deg) scale(2.2); opacity: 0; } to { transform: rotate(-9deg) scale(1); opacity: 1; } }
+.logo.mega .logo-grid i.on:nth-child(3n) { background: #ff7a1a; }
 /* the whole game: normal or Mega puzzles */
 .mega-switch { position: relative; z-index: 1; align-self: center; display: inline-flex; padding: 3px; gap: 0; border: 2px solid var(--line); border-radius: 999px; background: #fff; font: inherit; cursor: pointer; }
 .mega-switch .ms-opt { padding: .3em 1.1em; border-radius: 999px; font-weight: 800; font-size: .85rem; color: var(--muted); transition: background .15s, color .15s; }
@@ -196,6 +201,10 @@ body { background: #fff; }
 .modal { position: fixed; inset: 0; background: rgba(10, 20, 30, .45); display: grid; place-items: center; z-index: 10; }
 .dialog { background: #fff; border: 3px solid var(--line); border-radius: 16px; padding: 1rem; display: flex; flex-direction: column; gap: .6rem; min-width: 250px; box-shadow: 0 5px 0 var(--line); }
 .dialog h3 { margin: 0 0 .3rem; text-align: center; font-weight: 900; }
+.dialog { max-width: min(92vw, 420px); }
+.dialog-text { margin: 0 0 .3rem; text-align: center; color: var(--muted); font-weight: 700; line-height: 1.35; }
+.dialog-input { font: inherit; font-weight: 800; font-size: 1.05rem; border: 2px solid var(--line); border-radius: 10px; padding: .55em .7em; }
+.btn.danger { background: #d64541; color: #fff; border-color: var(--line); }
 .options { max-width: 560px; width: 100%; margin: 0 auto; padding: 1.2rem 1rem; display: flex; flex-direction: column; gap: .5rem; }
 .opt { display: flex; justify-content: space-between; align-items: center; background: #fff; border: 2px solid var(--line); border-radius: 10px; padding: .55rem .8rem; gap: 1rem; font-weight: 700; }
 .opt select, .opt input[type=range] { font: inherit; max-width: 55%; }
@@ -428,7 +437,10 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .score-table tbody th { text-align: left; font-weight: 800; white-space: normal; }
 .score-table td.top { font-weight: 900; color: var(--easy); }
 .mcount .medal { width: 1rem; height: 1rem; }
-.home-top .chips { display: flex; justify-content: flex-end; gap: .4rem; flex-wrap: wrap; margin-bottom: -.4rem; position: relative; z-index: 1; }
+.home-top .chips { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: -.4rem; position: relative; z-index: 1; }
+.home-top .chips .gap { flex: 1; }
+.home-top .chips .mega-switch { align-self: center; }
+.home-top .chips .mega-switch .ms-opt { padding: .22em .8em; font-size: .78rem; }
 .home-top .chips .profile-chip { margin-bottom: 0; }
 .sync-chip { padding: .25em .7em; font-size: .8rem; border-radius: 999px; color: var(--muted); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sync-chip.bad { color: var(--hard); }
@@ -458,3 +470,14 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .soundtest .track b { font-size: .9rem; }
 .soundtest .track small { color: var(--muted); font-size: .72rem; }
 .soundtest .track.on { background: radial-gradient(circle at 35% 25%, #fff6b0 0 20%, #ffd21a 65%, #e8a800 100%); }
+
+/* game menu: two buttons side by side (music) */
+.menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.menu-row .btn { padding-left: .4em; padding-right: .4em; }
+
+/* where a Mega puzzle comes from */
+.mega-src { align-self: center; margin: 0; padding: .25em .8em; border-radius: 999px; font-weight: 800; font-size: .85rem; border: 2px solid var(--line); background: #fff; }
+.mega-src.game { background: #fff1e0; color: #a14a00; }
+.mega-src.momo { background: #eef4ff; color: #2c4f9e; }
+.mega-src.mixed { background: #f4f0ff; color: #5a3fa0; }
+.mega-src.small { display: inline-block; margin-top: .2rem; padding: .1em .6em; font-size: .72rem; border-width: 1.5px; }

@@ -6,10 +6,12 @@ import { bgr555, renderCell, Frame } from '../rom/dsgfx';
 
 export type PckGetter = (i: number) => Uint8Array | null;
 
-// coloured solved pictures read from the player's games, keyed by the puzzle's pattern
+// coloured solved pictures read from the player's games, per pack and keyed by the puzzle's pattern (two games
+// can have the same small pattern with different pictures: a 5×5 of Club Nintendo Picross and one of Sanrio)
 const colourPics = new Map<string, HTMLCanvasElement>();
-export function addPictures(m: Map<string, { w: number; h: number; rgba: Uint8Array }>) {
-  for (const [k, p] of m) {
+export function addPictures(packId: string, m: Map<string, { w: number; h: number; rgba: Uint8Array }>) {
+  for (const [pat, p] of m) {
+    const k = packId + '|' + pat;
     if (colourPics.has(k)) continue;
     const c = document.createElement('canvas');
     c.width = p.w; c.height = p.h;
@@ -17,7 +19,9 @@ export function addPictures(m: Map<string, { w: number; h: number; rgba: Uint8Ar
     colourPics.set(k, c);
   }
 }
-const pictureOf = (p: PackPuzzle) => colourPics.get(p.rows.join('/')) ?? null;
+/** the game a puzzle's picture comes from (a daily puzzle: its own game) */
+const picPack = (p: PackPuzzle, packId: string) => (p.origin ? p.origin.slice(0, p.origin.lastIndexOf('/')) : packId).replace(/@mega$/, '');
+const pictureOf = (p: PackPuzzle, packId: string) => colourPics.get(picPack(p, packId) + '|' + p.rows.join('/')) ?? null;
 
 export class PictureAnimator {
   private frames: Frame[] = [];
@@ -27,7 +31,10 @@ export class PictureAnimator {
   private acc = 0;
   private still: HTMLCanvasElement | null = null;
 
-  constructor(private puzzle: PackPuzzle & { anim?: DsAnimRef }, pck: PckGetter | null) {
+  /** the part of the frames that is drawn on (small pictures sit in a corner of a bigger frame) */
+  private box: { x: number; y: number; w: number; h: number } | null = null;
+
+  constructor(private puzzle: PackPuzzle & { anim?: DsAnimRef }, pck: PckGetter | null, private packId = '') {
     const a = this.puzzle.anim;
     if (a && pck) {
       const pal = pck(a.palette), tiles = pck(a.tiles);
@@ -35,6 +42,7 @@ export class PictureAnimator {
         const p = bgr555(pal);
         for (const s of a.script) { this.frames.push(renderCell(s.cells, tiles, p)); this.durations.push(Math.max(1, s.frames)); }
         this.loopTo = a.loopTo;
+        this.box = usedBox(this.frames);
       }
     }
   }
@@ -53,30 +61,43 @@ export class PictureAnimator {
   }
 
   lastFrame(): Frame | null { return this.frames.length ? this.frames[this.frames.length - 1] : null; }
+  get usedBox() { return this.box; }
 
   draw(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
     ctx.imageSmoothingEnabled = false;
     if (this.frames.length) {
       const f = this.frames[this.idx];
-      drawFrame(ctx, f, x, y, size);
+      drawFrame(ctx, f, x, y, size, this.box);
       return;
     }
-    if (!this.still) this.still = pictureOf(this.puzzle) ?? staticPicture(this.puzzle);
+    if (!this.still) this.still = pictureOf(this.puzzle, this.packId) ?? staticPicture(this.puzzle);
     const s = Math.min(size / this.still.width, size / this.still.height);
     ctx.imageSmoothingEnabled = this.still.width > 64; // large illustrations smooth, pixel pictures sharp
     ctx.drawImage(this.still, x + (size - this.still.width * s) / 2, y + (size - this.still.height * s) / 2, this.still.width * s, this.still.height * s);
   }
 }
 
-export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, x: number, y: number, size: number) {
+/** the smallest box holding every drawn (not transparent) pixel of all frames */
+function usedBox(frames: Frame[]): { x: number; y: number; w: number; h: number } | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+  for (const f of frames) for (let y = 0; y < f.height; y++) for (let x = 0; x < f.width; x++) {
+    if (!(f.pixels[y * f.width + x] >>> 24)) continue; // RGBA in one 32-bit word (little-endian: alpha on top)
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/** a frame, scaled to fit and centred; `box`: only this part of it (the part the animation uses) */
+export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, x: number, y: number, size: number, box: { x: number; y: number; w: number; h: number } | null = null) {
   if (!f.width) return;
   const c = document.createElement('canvas');
   c.width = f.width; c.height = f.height;
   const id = new ImageData(new Uint8ClampedArray(f.pixels.buffer.slice(0) as ArrayBuffer), f.width, f.height);
   c.getContext('2d')!.putImageData(id, 0, 0);
-  const s = Math.floor(Math.min(size / f.width, size / f.height)) || Math.min(size / f.width, size / f.height);
+  const b = box ?? { x: 0, y: 0, w: f.width, h: f.height };
+  const s = Math.floor(Math.min(size / b.w, size / b.h)) || Math.min(size / b.w, size / b.h);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(c, x + (size - f.width * s) / 2, y + (size - f.height * s) / 2, f.width * s, f.height * s);
+  ctx.drawImage(c, b.x, b.y, b.w, b.h, x + (size - b.w * s) / 2, y + (size - b.h * s) / 2, b.w * s, b.h * s);
 }
 
 /** Picture from pack colour data or from the solution. */
@@ -96,13 +117,13 @@ export function staticPicture(p: PackPuzzle): HTMLCanvasElement {
 }
 
 /** Small thumbnail for puzzle lists (cleared puzzles). */
-export function thumbnail(p: PackPuzzle & { anim?: DsAnimRef }, pck: PckGetter | null, size: number): HTMLCanvasElement {
+export function thumbnail(p: PackPuzzle & { anim?: DsAnimRef }, pck: PckGetter | null, size: number, packId = ''): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = size; c.height = size;
   const ctx = c.getContext('2d')!;
-  const a = new PictureAnimator(p, pck);
+  const a = new PictureAnimator(p, pck, packId);
   const lf = a.lastFrame();
-  if (lf) drawFrame(ctx, lf, 0, 0, size);
+  if (lf) drawFrame(ctx, lf, 0, 0, size, a.usedBox);
   else a.draw(ctx, 0, 0, size);
   return c;
 }

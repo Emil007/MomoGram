@@ -6,6 +6,7 @@ import { importFileSet } from '../packs/importers/index';
 import { storage } from '../store';
 import { t, lang } from '../i18n';
 import { h, pickFiles, serverError } from '../app';
+import { confirmBox, message } from './dialog';
 import * as Sync from '../sync';
 import { download, makeZip, unzipAll } from '../util/files';
 import { extractAll, isArchive } from '../util/archive';
@@ -41,7 +42,7 @@ export function openPackManager(pm: PM) {
           h('small', {}, `${p.source.platform}${p.source.region ? ' · ' + p.source.region : ''} · ${count(p)} ${t('puzzles')}` + (p.theme?.music ? ' · ♪' : ''))),
         h('button', { class: 'btn ghost', title: t('download'), onClick: async () => download(momopackName(p), await momopackOf(p)) }, '⤓'),
         h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
-          if (!confirm(t('delete') + ': ' + pickAny(p.title, lang()) + '?')) return;
+          if (!(await confirmBox(t('delete') + ': ' + pickAny(p.title, lang()) + '?', t('delete'), true))) return;
           await storage.deletePack(p.id);
           await storage.deleteAssets(p.id).catch(() => {});
           pm.setPacks(pm.packs().filter(x => x.id !== p.id));
@@ -190,8 +191,8 @@ export function openPackManager(pm: PM) {
           h('small', {}, [sp.meta?.platform, sp.meta?.puzzles !== undefined ? `${sp.meta.puzzles} ${t('puzzles')}` : '', sp.size < 1048576 ? `${Math.max(1, Math.round(sp.size / 1024))} KB` : `${(sp.size / 1048576).toFixed(1)} MB`, sp.by ? t('uploadedBy', { name: sp.by }) : '', note].filter(Boolean).join(' · '))),
         st === 'same' || st === 'newer-here' ? null : dl,
         mine ? h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
-          if (!confirm(t('delete') + ' (' + t('onServer') + '): ' + title + '?')) return;
-          try { await Sync.deleteServerPack(sp.id); } catch (e) { alert(serverError(e)); }
+          if (!(await confirmBox(t('delete') + ' (' + t('onServer') + '): ' + title + '?', t('delete'), true))) return;
+          try { await Sync.deleteServerPack(sp.id); } catch (e) { await message(serverError(e)); }
           renderOnline();
         } }, '🗑') : null));
     }
