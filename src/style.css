@@ -524,3 +524,29 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .zoom-stage { flex: 1; width: 100%; overflow: hidden; display: grid; place-items: center; touch-action: none; }
 .zoom-img { image-rendering: pixelated; transform-origin: center; user-select: none; -webkit-user-drag: none; max-width: none; }
 .zoom-bar { display: flex; gap: .5rem; padding: .7rem; justify-content: center; }
+
+/* library views (chosen while arranging) */
+.library.v-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.library.v-tiles .game { min-height: 4.8rem; padding: .5em .55em .45em; gap: .2rem; }
+.library.v-tiles .game::before { width: 4px; }
+.library.v-tiles .game b { font-size: .82rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.library.v-tiles .game-meta small, .library.v-tiles .folder > small:not(.count) { display: none; }
+.library.v-tiles .game .count { font-size: .68rem; }
+.library.v-tiles .game .game-icon { width: 20px; height: 20px; }
+.library.v-tiles .folder-tabs .game-icon { width: 16px; height: 16px; }
+.library.v-list { grid-template-columns: 1fr; gap: .4rem; }
+.library.v-list .game { min-height: 0; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: .6rem; row-gap: .15rem; padding: .45em .8em .45em 1em; }
+.library.v-list .game > b { grid-column: 1; }
+.library.v-list .game > .count { grid-column: 2; grid-row: 1; text-align: right; }
+.library.v-list .game > .game-meta, .library.v-list .game > .folder-tabs, .library.v-list .game > small:not(.count) { grid-column: 1; }
+.library.v-list .game > .bar-outer { grid-column: 1 / -1; margin-left: 0; }
+.library.v-list .lib-entry { flex-direction: row; align-items: center; }
+.library.v-list .lib-entry > .btn { min-width: 0; }
+.library.v-list .lib-tools { gap: .3rem; }
+.opt-packs { display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin-bottom: .2rem; }
+.opt-packs small { font-weight: 700; opacity: .75; }
+.update-banner { width: 100%; display: flex; flex-direction: column; align-items: flex-start; margin-bottom: .8rem; background: linear-gradient(#5fd18a, #2fae5a); color: #fff; border-color: var(--line); }
+.update-banner b, .update-banner small { color: #fff; }
+.update-banner small { font-weight: 700; opacity: .92; }
+.update-slot:empty { display: none; }
+.home .menu.small .btn { font-size: .88rem; padding-left: .3em; padding-right: .3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -60,11 +60,13 @@ Nonograms do that too.
 - **The games' own music:** every song of each game, a sound test to retag or switch songs off, a music bar at the bottom of the home screen shows what plays and skips to the next song; the same song from several games counts once.
 - **An editor** for your own puzzles and packs.
 - **Your own server (optional):** sync progress, settings and paused puzzles between your devices, share packs within your family or friends, and see each other's high scores (points, PixElo, puzzles solved, medals, fastest times).
+- **Updates itself:** the home screen tells you when a new version is out; the web version (also installed on the home screen) switches to it with one tap, the apps link to the download. The back button (Android, browser) goes back inside MomoGram.
+- **Your library, your way:** cards, three tiles in a row, or a slim list (Arrange → View).
 - Offline after the first start; English and German, with the games' puzzle names in every language they have.
 
 ## Supported games
 
-**Puzzle packs → Add games or packs**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
+**Options → Puzzle packs → Add games or packs**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
 MomoGram finds the puzzles and makes one pack per game, with the original level structure and the puzzle
 names where the game has them. Regional versions of the same game become **one** pack with every
 language's names. **Add a folder (everything in it)** takes a whole folder with its subfolders: every ROM,

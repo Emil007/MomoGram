@@ -125,7 +125,7 @@ jobs:
           mkdir -p out android-app
           cd android-app
           npm init -y > /dev/null
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app
           cp -r ../dist/web www && find www -name '*.map' -delete
           npx cap init MomoGram io.github.emil007.momogram --web-dir www
           npx cap add android

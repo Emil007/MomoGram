@@ -23,6 +23,8 @@ else await esbuild.build(opts);
 // service worker (offline play / installable web app). The cache name carries a hash of the build, so every
 // deploy replaces the old cache; pages and app files are fetched network-first, so updates show up on the next
 // start and the cache is only the offline fallback.
+// what the running app compares itself with to offer an update (home screen)
+writeFileSync(`${out}/version.json`, JSON.stringify({ version: pkg.version }));
 const files = ['./', 'index.html', 'app.js', 'app.css', 'worklet.js', 'icon.svg', 'manifest.webmanifest'];
 const hash = createHash('sha1');
 for (const f of ['app.js', 'app.css', 'worklet.js', 'index.html']) { try { hash.update(readFileSync(`${out}/${f}`)); } catch { /* not built */ } }

@@ -189,6 +189,44 @@ function logo(): HTMLElement {
 }
 
 /** points for puzzles solved before points existed (from their medal and times); a little at a time */
+// ---------------------------------------------------------------- updates
+// The home screen looks for a newer MomoGram (at most every ten minutes, and when the app comes back to the
+// front). The web version (also installed on the home screen) reloads into it with one tap; the Android and
+// desktop apps carry their files inside, so they link to the download.
+let newVersion: string | null = null, lastCheck = 0;
+const RELEASES = 'https://github.com/Emil007/MomoGram/releases/latest';
+const isWeb = () => /^https?:$/.test(location.protocol) && !(window as any).Capacitor?.isNativePlatform?.();
+const newer = (a: string, b: string) => { const x = a.split(/[.-]/).map(Number), y = b.split(/[.-]/).map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+async function checkUpdate(force = false): Promise<void> {
+  const mine = (window as any).MOMOGRAM_VERSION as string;
+  if (mine === 'dev' || (!force && Date.now() - lastCheck < 600000)) return;
+  lastCheck = Date.now();
+  try {
+    const url = isWeb() ? 'version.json' : 'https://emil007.github.io/MomoGram/version.json';
+    const r = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
+    const v = (await r.json())?.version;
+    if (typeof v === 'string' && newer(v, mine)) newVersion = v;
+  } catch { /* offline */ }
+}
+function showUpdate(slot: HTMLElement) {
+  const draw = () => {
+    slot.replaceChildren();
+    if (!newVersion) return;
+    slot.append(h('button', { class: 'btn update-banner', onClick: async () => {
+      if (!isWeb()) { window.open(RELEASES, '_blank'); return; }
+      try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* reload anyway */ }
+      location.reload();
+    } }, h('b', {}, '⬆ ' + t('updateReady', { v: newVersion })), h('small', {}, isWeb() ? t('updateTap') : t('updateDownload'))));
+  };
+  draw();
+  checkUpdate().then(() => { if (slot.isConnected) draw(); });
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const slot = document.querySelector<HTMLElement>('.update-slot');
+  if (slot) { lastCheck = 0; showUpdate(slot); }
+});
+
 /** the profile button: the name, and below it the PixElo of the mode being played (provisional: fewer than 15 rated solves) */
 function profileChip(): HTMLElement {
   const st = localStats(curMode());
@@ -270,20 +308,20 @@ export function home() {
   renderLibrary(lib, null);
   const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { libEdit = !libEdit; renderLibrary(lib, null); arrange.classList.toggle('on', libEdit); } }, t('arrange'));
 
-  screen(h('div', { class: 'home' }, top, quick,
+  const upd = h('div', { class: 'update-slot' });
+  showUpdate(upd);
+  screen(h('div', { class: 'home' }, upd, top, quick,
     h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, t('library')), arrange), lib,
     h('div', { class: 'menu small' },
       Sync.account() ? h('button', { class: 'btn', onClick: () => scoresScreen() }, '🏆 ' + t('scores')) : null,
-      h('button', { class: 'btn', onClick: () => packsScreen() }, '📦 ' + t('packs')),
       h('button', { class: 'btn', onClick: () => editorScreen() }, '✎ ' + t('editor')),
       h('button', { class: 'btn', onClick: () => optionsScreen() }, '⚙ ' + t('options'))),
-    nowPlaying(),
-    h('footer', { class: 'fine' }, t('noGameData'))));
+    nowPlaying()));
 }
 
 // ---------------------------------------------------------------- library: folders, order, hidden games
 
-interface LibPrefs { order: string[]; hidden: string[]; group: 'series' | 'system' | 'none' }
+interface LibPrefs { order: string[]; hidden: string[]; group: 'series' | 'system' | 'none'; view?: 'cards' | 'tiles' | 'list' }
 function libPrefs(): LibPrefs {
   try { return { order: [], hidden: [], group: 'series', ...JSON.parse(localStorage.getItem('momogram.library') || '{}') }; } catch { return { order: [], hidden: [], group: 'series' }; }
 }
@@ -342,6 +380,8 @@ function renderLibrary(el: HTMLElement, folder: string | null) {
     if (e) e.packs.push(p); else entries.push({ key: k, packs: [p] });
   }
   el.replaceChildren();
+  el.classList.remove('v-cards', 'v-tiles', 'v-list');
+  el.classList.add('v-' + (pr.view ?? 'cards'));
   const move = (e: { packs: Pack[] }, d: number) => {
     // order is kept per game; moving an entry moves all games in it past the neighbour entry
     const flat = entries.flatMap(x => x.packs.map(p => p.id));
@@ -373,7 +413,9 @@ function renderLibrary(el: HTMLElement, folder: string | null) {
     el.append(wrap);
   }
   if (libEdit && folder === null) el.append(h('div', { class: 'lib-group' }, h('span', {}, t('groupBy')),
-    ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))));
+    ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))),
+    h('div', { class: 'lib-group' }, h('span', {}, t('viewAs')),
+      ...(['cards', 'tiles', 'list'] as const).map(m => h('button', { class: 'tab' + ((pr.view ?? 'cards') === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, view: m }); renderLibrary(el, folder); } }, t('view_' + m)))));
 }
 
 /** an icon with a picture on it (some files have a blank one: all white, or all one colour) */
@@ -1312,6 +1354,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
         }, 'btn ghost'));
       };
       draw();
+      return end; // back: continue playing
     }));
     last = performance.now();
     running = true;
@@ -1422,15 +1465,15 @@ function editorScreen() {
   });
 }
 
-function packsScreen() {
+function packsScreen(back: () => void = home) {
   applyThemeCss(root(), null);
   openPackManager({
     root: root(),
     packs: () => ctx.packs,
     setPacks: p => { ctx.packs = p; for (const id of [...ctx.pcks.keys()]) if (!p.some(x => x.id === id)) ctx.pcks.delete(id); },
-    header: (title: string) => header(title, home),
+    header: (title: string) => header(title, back),
     screen,
-    openPack: (p: Pack) => openPack(p, () => packsScreen()),
+    openPack: (p: Pack) => openPack(p, () => packsScreen(back)),
   });
 }
 
@@ -1705,6 +1748,7 @@ function optionsScreen() {
   const row = (label: string, ctl: Node, note?: string) => h('div', { class: 'opt' }, h('div', { class: 'opt-label' }, h('span', {}, label), note ? h('small', {}, note) : null), ctl);
   const card = (title: string, ...rows: Array<Node | null>) => h('section', { class: 'opt-card' }, h('h2', {}, title), ...rows);
   screen(header(t('options'), home), h('div', { class: 'options' },
+    h('button', { class: 'btn big opt-packs', onClick: () => packsScreen(optionsScreen) }, h('b', {}, '📦 ' + t('packs')), h('small', {}, t('packsHelp'))),
     card(t('secSound'),
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,

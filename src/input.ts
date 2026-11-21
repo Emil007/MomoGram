@@ -94,6 +94,19 @@ export const Gamepads = {
   onPlay(h: PlayHandlers): () => void { play = h; return () => { if (play === h) play = null; }; },
   pushModal(el: HTMLElement) { modals.push(el); focusables(el)[0]?.focus(); },
   popModal() { modals.pop(); },
+  /**
+   * "Back" (Android back button, the browser's back, Esc): closes the top window (as its cancel would), opens
+   * the menu while playing, or goes back a screen. False on the home screen: nothing left to go back to.
+   */
+  back(): boolean {
+    const ms = document.querySelectorAll<HTMLElement>('.modal');
+    const top = ms[ms.length - 1];
+    if (top) { const d = (top as any).dismiss; if (typeof d === 'function') d(); else top.remove(); return true; }
+    if (play) { play.start(); return true; }
+    const b = document.querySelector<HTMLElement>('.back');
+    if (b) { b.click(); return true; }
+    return false;
+  },
   focusFirst(scope: HTMLElement) {
     // only grab focus when a gamepad/keyboard user is likely (avoids focus rings for touch users)
     if (document.body.classList.contains('kbd')) focusables(scope)[0]?.focus();
@@ -107,7 +120,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     moveFocus(...m[e.key]);
   }
-  if (!play && e.key === 'Escape') (document.querySelector<HTMLElement>('.dialog button:last-child') ?? document.querySelector<HTMLElement>('.back'))?.click();
+  if (e.key === 'Escape' && (!play || document.querySelector('.modal'))) Gamepads.back();
 });
 window.addEventListener('pointerdown', () => document.body.classList.remove('kbd'));
 window.addEventListener('gamepadconnected', () => document.body.classList.add('kbd'));

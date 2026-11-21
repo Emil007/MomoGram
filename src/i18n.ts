@@ -12,7 +12,7 @@ const en: Dict = {
   daily: 'Daily nonogram', dailyHelp: '15 fresh puzzles every day, 5 per difficulty',
   random: 'Random', randomHelp: 'A random puzzle from your library', randomFrom: 'Pick a difficulty',
   skipTrack: 'Play another track', arrange: 'Arrange', show: 'Show', hide: 'Hide', moveLeft: 'Move left', moveRight: 'Move right', groupBy: 'Folders by',
-  group_series: 'Series', group_system: 'System', group_none: 'No folders', gamesCount: '{n} games',
+  updateReady: 'MomoGram {v} is ready', updateTap: 'Tap to update now (your progress stays)', updateDownload: 'Tap to download it', packsHelp: 'Add games, update them, the server', viewAs: 'View', view_cards: 'Cards', view_tiles: 'Tiles', view_list: 'List', group_series: 'Series', group_system: 'System', group_none: 'No folders', gamesCount: '{n} games',
   continue: 'Continue', packs: 'Puzzle packs', options: 'Options', back: 'Back', play: 'Play',
   solvedCount: '{a} / {b} solved',
   // levels & puzzles
@@ -95,7 +95,7 @@ const de: Dict = {
   daily: 'Nonogramm des Tages', dailyHelp: 'Jeden Tag 15 neue Rätsel, 5 pro Schwierigkeit',
   random: 'Zufall', randomHelp: 'Ein zufälliges Rätsel aus deiner Sammlung', randomFrom: 'Wähle eine Schwierigkeit',
   skipTrack: 'Anderes Stück spielen', arrange: 'Anordnen', show: 'Zeigen', hide: 'Ausblenden', moveLeft: 'Nach links', moveRight: 'Nach rechts', groupBy: 'Ordner nach',
-  group_series: 'Serie', group_system: 'System', group_none: 'Keine Ordner', gamesCount: '{n} Spiele',
+  updateReady: 'MomoGram {v} ist da', updateTap: 'Tippen, um jetzt zu aktualisieren (dein Fortschritt bleibt)', updateDownload: 'Tippen zum Herunterladen', packsHelp: 'Spiele hinzufügen, aktualisieren, Server', viewAs: 'Ansicht', view_cards: 'Karten', view_tiles: 'Kacheln', view_list: 'Liste', group_series: 'Serie', group_system: 'System', group_none: 'Keine Ordner', gamesCount: '{n} Spiele',
   continue: 'Weiterspielen', packs: 'Rätselpakete', options: 'Optionen', back: 'Zurück', play: 'Spielen',
   solvedCount: '{a} / {b} gelöst',
   puzzleNo: 'Rätsel', puzzles: 'Rätsel', level: 'Schwierigkeit', extra: 'Extra', locked: 'Gesperrt',

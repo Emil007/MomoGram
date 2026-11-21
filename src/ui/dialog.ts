@@ -11,13 +11,14 @@ const el = (tag: string, attrs: Record<string, string> = {}, ...kids: Array<Node
 };
 
 /** a window with any content; `close` removes it */
-export function panel(build: (box: HTMLElement, close: () => void) => void): void { open(build); }
+export function panel(build: (box: HTMLElement, close: () => void) => void | (() => void)): void { open(build); }
 
-function open(build: (box: HTMLElement, close: () => void) => void): void {
+/** `build` may return what "back" (Esc, Android back) does; otherwise it just closes */
+function open(build: (box: HTMLElement, close: () => void) => void | (() => void)): void {
   const m = el('div', { class: 'modal' });
   const box = el('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true' });
   const close = () => { m.remove(); Gamepads.popModal(); };
-  build(box, close);
+  (m as any).dismiss = build(box, close) || close;
   m.append(box);
   document.body.append(m);
   Gamepads.pushModal(box);
@@ -32,6 +33,7 @@ export function choose(title: string, options: Array<[string, () => void | Promi
     if (text) box.append(el('p', { class: 'dialog-text' }, text));
     // a choice that opens another window (a name to type, …) is waited for
     for (const [label, fn] of options) box.append(button(label, 'btn', async () => { close(); try { await fn(); } finally { res(); } }));
+    return () => { close(); res(); };
   }));
 }
 
@@ -41,6 +43,7 @@ export function message(text: string, title = ''): Promise<void> {
     if (title) box.append(el('h3', {}, title));
     box.append(el('p', { class: 'dialog-text' }, text));
     box.append(button(t('ok'), 'btn primary', () => { close(); res(); }));
+    return () => { close(); res(); };
   }));
 }
 
@@ -50,6 +53,7 @@ export function confirmBox(question: string, yes = t('confirmYes'), danger = fal
     box.append(el('h3', {}, question));
     box.append(button(yes, danger ? 'btn danger' : 'btn primary', () => { close(); res(true); }));
     box.append(button(t('back'), 'btn ghost', () => { close(); res(false); }));
+    return () => { close(); res(false); };
   }));
 }
 
@@ -59,10 +63,11 @@ export function askText(title: string, value = ''): Promise<string | null> {
     const input = el('input', { type: 'text', class: 'dialog-input', maxlength: '60' }) as HTMLInputElement;
     input.value = value;
     const ok = () => { const v = input.value.trim(); close(); res(v || null); };
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') { close(); res(null); } });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
     box.append(el('h3', {}, title), input,
       button(t('ok'), 'btn primary', ok),
       button(t('back'), 'btn ghost', () => { close(); res(null); }));
     setTimeout(() => { input.focus(); input.select(); }, 30);
+    return () => { close(); res(null); };
   }));
 }
