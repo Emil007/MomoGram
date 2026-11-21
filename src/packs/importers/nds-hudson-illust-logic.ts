@@ -112,7 +112,8 @@ registerImporter({
       format: 'momogram-pack', version: 1, id: g.id, title: g.title,
       source: { game: g.title.en!, platform: g.platform, region: 'JPN', developer: 'Hudson Soft', year: g.year },
       levels, icon: px ? makeIcon(32, 32, px) : undefined,
-      theme: { ...music.theme }, assets: music.assets,
+      // the board (from screenshots): white cells, black filled cells, the cursor's lines as yellow beams
+      theme: { ...music.theme, palette: { style: 'logic', accent: '#c89010', cursor: '#f0d020', fill: '#1c1c1c', cross: '#806040', grid: '#b8b0a0', grid5: '#706050' } }, assets: music.assets,
     }];
   },
 });

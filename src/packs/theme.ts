@@ -48,24 +48,114 @@ export interface ThemeColors {
 
 /** the shape settings of a skin (see Theme in game/view.ts) */
 export interface BoardShape {
-  clueBands: 'fade' | 'flat'; clueArea: string; clueFocusBg: string; crossWidth: number; crossCap: CanvasLineCap;
-  grid5Width: number; cursorBox: string; clueFont: string; mark: string; mistake: string; trialFill: string;
+  clueBands: 'fade' | 'stripes' | 'flat'; clueArea: string; clueAreaAlt: string; clueFocusBg: string; crossWidth: number; crossCap: CanvasLineCap;
+  crossMargin: number; grid5Width: number; cursorBox: string; clueFont: string; mark: string; mistake: string; trialFill: string;
+  cellStyle: 'dither' | 'solid' | 'bevel'; fillStyle: 'dither' | 'solid' | 'inset' | 'bevel' | 'gloss'; cellBevel: [string, string]; fillBevel: [string, string];
+}
+
+/** a skin, then the game's exact values over it */
+function finish(c: ThemeColors, p: NonNullable<PackTheme['palette']>): ThemeColors {
+  if (p.board) Object.assign(c.board, p.board);
+  if (p.screen) { if (p.screen.bg) c.bg = p.screen.bg; if (p.screen.panel) c.panel = p.screen.panel; if (p.screen.top) c.top = p.screen.top; }
+  return c;
 }
 
 /** full set of colours for the screens and the board, from a pack palette */
 export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
+  return finish(skinColors(p), p);
+}
+
+/** the Game Boy games' board: full stripes behind the clues, filled cells as inset squares, small crosses */
+const GB = { clueBands: 'stripes' as const, cellStyle: 'solid' as const, fillStyle: 'inset' as const, crossWidth: 0.09, crossCap: 'butt' as const, crossMargin: 0.3, grid5Width: 0.09, clueFont: '800', hl: 'rgba(0, 0, 0, 0.12)' };
+
+function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
+  const plain = { cellStyle: 'solid' as const, fillStyle: 'solid' as const };
   if (p.style === 'switch') {
     // Jupiter's Switch games: white board, flat clue areas, solid dark cells, orange crosses, green guide lines
     // every 5 cells; the colours come from the game's own colour table (IdxRes_PuzzleColorDef)
-    const cell = p.cell ?? '#ffffff', fill = p.fill ?? '#333333', grid5 = p.grid5 ?? '#00e626';
+    // (colours checked against screenshots: light grey cells and clue lines in two shades, a blue bar for the
+    // cursor's line in the clues, a cyan cursor box; filled cells dark, or blue in PICROSS S and S2)
+    const fill = p.fill ?? '#333333', grid5 = p.grid5 ?? '#00e626';
     return {
-      accent: p.accent, accentDark: shade(p.accent, -0.12), bg: '#eef1f2', panel: '#fafbfb', top: '#ffffff', topLine: fill,
+      accent: p.accent, accentDark: shade(p.accent, -0.12), bg: '#eef1f2', panel: '#fafbfb', top: '#ffffff', topLine: '#333333',
       board: {
-        bg: '#ffffff', grid: p.grid ?? '#666666', grid5, cell, cellDither: cell, fill, fillDither: fill, cross: p.cross ?? '#ff7f00',
-        clueBg: cell, clueBgAlt: cell, clue: p.clue ?? fill, clueDone: p.done ?? 'rgba(51, 51, 51, 0.4)', outline: fill,
-        cursor: p.hint ?? '#ff092d', hint: '#0085eb', hl: p.hl ?? 'rgba(128, 230, 255, 0.35)',
-        clueBands: 'flat', clueArea: cell, clueFocusBg: p.clueFocus ?? '#cfffd1', crossWidth: 0.11, crossCap: 'butt',
-        grid5Width: 0.1, cursorBox: p.cursorBox ?? '#ff0000', clueFont: '700', mark: p.mark ?? '#808080', mistake: p.mistake ?? '#ff0000', trialFill: '#0085eb',
+        ...plain, bg: '#ffffff', grid: p.grid ?? '#606060', grid5, cell: '#ececec', cellDither: '#ececec', fill, fillDither: fill, cross: p.cross ?? '#ff7f00',
+        clueBg: '#f8f8f8', clueBgAlt: '#efefef', clue: '#303030', clueDone: '#a0a0a0', outline: '#606060',
+        cursor: '#303030', hint: '#0085eb', hl: 'rgba(0, 0, 0, 0)',
+        clueBands: 'flat', clueArea: '#f8f8f8', clueAreaAlt: '#efefef', clueFocusBg: '#2fb6ef', crossWidth: 0.13, crossCap: 'butt', crossMargin: 0.27,
+        grid5Width: 0.07, cursorBox: '#2fc4f4', clueFont: '800', mark: p.mark ?? '#808080', mistake: p.mistake ?? '#ff0000', trialFill: '#0085eb',
+      },
+    };
+  }
+  if (p.style === '3ds') {
+    // Jupiter's 3DS games: light grey cells, solid filled cells in the game's colour, small dark crosses, flat
+    // clue lines in two shades, the cursor's line in the game's colour, thin orange guide lines every 5
+    const fill = p.fill ?? hsl(hexToHsl(p.accent)[0], 0.85, 0.6), cur = p.cursor ?? fill;
+    return {
+      accent: p.accent, accentDark: shade(p.accent, -0.12), bg: shade(fill, 0.34), panel: '#fbfbfb', top: '#ffffff', topLine: shade(fill, -0.2),
+      board: {
+        ...plain, bg: '#ffffff', grid: '#b8b8b8', grid5: p.grid5 ?? '#f0a020', cell: p.cell ?? '#e8e8e8', cellDither: p.cell ?? '#e8e8e8', fill, fillDither: fill,
+        cross: p.cross ?? '#505050', clueBg: '#f8f8f8', clueBgAlt: '#ececec', clue: p.clue ?? '#202020', clueDone: '#b0b0b0', outline: '#606060',
+        cursor: '#202020', hint: p.hint ?? '#0085ea', hl: 'rgba(0, 0, 0, 0)',
+        clueBands: 'flat', clueArea: '#f8f8f8', clueAreaAlt: '#ececec', clueFocusBg: cur + '99', crossWidth: 0.1, crossCap: 'butt', crossMargin: 0.26,
+        grid5Width: 0.07, cursorBox: cur, clueFont: '800', mistake: '#e03030', trialFill: '#f0a040',
+      },
+    };
+  }
+  if (p.style === 'stone') {
+    // Mario no Super Picross, Tamori no Picross: a carved stone tablet; sandstone cells with an edge, dark stones,
+    // dark stone stripes behind the clues, thin green guide lines, the cursor's line green, a red cursor box
+    return {
+      accent: '#6a5a30', accentDark: '#4a3e20', bg: '#cfc195', panel: '#efe7c6', top: '#c0b078', topLine: '#504830',
+      board: {
+        bg: '#c0b078', grid: '#a09058', grid5: '#30c050', cell: '#c8b880', cellDither: '#c8b880', fill: '#686040', fillDither: '#686040',
+        cross: '#605030', clueBg: '#807858', clueBgAlt: '#c0b078', clue: '#201808', clueDone: '#8a7c58', outline: '#504830',
+        cursor: '#201808', hint: '#1e50c0', hl: 'rgba(0, 0, 0, 0)',
+        clueBands: 'stripes', clueArea: '#c0b078', clueFocusBg: '#80c080', cellStyle: 'bevel', fillStyle: 'bevel',
+        cellBevel: ['#e8e0a8', '#a09058'], fillBevel: ['#807858', '#403820'],
+        crossWidth: 0.1, crossCap: 'butt', crossMargin: 0.22, grid5Width: 0.06, cursorBox: '#e02020', clueFont: '800', mistake: '#e02020', trialFill: '#4060c0',
+      },
+    };
+  }
+  if (p.style === 'notebook') {
+    // Picross NP: a notebook page; white cells, light blue grid, blue guide lines, maroon filled cells, clue
+    // stripes in the volume's colour (accent) and white
+    const stripe = p.accent;
+    return {
+      accent: shade(stripe, -0.25), accentDark: shade(stripe, -0.38), bg: '#efe8d4', panel: '#fbf8ee', top: shade(stripe, 0.12), topLine: '#7a5a3a',
+      board: {
+        ...plain, bg: '#f8f8f8', grid: '#a8d0e0', grid5: p.grid5 ?? '#3070d0', cell: '#f8f8f8', cellDither: '#f8f8f8', fill: p.fill ?? '#985858', fillDither: '#985858',
+        cross: '#606878', clueBg: stripe, clueBgAlt: '#f2f6ee', clue: '#202020', clueDone: '#a8a8a0', outline: '#506070',
+        cursor: '#c02020', hint: '#1e50c0', hl: 'rgba(240, 220, 60, 0.35)',
+        clueBands: 'stripes', clueArea: '#f2f6ee', crossWidth: 0.09, crossCap: 'butt', crossMargin: 0.24, grid5Width: 0.07, clueFont: '700', trialFill: '#e09030',
+      },
+    };
+  }
+  if (p.style === 'ds') {
+    // Picross DS: MomoGram's own look is modelled on it; the game's filled cells are glossy blocks
+    const fill = p.fill ?? '#1f6fd0';
+    return {
+      accent: p.accent, accentDark: shade(p.accent, -0.12), bg: shade(fill, 0.42), panel: '#fafcff', top: shade(fill, 0.3), topLine: shade(fill, -0.15),
+      board: {
+        bg: '#ffffff', grid: shade(fill, 0.3), grid5: p.grid5 ?? '#f39a2c', cell: p.cell ?? shade(fill, 0.47), cellDither: shade(p.cell ?? shade(fill, 0.47), -0.03),
+        fill, fillDither: shade(fill, -0.1), cross: p.cross ?? shade(fill, 0.1), clueBg: shade(fill, 0.35), clueBgAlt: shade(fill, 0.35),
+        clue: '#1d2a36', clueDone: '#a9b7c2', outline: '#1a1a1a', cursor: p.cursor ?? '#f08a10', hint: '#1565e0',
+        fillStyle: 'gloss', fillBevel: [shade(fill, 0.22), shade(fill, -0.18)],
+      },
+    };
+  }
+  if (p.style === 'logic') {
+    // the DS logic games of Hudson and Success: white cells, black filled cells, a light grid, the cursor's lines
+    // as coloured beams
+    const cur = p.cursor ?? '#f0b020';
+    return {
+      accent: p.accent, accentDark: shade(p.accent, -0.12), bg: shade(p.accent, 0.45), panel: '#ffffff', top: shade(p.accent, 0.32), topLine: shade(p.accent, -0.2),
+      board: {
+        ...plain, bg: '#ffffff', grid: p.grid ?? '#b0b0b0', grid5: p.grid5 ?? '#606060', cell: p.cell ?? '#ffffff', cellDither: p.cell ?? '#ffffff',
+        fill: p.fill ?? '#202020', fillDither: p.fill ?? '#202020', cross: p.cross ?? '#707070', clueBg: '#ffffff', clueBgAlt: '#f0f0f0',
+        clue: '#202020', clueDone: '#b0b0b0', outline: '#404040', cursor: '#d02020', hint: '#1e50c0', hl: cur + '55',
+        clueBands: 'flat', clueArea: '#ffffff', clueAreaAlt: '#f2f2f2', clueFocusBg: cur + '88', crossWidth: 0.09, crossCap: 'butt', crossMargin: 0.22,
+        grid5Width: 0.08, cursorBox: '#d02020', clueFont: '700', trialFill: '#e09030',
       },
     };
   }
@@ -74,7 +164,7 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     const c0 = p.cell ?? '#c4cfa1', c1 = '#8b956d', c2 = p.grid ?? '#4d533c', c3 = p.fill ?? '#1f1f1f';
     return {
       accent: '#4d533c', accentDark: '#2c3024', bg: '#d7deb8', panel: '#eef2dc', top: '#b5c08e', topLine: '#4d533c',
-      board: { bg: '#e3e9c8', grid: c1, grid5: c2, cell: c0, cellDither: '#b9c595', fill: c3, fillDither: '#33372a', cross: c2, clueBg: '#b5c08e', clueBgAlt: '#b5c08e', clue: c3, clueDone: c1, outline: c3 },
+      board: { ...GB, bg: c0, grid: c1, grid5: c3, cell: c0, cellDither: c0, fill: c3, fillDither: c3, cross: c2, clueBg: c1, clueBgAlt: c0, clueArea: c0, clue: c3, clueDone: c1, outline: c3, cursorBox: c3 },
     };
   }
   if (p.style === 'gbc' && p.cell && p.fill && p.grid) {
@@ -84,7 +174,7 @@ export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     const c0 = p.cell, c3 = p.fill;
     return {
       accent: shade(p.accent, -0.05), accentDark: shade(p.accent, -0.18), bg: shade(c0, -0.06), panel: shade(c0, 0.03), top: shade(c1, 0.12), topLine: c2,
-      board: { bg: shade(c0, -0.03), grid: c1, grid5: c2, cell: c0, cellDither: shade(c0, -0.06), fill: c3, fillDither: shade(c3, 0.06), cross: c2, clueBg: shade(c1, 0.12), clueBgAlt: shade(c1, 0.12), clue: c3, clueDone: c1, outline: c3 },
+      board: { ...GB, bg: c0, grid: c1, grid5: c3, cell: c0, cellDither: c0, fill: c3, fillDither: c3, cross: c2, clueBg: c1, clueBgAlt: c0, clueArea: c0, clue: c3, clueDone: c1, outline: c3, cursorBox: c3 },
     };
   }
   const [h, s] = hexToHsl(p.accent);

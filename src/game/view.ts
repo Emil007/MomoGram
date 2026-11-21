@@ -12,10 +12,19 @@ export interface Theme {
   bg: string; grid: string; grid5: string; cell: string; cellDither: string; fill: string; fillDither: string; trialFill: string; cross: string; mistake: string; mark?: string;
   clueBg: string; clueBgAlt: string; clue: string; clueOutline: string; clueDone: string; hl: string; cursor: string; hint: string; roulette: string; outline: string;
   // ---- shape of the board (a game's skin); left out: MomoGram's own look
-  /** clue areas: fading stripes on every other line (default), or flat with a line every 5 like the grid */
-  clueBands?: 'fade' | 'flat';
-  /** background of the clue areas when flat */
-  clueArea?: string;
+  /** clue areas: fading stripes on every other line (default), full stripes (clueBg / clueBgAlt), or flat with
+   *  a line every 5 like the grid */
+  clueBands?: 'fade' | 'stripes' | 'flat';
+  /** background of the clue areas when flat (and of every other line, if set) */
+  clueArea?: string; clueAreaAlt?: string;
+  /** empty cells: dithered (default), plain, or bevelled (light top left, dark bottom right) */
+  cellStyle?: 'dither' | 'solid' | 'bevel';
+  /** filled cells: dithered (default), plain, an inset square, bevelled, or a glossy block */
+  fillStyle?: 'dither' | 'solid' | 'inset' | 'bevel' | 'gloss';
+  /** light and dark edge colours for bevelled cells / filled cells */
+  cellBevel?: [string, string]; fillBevel?: [string, string];
+  /** distance of the cross from the cell edge, as a share of the cell */
+  crossMargin?: number;
   /** the cursor line's clue background (flat clue areas) */
   clueFocusBg?: string;
   /** cross lines: width as a share of the cell, and their ends */
@@ -435,13 +444,21 @@ export class BoardView {
     const cueY = this.showCursor || this.spin ? (this.spin ? this.spin.row : this.cursorY) : -1;
 
     // ---- clue areas: flat (with a line every 5, like the grid) or alternating stripes that fade out
-    if (T.clueBands === 'flat') {
+    if (T.clueBands === 'flat' || T.clueBands === 'stripes') {
       ctx.fillStyle = T.clueArea ?? T.bg;
       ctx.fillRect(0, this.clueH, this.clueW, gh); ctx.fillRect(this.clueW, 0, gw, this.clueH);
+      const alt = T.clueBands === 'stripes' ? T.clueBgAlt : T.clueAreaAlt;
+      const first = T.clueBands === 'stripes' ? T.clueBg : null;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.rect(this.clueW, 0, gw, this.clueH); ctx.clip();
+      for (let y = vy0; y < vy1; y++) { const c = y % 2 === 0 ? first : alt; if (c) { ctx.fillStyle = c; ctx.fillRect(0, oy + y * cs, this.clueW, cs); } }
+      for (let x = vx0; x < vx1; x++) { const c = x % 2 === 0 ? first : alt; if (c) { ctx.fillStyle = c; ctx.fillRect(ox + x * cs, 0, cs, this.clueH); } }
+      ctx.restore();
       if (cueY >= 0 && T.clueFocusBg) { ctx.fillStyle = T.clueFocusBg; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
       if (cueX >= 0 && T.clueFocusBg) { ctx.fillStyle = T.clueFocusBg; ctx.fillRect(ox + cueX * cs, 0, cs, this.clueH); }
       ctx.save();
       ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.rect(this.clueW, 0, gw, this.clueH); ctx.clip();
+      if (T.clueBands === 'stripes') ctx.globalAlpha = 0; // stripes: no lines in the clues
       ctx.fillStyle = T.grid;
       for (let y = vy0; y <= vy1; y++) ctx.fillRect(0, Math.round(oy + y * cs) - 0.5, this.clueW, 1);
       for (let x = vx0; x <= vx1; x++) ctx.fillRect(Math.round(ox + x * cs) - 0.5, 0, 1, this.clueH);
@@ -455,7 +472,7 @@ export class BoardView {
     bandH.addColorStop(0, T.clueBg + '00'); bandH.addColorStop(0.45, T.clueBg); bandH.addColorStop(1, T.clueBg);
     const bandV = ctx.createLinearGradient(0, 0, 0, this.clueH);
     bandV.addColorStop(0, T.clueBg + '00'); bandV.addColorStop(0.45, T.clueBg); bandV.addColorStop(1, T.clueBg);
-    if (T.clueBands !== 'flat') {
+    if (!T.clueBands || T.clueBands === 'fade') {
       ctx.save();
       ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW, gh); ctx.clip();
       for (let y = vy0; y < vy1; y++) if (y % 2 === 0) { ctx.fillStyle = bandH; ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
@@ -469,15 +486,40 @@ export class BoardView {
     // ---- cells
     ctx.save();
     ctx.beginPath(); ctx.rect(this.clueW, this.clueH, gw, gh); ctx.clip();
-    ctx.fillStyle = pat(T.cell, T.cellDither);
+    ctx.fillStyle = T.cellStyle && T.cellStyle !== 'dither' ? T.cell : pat(T.cell, T.cellDither);
     ctx.fillRect(ox + vx0 * cs, oy + vy0 * cs, (vx1 - vx0) * cs, (vy1 - vy0) * cs);
-    const fillPat = pat(T.fill, T.fillDither), trialPat = pat(T.trialFill, T.trialFill);
+    const fillPat = !T.fillStyle || T.fillStyle === 'dither' ? pat(T.fill, T.fillDither) : T.fill, trialPat = pat(T.trialFill, T.trialFill);
+    const edge = Math.max(1, cs / 9);
+    /** light top and left edge, dark bottom and right edge */
+    const bevel = (px: number, py: number, [lt, dk]: [string, string], inset = 0) => {
+      const a = px + inset, b2 = py + inset, w = cs - inset * 2;
+      ctx.fillStyle = lt; ctx.fillRect(a, b2, w, edge); ctx.fillRect(a, b2, edge, w);
+      ctx.fillStyle = dk; ctx.fillRect(a, b2 + w - edge, w, edge); ctx.fillRect(a + w - edge, b2, edge, w);
+    };
     for (let y = vy0; y < vy1; y++) for (let x = vx0; x < vx1; x++) {
       const v = b.at(x, y), px = ox + x * cs, py = oy + y * cs, i = y * b.w + x;
       const trial = b.isTrialCell(x, y);
+      if (v !== FILL && T.cellStyle === 'bevel' && T.cellBevel) bevel(px, py, T.cellBevel);
       if (v === FILL) {
-        ctx.fillStyle = trial ? trialPat : fillPat;
-        ctx.fillRect(px, py, cs, cs);
+        const col = trial ? T.trialFill : T.fill;
+        if (T.fillStyle === 'inset') {
+          // a square inside the cell, like the Game Boy games
+          const m = Math.max(1, Math.round(cs * 0.12));
+          ctx.fillStyle = col; ctx.fillRect(px + m, py + m, cs - 2 * m, cs - 2 * m);
+        } else if (T.fillStyle === 'bevel') {
+          ctx.fillStyle = col; ctx.fillRect(px, py, cs, cs);
+          if (!trial && T.fillBevel) bevel(px, py, T.fillBevel);
+        } else if (T.fillStyle === 'gloss') {
+          // a shiny block: lighter at the top, darker at the bottom (Picross DS)
+          const g = ctx.createLinearGradient(0, py, 0, py + cs);
+          const [lt, dk] = trial ? [T.trialFill, T.trialFill] : T.fillBevel ?? [T.fill, T.fillDither];
+          g.addColorStop(0, lt); g.addColorStop(0.45, col); g.addColorStop(1, dk);
+          ctx.fillStyle = g; ctx.fillRect(px, py, cs, cs);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.fillRect(px + cs * 0.12, py + cs * 0.1, cs * 0.76, Math.max(1, cs * 0.12));
+        } else {
+          ctx.fillStyle = trial ? trialPat : fillPat;
+          ctx.fillRect(px, py, cs, cs);
+        }
       } else if (v === MARK) {
         // the player's own note: a soft dot that the picture can't be mistaken for
         const m = cs * 0.27;
@@ -490,7 +532,7 @@ export class BoardView {
         ctx.strokeStyle = col;
         ctx.lineWidth = Math.max(1.5, cs * (T.crossWidth ?? 1 / 7));
         ctx.lineCap = T.crossCap ?? 'round';
-        const m = cs * 0.24;
+        const m = cs * (T.crossMargin ?? 0.24);
         ctx.beginPath();
         ctx.moveTo(px + m, py + m); ctx.lineTo(px + cs - m, py + cs - m);
         ctx.moveTo(px + cs - m, py + m); ctx.lineTo(px + m, py + cs - m);

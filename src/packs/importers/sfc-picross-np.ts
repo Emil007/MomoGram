@@ -47,11 +47,15 @@ function readPicrossNp(d: Uint8Array, vol: number, rev: boolean): Pack {
   }
   return {
     format: 'momogram-pack', version: 1, id: `sfc-picross-np-${vol}`,
+    theme: { palette: { style: 'notebook', accent: NP_STRIPES[vol] ?? '#e0c878' } },
     title: { en: `Picross NP Vol. ${vol}`, ja: `ピクロスNP Vol.${vol}` },
     source: { game: `Picross NP Vol. ${vol}`, platform: 'Super Famicom (Nintendo Power)', region: 'JPN', developer: 'Jupiter', year: vol <= 4 ? 1999 : 2000, ...(rev ? { file: 'Rev 1' } : {}) },
     levels,
   };
 }
+
+/** the clue stripes of each volume's notebook (1, 2, 6 from screenshots; the others guessed until checked) */
+const NP_STRIPES: Record<number, string> = { 1: '#70d8a8', 2: '#e0c878', 3: '#f0a8c0', 4: '#88c8f0', 5: '#f0b878', 6: '#d8d868', 7: '#c0a8e8', 8: '#f09898' };
 
 registerImporter({
   name: 'Picross NP (Super Famicom)',

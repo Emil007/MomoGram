@@ -67,6 +67,8 @@ function readPokemonPicross(d: Uint8Array): Pack {
   (levels as any[]).forEach(l => { l.groupTitle = l.group === 'main' ? main : safari; });
   return {
     format: 'momogram-pack', version: 1, id: 'gbc-pokemon-picross',
+    // the puzzle screen (from screenshots): white cells, lavender grid, dark blue filled cells, gold and white stripes
+    theme: { palette: { style: 'gbc', accent: '#c8a800', cell: '#ffffff', grid: '#a5a5ff', fill: '#3a3aa5', board: { clueBg: '#e6c832', clueBgAlt: '#ffffff', clueArea: '#ffffff', grid5: '#3a3aa5', cross: '#202020', clue: '#000000', clueDone: '#a5a5ff', bg: '#ffffff' }, screen: { bg: '#f4ecb0', top: '#efd600' } } },
     title: { en: 'Pokémon Picross (GBC prototype)', ja: 'ポケモンピクロス' },
     source: { game: 'Pokémon Picross', platform: 'Game Boy Color', region: 'JPN', developer: 'Jupiter', year: 1999 },
     levels,

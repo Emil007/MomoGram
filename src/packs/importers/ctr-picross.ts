@@ -145,10 +145,10 @@ export function read3ds(data: Uint8Array): Pack[] {
   if (pics.length) { assets.push({ name: 'pictures.bin', data: packPictures(pics) }); theme.pictures = true; }
   const accent = accentFromColors(t.iconColors);
   const board = boardColors(t.files);
-  if (accent || board) theme.palette = { accent: accent ?? board?.cursor ?? '#1f9be0', ...board };
+  theme.palette = { style: '3ds', accent: accent ?? board?.cursor ?? '#1f9be0', ...board, ...KNOWN_LOOKS.find(([re]) => re.test(key))?.[1] };
   return [{
     icon: t.icon ? makeIcon(48, 48, t.icon) : undefined,
-    theme: theme.palette || theme.music ? theme : undefined,
+    theme,
     assets: assets.length ? assets : undefined,
     format: 'momogram-pack', version: 1,
     id: 'ctr-' + key,
@@ -157,6 +157,16 @@ export function read3ds(data: Uint8Array): Pack[] {
     levels,
   }];
 }
+
+// ---- the board's look: the colours a game's textures don't give, measured from screenshots ----
+const KNOWN_LOOKS: Array<[RegExp, Partial<NonNullable<PackTheme['palette']>>]> = [
+  [/^picross-e$/, { fill: '#40b0f8', cursor: '#40b0f8' }],
+  [/^picross-e3$/, { fill: '#f870a8', cursor: '#f870a8', accent: '#c8407a' }],
+  // Pokémon Picross: dark cells on pale green, orange crosses, an amber cursor line
+  [/pok.?mon/, { fill: '#484858', cell: '#dfe8bc', cross: '#e88000', cursor: '#e8c050', accent: '#c87800', board: { clueArea: '#eef3d8', clueAreaAlt: '#e2eac6', clueBg: '#eef3d8', clueBgAlt: '#e2eac6', grid5: '#e88000' } }],
+  // Sanrio Characters Picross: brown cells on cream, brown crosses, a turquoise cursor line
+  [/sanrio/, { fill: '#987840', cell: '#f8e8c0', cross: '#987840', cursor: '#40d0d8', accent: '#a07838', board: { clueArea: '#fbf6dc', clueAreaAlt: '#f3edcc', clueBg: '#fbf6dc', clueBgAlt: '#f3edcc', grid: '#c8b890', grid5: '#40c0d0' } }],
+];
 
 // ---- puzzle names ----
 

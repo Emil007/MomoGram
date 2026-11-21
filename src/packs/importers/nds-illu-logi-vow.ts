@@ -44,7 +44,9 @@ registerImporter({
     return [{
       format: 'momogram-pack', version: 1, id: 'nds-illu-logi-vow', title: { en: 'Illu-Logi VOW', ja: 'イラロジVOW' },
       source: { game: 'Illu-Logi VOW', platform: 'Nintendo DS', region: 'JPN', developer: 'Success', year: 2008 },
-      levels: used, icon: px ? makeIcon(32, 32, px) : undefined, theme: music.theme, assets: music.assets,
+      // the board (from a screenshot): white cells, black filled cells, light blue grid, orange cursor beams
+      levels: used, icon: px ? makeIcon(32, 32, px) : undefined, assets: music.assets,
+      theme: { ...music.theme, palette: { style: 'logic', accent: '#e07818', cursor: '#f08a20', fill: '#101010', grid: '#a8c8d8', grid5: '#5888a8', cross: '#404040' } },
     }];
   },
 });

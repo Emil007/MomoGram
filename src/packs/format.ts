@@ -43,7 +43,11 @@ export interface PackTheme {
   palette?: {
     accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string;
     /** the board's design: dmg / gbc (Game Boy), switch (Jupiter's Switch games), default (MomoGram's look in the game's colours) */
-    style?: 'dmg' | 'gbc' | 'switch' | 'default';
+    style?: 'dmg' | 'gbc' | 'switch' | '3ds' | 'stone' | 'notebook' | 'ds' | 'logic' | 'default';
+    /** exact board colours and shape settings of the game, over the style's own (see Theme in game/view.ts) */
+    board?: Record<string, string | number | boolean | string[]>;
+    /** screen colours around the board: page background, panels, top bar */
+    screen?: { bg?: string; panel?: string; top?: string };
     /** more board colours (used by the switch style): guide lines every 5, the cursor's line in the clues and on the board, marks, solved clues */
     grid5?: string; clueFocus?: string; hl?: string; mark?: string; done?: string; cursorBox?: string; mistake?: string;
   };

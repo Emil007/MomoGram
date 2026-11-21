@@ -101,7 +101,7 @@ function readMarioSuper(d: Uint8Array, fileName: string): Pack {
   (levels as any[]).forEach(l => { l.groupTitle = l.group === 'm' ? mario : wario; });
   const vc = /virtual console/i.test(fileName);
   return {
-    format: 'momogram-pack', version: 1, id: 'sfc-mario-no-super-picross',
+    format: 'momogram-pack', version: 1, id: 'sfc-mario-no-super-picross', theme: { palette: { style: 'stone', accent: '#6a5a30' } },
     title: { en: "Mario's Super Picross", ja: 'マリオのスーパーピクロス' },
     source: { game: "Mario's Super Picross", platform: 'Super Famicom', region: vc ? 'Virtual Console' : 'JPN', developer: 'Jupiter', year: 1995 },
     levels,
@@ -157,7 +157,7 @@ function readTamori(d: Uint8Array): Pack {
   for (const l of out) { delete (l as any).order; l.puzzles.sort((p, q) => (p.id < q.id ? -1 : p.id > q.id ? 1 : 0)); }
   const date = sfcHeaderTitle(d).match(/(\d+)\/(\d+)/);
   return {
-    format: 'momogram-pack', version: 1, id: 'bs-tamori-no-picross',
+    format: 'momogram-pack', version: 1, id: 'bs-tamori-no-picross', theme: { palette: { style: 'stone', accent: '#6a5a30' } },
     title: { en: 'Tamori no Picross', ja: 'タモリのピクロス' },
     source: { game: 'Tamori no Picross', platform: 'Satellaview', region: 'JPN', developer: 'Jupiter', year: 1995, ...(date ? { file: `broadcast ${date[1]}/${date[2]}` } : {}) },
     levels: out,

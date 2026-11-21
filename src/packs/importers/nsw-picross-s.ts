@@ -120,16 +120,23 @@ const hex = (c?: number[]) => c && c.length >= 3 ? '#' + c.slice(0, 3).map(v => 
 const rgba = (c?: number[], a?: number) => c && c.length >= 3 ? `rgba(${c.slice(0, 3).map(Math.round).join(', ')}, ${a ?? (c[3] ?? 255) / 255})` : undefined;
 
 /** the board's colours: the game's table, or the same values (PICROSS S has no table) */
-function switchPalette(t: Map<string, number[][]> | null): NonNullable<NonNullable<Pack['theme']>['palette']> {
+function switchPalette(t: Map<string, number[][]> | null, g: string): NonNullable<NonNullable<Pack['theme']>['palette']> {
   const c = (k: string) => t?.get(k)?.[0];
-  return {
+  const pal: NonNullable<NonNullable<Pack['theme']>['palette']> = {
     style: 'switch', accent: '#1d9e3a',
     fill: hex(c('ColorPrs_Nuri')) ?? '#333333', cross: hex(c('ColorPrs_Batu')) ?? '#ff7f00', mark: hex(c('ColorPrs_Mark')) ?? '#808080',
-    cell: hex(c('ColorPrs_BG')) ?? '#ffffff', grid: hex(c('ColorPrs_Grid')) ?? '#666666', grid5: hex(c('ColorPrs_Grid5')) ?? '#00e626',
-    clueFocus: hex(c('ColorPrs_HintLineSub')) ?? '#cfffd1', hint: hex(c('ColorPrs_FocusHintNum')) ?? '#ff092d',
-    hl: rgba(c('Color_Player'), 0.35) ?? 'rgba(128, 230, 255, 0.35)', done: rgba(c('ColorPrs_Gray')) ?? 'rgba(51, 51, 51, 0.4)',
-    cursorBox: hex(c('ColorPrs_FocusLine_Main')) ?? '#ff0000', mistake: hex(c('ColorPrs_Red')) ?? '#ff0000',
+    grid: hex(c('ColorPrs_Grid')) ?? '#666666', grid5: hex(c('ColorPrs_Grid5')) ?? '#00e626', mistake: hex(c('ColorPrs_Red')) ?? '#ff0000',
   };
+  void rgba;
+  // PICROSS S and S2 fill in blue (from screenshots)
+  if (g === 'S1' || g === 'S2') { pal.fill = '#00b8e8'; pal.accent = '#0094c8'; }
+  // LogiartGrimoire: dark clue areas with white numbers, the cursor's line in violet (from screenshots)
+  if (g === 'RK') {
+    pal.accent = '#7a52c8';
+    pal.board = { cell: '#ffffff', cellDither: '#ffffff', clueArea: '#2c2c36', clueAreaAlt: '#353541', clueBg: '#2c2c36', clueBgAlt: '#353541', clue: '#ffffff', clueDone: '#6c6c7c', cursor: '#ffffff', clueFocusBg: '#a878f0', hint: '#3aa0ff', cursorBox: '#a878f0', bg: '#1e1e26', outline: '#2c2c36' };
+    pal.screen = { bg: '#24242e', panel: '#f4f2fa', top: '#e8e4f4' };
+  }
+  return pal;
 }
 
 // ---- puzzles ----
@@ -286,7 +293,7 @@ registerSetImporter({
       const levels = sizeLevels(list, order, names, game.id.startsWith('ctr-') ? 'free' : 'normal');
       const music = await gameMusic(g, sound, audio, files, clipFiles);
       const colors = blobs.find(x => x.name.toLowerCase() === 'idxres_puzzlecolordef');
-      const palette = switchPalette(colors ? colorTable(colors.bytes) : null);
+      const palette = switchPalette(colors ? colorTable(colors.bytes) : null, g);
       packs.push({
         format: 'momogram-pack', version: 1, id: game.id, title: game.title,
         source: { game: game.title.en!, platform: 'Nintendo Switch', developer: 'Jupiter', year: game.year },

@@ -73,7 +73,8 @@ registerImporter({
     const pack: Pack = {
       format: 'momogram-pack', version: 1, id: g.id, title: g.title,
       source: { game: g.region === 'JPN' ? g.title.ja! : g.title.en!, platform: 'Nintendo DS', region: g.region, developer: 'Success', year: g.year },
-      levels, icon: px ? makeIcon(32, 32, px) : undefined, theme: music.theme, assets: music.assets,
+      levels, icon: px ? makeIcon(32, 32, px) : undefined, assets: music.assets,
+      theme: { ...music.theme, palette: { style: 'logic', accent: '#2f7fd0', cursor: '#60b0f0' } },
     };
     return [pack];
   },

@@ -404,6 +404,9 @@ const DS_STAGES = ['jazz', 'reggae', 'bossanova', 'waltz', 'musette', 'musicbox'
 /** the game's music: title, the nine in-game styles, clear jingle */
 export function dsTheme(): NonNullable<Pack['theme']> {
   return {
+    // the board as in the game: glossy blue blocks, striped clue bands, orange guide lines (MomoGram's own look is
+    // modelled on it)
+    palette: { style: 'ds', accent: '#1f6fd0', fill: '#1f6fd0' },
     music: { menu: 'sound.sdat#title_SEQ', title: 'sound.sdat#title_SEQ', play: 'sound.sdat#stage_jazz_SEQ', clear: 'sound.sdat#game_clear_jingle_SEQ' },
     tracks: DS_STAGES.map(s => `sound.sdat#stage_${s}_SEQ`),
   };

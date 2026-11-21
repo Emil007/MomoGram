@@ -52,7 +52,8 @@ registerImporter({
     return [{
       format: 'momogram-pack', version: 1, id: 'nds-hello-kitty-logic', title: { en: 'Hello Kitty no Paku Paku & Logic', ja: 'ハローキティのパクパク＆ロジック' },
       source: { game: 'Hello Kitty no Paku Paku & Logic', platform: 'Nintendo DS', region: 'JPN' },
-      levels, icon: px ? makeIcon(32, 32, px) : undefined, theme: music.theme, assets: music.assets,
+      levels, icon: px ? makeIcon(32, 32, px) : undefined, assets: music.assets,
+      theme: { ...music.theme, palette: { style: 'logic', accent: '#e0508a', cursor: '#f890b8', fill: '#4a3038', grid5: '#e0508a' } },
     }];
   },
 });
