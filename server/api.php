@@ -174,6 +174,7 @@ switch ($a) {
       $s = json_decode($r['data'], true);
       $solved = 0; $weekN = 0; $medals = ['bronze' => 0, 'silver' => 0, 'gold' => 0, 'platinum' => 0]; $per = []; $time = 0;
       foreach (($s['packs'] ?? []) as $pid => $pk) {
+        if (strncmp((string)$pid, 'my-', 3) === 0) continue; // packs made in the editor don't count
         foreach (($pk['progress'] ?? []) as $pz => $v) {
           if (empty($v['cleared'])) continue;
           $solved++; $per[$pid] = ($per[$pid] ?? 0) + 1;
@@ -229,7 +230,9 @@ switch ($a) {
     q('DELETE FROM momo_uploads WHERE created < ?', [gmdate('Y-m-d\TH:i:s\Z', time() - 86400)]);
     // the server keeps only the newest version of a pack: an older or the same one isn't sent at all
     $rev = (int)($b['meta']['rev'] ?? 1);
-    $have = q('SELECT meta FROM momo_packs WHERE pack_id = ?', [$id])->fetch();
+    $have = q('SELECT p.meta, p.user_id, u.name FROM momo_packs p LEFT JOIN momo_users u ON u.id = p.user_id WHERE p.pack_id = ?', [$id])->fetch();
+    // a pack made in the editor is only replaced by the one who uploaded it (game packs are the same game for everyone)
+    if ($have && strncmp($id, 'my-', 3) === 0 && (int)$have['user_id'] !== (int)$u['id']) fail('owner', 403, ['by' => $have['name']]);
     if ($have && (int)(json_decode($have['meta'], true)['rev'] ?? 1) >= $rev) fail('have', 409, ['rev' => (int)(json_decode($have['meta'], true)['rev'] ?? 1)]);
     $up = bin2hex(random_bytes(16));
     q('INSERT INTO momo_uploads (id, pack_id, meta, user_id, parts, created) VALUES (?, ?, ?, ?, 0, ?)', [$up, $id, json_encode($b['meta'] ?? new stdClass, JSON_UNESCAPED_UNICODE), $u['id'], $now]);
@@ -260,7 +263,8 @@ switch ($a) {
     if (!$up || !is_file($part)) fail('upload', 404);
     if (fread(fopen($part, 'rb'), 2) !== 'PK') { unlink($part); fail('zip'); }
     $meta = json_decode($up['meta'], true);
-    $have = q('SELECT meta FROM momo_packs WHERE pack_id = ?', [$up['pack_id']])->fetch();
+    $have = q('SELECT meta, user_id FROM momo_packs WHERE pack_id = ?', [$up['pack_id']])->fetch();
+    if ($have && strncmp($up['pack_id'], 'my-', 3) === 0 && (int)$have['user_id'] !== (int)$u['id']) { unlink($part); q('DELETE FROM momo_uploads WHERE id = ?', [$up['id']]); fail('owner', 403); }
     if ($have && (int)(json_decode($have['meta'], true)['rev'] ?? 1) >= (int)($meta['rev'] ?? 1)) {
       unlink($part); q('DELETE FROM momo_uploads WHERE id = ?', [$up['id']]); fail('have', 409);
     }

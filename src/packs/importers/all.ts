@@ -1,4 +1,7 @@
-// Registers every importer. Each game family lives in its own file.
-import './gameboy';
-import './snes';
-import './threeds';
+// Written by build.mjs: loads every import method in this folder. Do not edit.
+import './ctr-picross';
+import './gb-picross';
+import './gbc-pokemon-picross';
+import './nds-picross-ds';
+import './sfc-picross-np';
+import './sfc-picross';

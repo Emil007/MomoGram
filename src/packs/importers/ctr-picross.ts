@@ -1,7 +1,22 @@
-// Jupiter's 3DS Picross games (Picross e1–e9, Pokémon Picross, My Nintendo / Club Nintendo Picross, …).
-// Needs decrypted files; puzzles are .bprs (title utf16[16], w, h, cells) or .bprs2 (".PRS" header, title, w, h, cells).
+// Jupiter's Picross games for Nintendo 3DS. One import method for all of them: the files inside the game
+// (RomFS) are named the same way. Needs decrypted files; MomoGram decrypts nothing.
+//
+//  Game                            Product codes (CTR-N-…)   Puzzle names, besides the Japanese title in each puzzle file
+//  Picross e                       JEX(J/E/P)                IdxRes_PrsTitle_<language>.dat, one entry per puzzle, mode order
+//  Picross e2                      JP2(J/E/P)                IdxRes_PrsTitle_<language>.dat in play order; the play order
+//                                                              itself is a list of puzzle numbers in the program (code.bin)
+//  Picross e3 – e8                 JET, JEP, KPQ, KP6, KPA,  IdxRes_PuzzleBuiltin.dat: columns of puzzle file names
+//                                    KP8 …                     (Prs_…), then the same columns per language
+//  Picross e9                      (J; fan translation)      as e3 – e8
+//  Club Nintendo Picross (+ Plus)  JPQJ, KXXJ                Plus: IdxRes_PuzzleBuiltin.dat (Japanese)
+//  My Nintendo Picross: Zelda,     —                         Japanese titles only for now
+//    Pokémon Picross, Sanrio …
+//
+// Puzzles: .bprs (title utf16[16], w, h, cells) or .bprs2 (".PRS" header, title, w, h, cells), LZ11 packed.
+// Also read: the coloured solved pictures (_I / _PC / _C textures), the board colours (GameL textures),
+// the music (.bcstm) and the icon.
 import { registerImporter } from './index';
-import { readCtr, lz11, ctrEncrypted, SMDH_LANGS, u16, CtrFile } from '../../rom/ctr';
+import { readCtr, ctrCode, lz11, ctrEncrypted, SMDH_LANGS, u16, u32, CtrFile, CtrTitle } from '../../rom/ctr';
 import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFromBits, makeIcon } from '../format';
 import { accentFromColors } from '../theme';
 import { jtexPixels, dominantColors, jtexImage, packPictures } from '../../rom/jtex';
@@ -67,7 +82,7 @@ export function read3ds(data: Uint8Array): Pack[] {
   const toPuzzle = (r: Raw, id: string): PackPuzzle => ({
     id, width: r.w, height: r.h,
     rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1),
-    name: r.title ? { ja: r.title } : undefined,
+    name: ownTitle(r.title),
   });
   const levels: PackLevel[] = [];
   const modeStyle = raws.every(r => /\/Prs_[ENFX]_\d+\.bprs$/.test(r.file));
@@ -106,6 +121,7 @@ export function read3ds(data: Uint8Array): Pack[] {
       levels.push(...chunk(`s${s}-`, { en: label }, s, list));
     }
   }
+  addNames(t, data, raws, levels);
   const title: Text = {};
   t.names.forEach((n, i) => { const l = SMDH_LANGS[i] as Lang; if (n && ['ja', 'en', 'fr', 'de', 'it', 'es', 'ko'].includes(l)) title[l] = n; });
   // identify the game across regions by its English (or Japanese) title, not the region-specific code
@@ -140,6 +156,97 @@ export function read3ds(data: Uint8Array): Pack[] {
     source: { game: title.en ?? title.ja ?? t.productCode, platform: 'Nintendo 3DS', region: t.productCode.slice(-1), developer: 'Jupiter' },
     levels,
   }];
+}
+
+// ---- puzzle names ----
+
+/** the title stored in a puzzle file: Japanese, or English in translations; placeholders and dev names are skipped */
+function ownTitle(s: string): Text | undefined {
+  s = s.replace(/\0.*$/, '').trim();
+  if (!s || /タイトルを入力/.test(s)) return undefined;
+  if (/[\u3040-\u30ff\u4e00-\u9fff]/.test(s)) return { ja: s };
+  if (/^[\x20-\x7e]+$/.test(s) && /^[A-Z0-9]|\s/.test(s)) return { en: s };
+  return undefined;
+}
+
+const td16 = new TextDecoder('utf-16le');
+/** IdxRes resources: u32 offsets (LZ11 packed), each entry a UTF-16 block */
+function idxEntries(raw: Uint8Array): string[] {
+  const d = lz11(raw);
+  const n = (u32(d, 0) & 0xffffff) >> 2;
+  const offs = [...Array(n)].map((_, i) => u32(d, i * 4) & 0xffffff);
+  return offs.map((o, i) => { const e = d.subarray(o, i + 1 < n ? offs[i + 1] : d.length); return td16.decode(e.subarray(0, e.length & ~1)); });
+}
+
+/** language columns per round, by number of rounds (USA releases: 3, European: 5, Japanese: 1) */
+const ROUND_LANGS: Record<number, Lang[]> = { 1: ['ja'], 3: ['en', 'fr', 'es'], 5: ['en', 'fr', 'it', 'de', 'es'] };
+
+/**
+ * IdxRes_PuzzleBuiltin (e3 and later): columns of strings. First the key columns (file names like Prs_10x10_04,
+ * in play order), then for every language the same columns with the names. Columns are matched by length.
+ */
+function builtinNames(f: CtrFile): Map<string, Text> {
+  const cols = idxEntries(f.data).map(s => { const a = s.split('\0'); while (a.length && a[a.length - 1] === '') a.pop(); return a; });
+  const isKey = (c: string[]) => c.length > 0 && c.every(s => /^(Prs|Dpc|Mrs|filename)_/.test(s));
+  let last = -1;
+  const keys: string[][] = [];
+  for (let i = 0; i < cols.length; i++) {
+    if (!cols[i].length) continue;
+    if (isKey(cols[i])) { keys.push(cols[i]); last = i; } else if (keys.length) break;
+  }
+  const out = new Map<string, Text>();
+  const named = cols.slice(last + 1).filter(c => c.length && !isKey(c));
+  for (const len of new Set(keys.map(k => k.length))) {
+    const ks = keys.filter(k => k.length === len), ns = named.filter(c => c.length === len);
+    const langs = ROUND_LANGS[ns.length / ks.length];
+    if (!langs) continue;
+    langs.forEach((lang, li) => ks.forEach((k, j) => {
+      if (!k[0].startsWith('Prs_')) return;
+      const col = ns[li * ks.length + j];
+      k.forEach((file, row) => { const s = col[row]?.trim(); if (s) out.set(file, { ...out.get(file), [lang]: s }); });
+    }));
+  }
+  return out;
+}
+
+/** a list of 32-bit numbers in the program that is an ordering of 0 … n-1 (the play order of n puzzles) */
+function playOrder(code: Uint8Array, n: number): number[] | null {
+  for (let o = 0; o + n * 4 <= code.length; o += 4) {
+    if (u32(code, o) >= n) continue;
+    const seen = new Uint8Array(n);
+    let ok = true;
+    for (let i = 0; i < n && ok; i++) { const v = u32(code, o + i * 4); ok = v < n && !seen[v]; seen[v] = 1; }
+    if (ok) return [...Array(n)].map((_, i) => u32(code, o + i * 4));
+  }
+  return null;
+}
+
+/** names from the game's tables, added to the Japanese titles of the puzzle files */
+function addNames(t: CtrTitle, data: Uint8Array, raws: Raw[], levels: PackLevel[]) {
+  const all = levels.flatMap(l => l.puzzles);
+  const byFile = new Map<string, PackPuzzle>();
+  // puzzles were made from raws in this order (sizes, then files): rebuild the link by pattern
+  const key = (w: number, h: number, rows: string[]) => `${w}x${h}:${rows.join('/')}`;
+  const pz = new Map(all.map(p => [key(p.width, p.height, p.rows), p]));
+  for (const r of raws) {
+    const p = pz.get(key(r.w, r.h, rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1)));
+    if (p) byFile.set(r.file.replace(/^.*\/|\.bprs2?$/g, ''), p);
+  }
+  const add = (p: PackPuzzle | undefined, n: Text) => { if (p) p.name = { ...p.name, ...n }; };
+  const builtin = t.files.find(f => /IdxRes_PuzzleBuiltin\.dat$/.test(f.path));
+  if (builtin) {
+    for (const [file, n] of builtinNames(builtin)) add(byFile.get(file), n);
+    return;
+  }
+  // e2: name tables in play order; the order is a list in the program
+  const tables = t.files.map(f => [f.path.match(/IdxRes_PrsTitle_(\w+)\.dat$/)?.[1], f] as const).filter(([l]) => l && IDX_LANG[l!]);
+  if (!tables.length) return;
+  const lists = tables.map(([l, f]) => { const e = idxEntries(f.data); return [IDX_LANG[l!], e.length === 4 && e[2].includes('\0') ? e[2].split('\0') : null] as const; });
+  if (lists.some(([, v]) => !v) || lists.some(([, v]) => v!.length < all.length)) return; // Picross e: handled with its modes
+  const code = ctrCode(data);
+  const order = code ? playOrder(code, all.length) : null;
+  if (!order) return;
+  order.forEach((g, i) => { const n: Text = {}; for (const [l, v] of lists) if (v![i]?.trim()) n[l] = v![i].trim(); add(all[g], n); });
 }
 
 /**

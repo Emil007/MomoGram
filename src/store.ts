@@ -403,6 +403,7 @@ export function localStats(): { solved: number; week: number; medals: Record<Med
   for (const [k, v] of Object.entries(progress)) {
     if (!v.cleared) continue;
     const id = k.slice(0, k.lastIndexOf('/'));
+    if (id.startsWith('my-')) continue; // packs made in the editor don't count
     out.solved++; out.packs[id] = (out.packs[id] ?? 0) + 1;
     if (v.at && v.at >= week) out.week++;
     if (v.medal) out.medals[v.medal]++;

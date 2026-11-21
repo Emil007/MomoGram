@@ -20,7 +20,8 @@ interface ED {
 }
 
 const isMine = (p: Pack) => p.id.startsWith('my-');
-const newId = (pre: string) => pre + Math.random().toString(36).slice(2, 9);
+/** random ids: a pack made here never takes the place of someone else's on a server */
+const newId = (pre: string) => pre + Array.from(crypto.getRandomValues(new Uint8Array(10)), b => (b % 36).toString(36)).join('');
 
 async function save(ed: ED, pack: Pack) {
   pack.rev = Date.now(); // every change is a new version (shared packs then offer an update)

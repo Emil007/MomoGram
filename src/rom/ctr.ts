@@ -85,6 +85,38 @@ export function readCtr(d: Uint8Array): CtrTitle {
   return { productCode, titleId, names, files, iconColors, icon };
 }
 
+/**
+ * The program (ExeFS ".code"), unpacked when the title says it is compressed (3DS "BLZ": LZ backwards from the
+ * end). Only for reading tables the game keeps in its code, like the order its puzzles are listed in.
+ */
+export function ctrCode(d: Uint8Array): Uint8Array | null {
+  const b = findNcch(d);
+  if (b < 0) return null;
+  const exefs = b + u32(d, b + 0x1a0) * 0x200;
+  const compressed = (d[b + 0x200 + 0xd] & 1) === 1; // exheader: system control info flags
+  for (let i = 0; i < 10; i++) {
+    const e = exefs + i * 16;
+    if (ascii(d, e, 8) !== '.code') continue;
+    const c = d.slice(exefs + 0x200 + u32(d, e + 8), exefs + 0x200 + u32(d, e + 8) + u32(d, e + 12));
+    if (!compressed) return c;
+    const n = c.length, top = u32(c, n - 8), extra = u32(c, n - 4), hdr = c[n - 5];
+    const out = new Uint8Array(n + extra); out.set(c);
+    let src = n - hdr, dst = out.length;
+    const end = n - (top & 0xffffff);
+    while (src > end) {
+      let fl = c[--src];
+      for (let k = 0; k < 8 && src > end; k++, fl <<= 1) {
+        if (!(fl & 0x80)) { out[--dst] = out[--src]; continue; }
+        const hi = out[--src], lo = out[--src];
+        const len = (hi >> 4) + 3, disp = (((hi & 15) << 8) | lo) + 3;
+        for (let j = 0; j < len; j++, dst--) out[dst - 1] = out[dst - 1 + disp];
+      }
+    }
+    return out;
+  }
+  return null;
+}
+
 export function lz11(d: Uint8Array): Uint8Array {
   if (d[0] !== 0x11 && d[0] !== 0x10) return d;
   let n = d[1] | (d[2] << 8) | (d[3] << 16), p = 4;

@@ -1,7 +1,7 @@
 // Pack creation: identify a game file the user owns and read its puzzles into a MomoGram pack.
-import { Pack, makeIcon } from '../format';
-import { NdsRom } from '../../rom/nds';
-import { readPicrossDs, readPicrossDsDemo, dsToPack } from '../../rom/picrossds';
+// Every other file in this folder is one import method and registers itself; all.ts (written by build.mjs)
+// loads them. To support a new game, add its details to the file of the method it uses, or add a new file.
+import { Pack } from '../format';
 
 export interface ImportResult { file: string; ok: boolean; packs: Pack[]; message: string }
 
@@ -14,20 +14,6 @@ export interface Importer {
 
 const importers: Importer[] = [];
 export function registerImporter(i: Importer) { importers.push(i); }
-
-// ---- Picross DS (full game or the Download Station / Nintendo Channel demos) ----
-registerImporter({
-  name: 'Picross DS',
-  detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('AXP') || (NdsRom.looksLike(d) && new NdsRom(d).title.startsWith('PICROSS')),
-  read: d => {
-    const px = new NdsRom(d).icon();
-    const icon = px ? makeIcon(32, 32, px) : undefined;
-    let ds;
-    try { ds = readPicrossDs(d); } catch { return [{ ...readPicrossDsDemo(d), icon }]; }
-    // puzzles, names, daily sets, solved-picture animations, music and icon; the ROM itself is not kept
-    return [{ ...dsToPack(ds), icon }];
-  },
-});
 
 export function is3dsEncrypted(d: Uint8Array): boolean | null {
   // look for an NCCH header and test the NoCrypto flag

@@ -1,4 +1,11 @@
-// Super Famicom / Satellaview nonogram games by Jupiter.
+// Super Famicom / Satellaview nonogram games by Jupiter with the first puzzle engine.
+//
+//  Game                          File (recognised by)                         Puzzles
+//  Mario no Super Picross (JPN,  header title "SUPER PICROSS" (0xFFC0)        longest pointer table (>= 300 records):
+//    also the Virtual Console)                                                  Mario 1-10 + Special, Mario EX,
+//                                                                               Wario 1-10 + Special, Ultra, EX
+//  Tamori no Picross             Satellaview header bytes C0 D3 D8 at 0xFFC1  longest pointer table; filed by air date
+//    (Satellaview broadcasts)
 //
 // Mario no Super Picross (1995) and Tamori no Picross (Satellaview, 1995) share one puzzle format:
 // a table of 4-byte entries (24-bit HiROM pointer + 00) points to one record per puzzle. A record is a
@@ -10,16 +17,7 @@
 // Size codes: 0 = 5x5, 1 = 10x10, 2 = 15x15, 3 = 20x20, 6 = 25x20.
 import { registerImporter } from './index';
 import { Pack, PackLevel, PackPuzzle, Text, rowsFromBits } from '../format';
-import { snesPackMusic } from '../../audio/snes/games';
-
-/** the game's own music, played by MomoGram's SPC700 / S-DSP emulation (src/audio/snes) */
-async function withMusic(p: Pack, rom: Uint8Array): Promise<Pack> {
-  try {
-    const m = await snesPackMusic(rom, () => new Promise(r => setTimeout(r, 0)));
-    if (m) { p.theme = { ...p.theme, music: m.music }; p.assets = [...(p.assets ?? []), m.asset]; }
-  } catch (e) { console.warn('SNES music', e); }
-  return p;
-}
+import { sfcHeaderTitle, sfcWithMusic } from '../../rom/sfc';
 
 const SIZES: Record<number, [number, number]> = { 0: [5, 5], 1: [10, 10], 2: [15, 15], 3: [20, 20], 6: [25, 20] };
 
@@ -66,7 +64,6 @@ function readTable(d: Uint8Array, t: { offset: number; count: number }): SfcReco
   return out;
 }
 
-const headerTitle = (d: Uint8Array) => d.length >= 0x10000 ? String.fromCharCode(...d.subarray(0xffc0, 0xffd5)) : '';
 const letter = (i: number) => String.fromCharCode(65 + i);
 
 function withTitle(base: Text, suffix: string): Text {
@@ -158,7 +155,7 @@ function readTamori(d: Uint8Array): Pack {
   }
   const out = [...levels.values()].sort((x: any, y: any) => x.order - y.order);
   for (const l of out) { delete (l as any).order; l.puzzles.sort((p, q) => (p.id < q.id ? -1 : p.id > q.id ? 1 : 0)); }
-  const date = headerTitle(d).match(/(\d+)\/(\d+)/);
+  const date = sfcHeaderTitle(d).match(/(\d+)\/(\d+)/);
   return {
     format: 'momogram-pack', version: 1, id: 'bs-tamori-no-picross',
     title: { en: 'Tamori no Picross', ja: 'タモリのピクロス' },
@@ -171,66 +168,12 @@ const isTamori = (d: Uint8Array) => d.length >= 0x10000 && d[0xffc1] === 0xc0 &&
 
 registerImporter({
   name: 'Mario no Super Picross (Super Famicom)',
-  detect: d => d.length >= 0x10000 && headerTitle(d).startsWith('SUPER PICROSS'),
-  read: async (d, f) => [await withMusic(readMarioSuper(d, f), d)],
+  detect: d => d.length >= 0x10000 && sfcHeaderTitle(d).startsWith('SUPER PICROSS'),
+  read: async (d, f) => [await sfcWithMusic(readMarioSuper(d, f), d)],
 });
 
 registerImporter({
   name: 'Tamori no Picross (Satellaview)',
   detect: d => isTamori(d),
-  read: async d => [await withMusic(readTamori(d), d)],
-});
-
-// ---- Picross NP Vol. 1-8 (Nintendo Power, 1999) ----
-// A newer engine: a ROM bank starts with a table of 24-bit offsets (relative to that bank), one per
-// record. A record starts with a size code (0 = 5x5, 1 = 10x10, 2 = 15x15, 5 = 20x20, 6 = 25x20) and a
-// colour byte, followed by the solution as one bitstream, row-major, most significant bit first, then
-// the coloured picture. Vol. 1-5 hold 122 records, Vol. 6-8 242: the first two are the title-screen demo
-// and the tutorial (not imported), the rest are the volume's puzzles in sets of twelve (A-L), in the
-// order they are stored. Which mode (Beginner, Regular, ...) a set belongs to is not stored next to the
-// puzzles, so sets are numbered.
-const NP_SIZES: Record<number, [number, number]> = { 0: [5, 5], 1: [10, 10], 2: [15, 15], 5: [20, 20], 6: [25, 20] };
-
-function findNpTable(d: Uint8Array): { bank: number; offsets: number[] } | null {
-  for (let b = 0; b + 0x10000 <= d.length; b += 0x10000) {
-    const offsets: number[] = [];
-    for (let i = 0; b + 3 * i + 3 <= d.length; i++) {
-      const v = d[b + 3 * i] | (d[b + 3 * i + 1] << 8) | (d[b + 3 * i + 2] << 16);
-      if ((offsets.length && v <= offsets[offsets.length - 1]) || b + v + 2 >= d.length || !NP_SIZES[d[b + v]]) break;
-      offsets.push(v);
-    }
-    // the first record follows the table directly
-    if (offsets.length >= 100 && offsets[0] >= 3 * offsets.length && offsets[0] <= 3 * offsets.length + 8) return { bank: b, offsets };
-  }
-  return null;
-}
-
-function readPicrossNp(d: Uint8Array, vol: number, rev: boolean): Pack {
-  const t = findNpTable(d);
-  if (!t) throw new Error('Puzzle table not found.');
-  const puzzles: PackPuzzle[] = [];
-  for (const off of t.offsets.slice(2)) {
-    const a = t.bank + off, [w, h] = NP_SIZES[d[a]];
-    const rows = rowsFromBits(w, h, (x, y) => { const i = y * w + x; return ((d[a + 2 + (i >> 3)] >> (7 - (i & 7))) & 1) === 1; });
-    puzzles.push({ id: '', width: w, height: h, rows });
-  }
-  const levels: PackLevel[] = [];
-  for (let s = 0; s * 12 < puzzles.length; s++) {
-    levels.push({
-      id: `set-${s + 1}`, title: { en: `Set ${s + 1}`, ja: `セット ${s + 1}` }, rules: 'normal',
-      puzzles: puzzles.slice(s * 12, s * 12 + 12).map((p, k) => ({ ...p, id: `${s + 1}-${letter(k)}` })),
-    });
-  }
-  return {
-    format: 'momogram-pack', version: 1, id: `sfc-picross-np-${vol}`,
-    title: { en: `Picross NP Vol. ${vol}`, ja: `ピクロスNP Vol.${vol}` },
-    source: { game: `Picross NP Vol. ${vol}`, platform: 'Super Famicom (Nintendo Power)', region: 'JPN', developer: 'Jupiter', year: vol <= 4 ? 1999 : 2000, ...(rev ? { file: 'Rev 1' } : {}) },
-    levels,
-  };
-}
-
-registerImporter({
-  name: 'Picross NP (Super Famicom)',
-  detect: d => d.length >= 0x10000 && /^PICROSS NP VOL\.\d/.test(headerTitle(d)),
-  read: async (d, f) => [await withMusic(readPicrossNp(d, +headerTitle(d).match(/VOL\.(\d)/)![1], /rev ?1/i.test(f)), d)],
+  read: async d => [await sfcWithMusic(readTamori(d), d)],
 });

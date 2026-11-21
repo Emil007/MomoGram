@@ -78,7 +78,7 @@ language's names. Do it once, keep the files, import them anywhere.
 | Picross NP Vol. 1–8 | Super Famicom (Nintendo Power) | ✓ all puzzles of each volume, in sets of twelve (tested with Vol. 1: 120 puzzles) | ✓ the game's own music (emulated) |
 | Picross S series | Switch | later | later |
 
-Only puzzles from Jupiter / Nintendo releases are supported.
+Only puzzles from Jupiter / Nintendo releases are supported. To add a game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
 ### Sound emulation (Game Boy, Super Famicom, Satellaview)
 
@@ -164,7 +164,7 @@ The desktop app takes `--rom <file.nds>` (or a ROM dropped on the program) to lo
 
 ## Pack files
 
-A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a hidden version) and `assets/` (music, pictures, the game's icon). Double-clicking one opens it in the desktop app, or in the installed web version where the browser supports it. Older `.momopack.json` files and `.zip` exports still work.
+A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a hidden version) and `assets/` (music, pictures, the game's icon). Double-clicking one opens it in the desktop app, or in the installed web version where the browser supports it. Older `.momopack.json` files and `.zip` exports still work. The format is described in [docs/momopack-format.md](docs/momopack-format.md).
 
 ## Your own server
 
