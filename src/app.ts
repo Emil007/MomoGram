@@ -1351,7 +1351,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
           if (choice === 'save') { keepBoard(); cleanup(); back(); }
           else if (choice === 'drop') { cleanup(); clearBoard(pack.id, lv.id, pz.id); back(); }
           else { last = performance.now(); running = true; }
-        }, 'btn ghost'));
+        }));
       };
       draw();
       return end; // back: continue playing
