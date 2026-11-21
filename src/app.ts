@@ -834,7 +834,9 @@ function syncChip(): HTMLElement | null {
 function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
   const sc = Sync.scores(), me = Sync.account();
   if (!sc || !me) return null;
-  const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name);
+  // older progress (and an older server) gives no rules with a time: the medal tells which rules it was played with
+  const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name)
+    .map(([n, ms, r, m]) => [n, ms, r || (m ? RULES_OF[m] ?? '' : ''), m] as typeof sc.best[string][number]);
   const myProgress = getProgress(packId, puzzleId), mine = strictestTime(myProgress);
   if (mine) list.push([me.name, mine[0], mine[1], myProgress.medal ?? '']);
   if (!list.length) return null;
