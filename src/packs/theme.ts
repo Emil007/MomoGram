@@ -203,6 +203,8 @@ export function applyThemeCss(el: HTMLElement, c: ThemeColors | null) {
     '--accent': c.accent, '--accent-dark': c.accentDark, '--bg': c.bg, '--panel': c.panel, '--top': c.top, '--top-line': c.topLine,
     '--board-bg': c.board.bg,
   } : {};
+  // dark mode: the menus stay dark, only the game's accent colour comes along (its board is drawn as it is)
+  if (document.body.classList.contains('dark')) for (const k of ['--bg', '--panel', '--top', '--top-line', '--board-bg']) delete vars[k];
   for (const k of ['--accent', '--accent-dark', '--bg', '--panel', '--top', '--top-line', '--board-bg']) {
     if (vars[k]) el.style.setProperty(k, vars[k]); else el.style.removeProperty(k);
   }

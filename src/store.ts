@@ -169,6 +169,7 @@ export interface Settings {
   showTimer: boolean;
   packMusic: boolean; // play the games' own music
   packColors: boolean; // colour the screens like the pack's original game
+  look?: 'auto' | 'light' | 'dark'; // dark mode for the menus (the boards keep their look)
   difficulty: 'auto' | 'easy' | 'normal' | 'hard'; // auto = the level's own rules
   logicHints: boolean;
   toolsRight: boolean;

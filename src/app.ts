@@ -87,6 +87,7 @@ export function levelUnlocked(pack: Pack, lv: PackLevel): boolean {
 // ---------------------------------------------------------------- start
 
 export async function boot() {
+  applyLook();
   const want = (settings.lang || navigator.language.slice(0, 2)) as Lang;
   setLang(['en', 'de', 'fr', 'it', 'es', 'ja', 'ko'].includes(want) ? want : 'en');
   storage.persist();
@@ -289,7 +290,7 @@ function lastPack(): Pack | null {
 }
 
 export function home() {
-  applyThemeCss(root(), null);
+  themeRoot(null);
   // whatever plays keeps playing; only a silent start picks a random track from all games
   if (!Snd.current()) menuMusic(null, true);
   void hashTracks();
@@ -363,6 +364,22 @@ function libraryPacks(includeHidden = false): Pack[] {
   const idx = (id: string) => { const i = pr.order.indexOf(id); return i < 0 ? 1e6 : i; };
   return allPacks().filter(p => includeHidden || !pr.hidden.includes(p.id)).sort((a, b) => idx(a.id) - idx(b.id));
 }
+
+let lastColors: ThemeColors | null = null;
+function themeRoot(c: ThemeColors | null) { lastColors = c; applyThemeCss(root(), c); }
+
+// ---------------------------------------------------------------- dark mode (menus only; boards keep their look)
+const darkMq = window.matchMedia?.('(prefers-color-scheme: dark)');
+export function applyLook() {
+  const look = settings.look ?? 'auto';
+  const dark = look === 'dark' || (look === 'auto' && !!darkMq?.matches);
+  if (document.body.classList.contains('dark') === dark) return;
+  document.body.classList.toggle('dark', dark);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#121820' : '#2f5d93');
+  // a game's own screen colours are light: in dark mode only its accent colour stays
+  applyThemeCss(root(), lastColors);
+}
+darkMq?.addEventListener?.('change', () => applyLook());
 
 /** Mega mode: a small glowing dot on games (and folders) whose Mega puzzles come from the game itself */
 const hasGameMega = (p: Pack) => p.levels.some(l => l.puzzles.some(z => z.mega));
@@ -476,7 +493,7 @@ function folderCard(key: string, packs: Pack[]): HTMLElement {
 }
 
 function folderScreen(key: string) {
-  applyThemeCss(root(), null);
+  themeRoot(null);
   const lib = h('div', { class: 'library' });
   renderLibrary(lib, key);
   screen(header(key, home), h('div', { class: 'home' }, lib));
@@ -933,7 +950,7 @@ function gamesWith(id: string): Pack[] {
 let lastTrack = '';
 /** music while playing: random from this game (default), random from all games, or the game's main track */
 function playMusicFor(pack: Pack) {
-  applyThemeCss(root(), packColors(pack));
+  themeRoot(packColors(pack));
   let pool: Track[];
   if (settings.musicMode === 'fixed') pool = packTracks(pack).slice(0, 1);
   else if (settings.musicMode === 'random-all' || !packTracks(pack).length) pool = allPacks().flatMap(packTracks); // games without music borrow
@@ -953,7 +970,7 @@ function packColors(pack: Pack | null): ThemeColors | null {
 
 /** a game's look and one of its tracks ('menu', 'clear' …) */
 function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear', loop = true) {
-  applyThemeCss(root(), packColors(pack));
+  themeRoot(packColors(pack));
   if (role === 'menu') return menuMusic(pack);
   // several songs for a role: one of them at random
   const refs = roleSongs(pack?.theme, role).filter(r => pack && !isOff(pack, r));
@@ -1486,7 +1503,7 @@ function confirmChoice(question: string, yes: string): Promise<boolean> { return
 // ---------------------------------------------------------------- packs
 
 function editorScreen() {
-  applyThemeCss(root(), null);
+  themeRoot(null);
   editorHome({
     packs: () => ctx.packs,
     setPacks: p => { ctx.packs = p.sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en'))); },
@@ -1498,7 +1515,7 @@ function editorScreen() {
 }
 
 function packsScreen(back: () => void = home) {
-  applyThemeCss(root(), null);
+  themeRoot(null);
   openPackManager({
     root: root(),
     packs: () => ctx.packs,
@@ -1792,6 +1809,7 @@ function optionsScreen() {
       row(t('logicDefault'), toggle('logicHints')),
       row(t('unlockAll'), toggle('unlockAll'))),
     card(t('secLook'),
+      row(t('look'), seg('look', [['auto', t('lookAuto')], ['light', t('lookLight')], ['dark', t('lookDark')]], () => applyLook())),
       row(t('packColors'), toggle('packColors')),
       row(t('toolsRight'), toggle('toolsRight')),
       row(t('language'), langSel)),
