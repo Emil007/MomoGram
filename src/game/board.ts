@@ -1,5 +1,6 @@
 // Puzzle state and Picross DS rules (Normal: mistakes are caught and cost time; Free: no checks, "Try it out").
 import { MegaPairs, BandItem, bandItems, analyzeBand, pairOf } from './mega';
+import { ColorPuzzle, ColorClue, colorClues, colorLine } from './color';
 
 export const EMPTY = 0, FILL = 1, CROSS = 2;
 /** a note of the player's own: counts as empty for everything, stays while the rest of the board is played */
@@ -19,7 +20,7 @@ export function lineClues(line: ArrayLike<boolean | number>): number[] {
   return out;
 }
 
-export interface BoardSnapshot { cells: number[]; trial: number[] | null; mistakes: number; elapsedMs: number; penaltyMs: number; hintRow: number; hintCol: number }
+export interface BoardSnapshot { cells: number[]; trial: number[] | null; colors?: number[]; trialColors?: number[] | null; mistakes: number; elapsedMs: number; penaltyMs: number; hintRow: number; hintCol: number }
 
 export class Board {
   readonly w: number;
@@ -38,7 +39,15 @@ export class Board {
   hintRow = -1;
   hintCol = -1;
   solved = false;
-  private undoStack: Array<{ cells: Uint8Array; trial: Uint8Array | null }> = [];
+  private undoStack: Array<{ cells: Uint8Array; trial: Uint8Array | null; colors: Uint8Array; trialColors: Uint8Array | null }> = [];
+
+  /** Colour puzzles: the palette, per cell the solution's colour (0 empty, k + 1), the clues with their colours,
+   *  and per cell the colour of a filled cell (and of a filled trial cell) */
+  readonly color: ColorPuzzle | null;
+  readonly rowColorClues: ColorClue[][] = [];
+  readonly colColorClues: ColorClue[][] = [];
+  colors: Uint8Array;
+  trialColors: Uint8Array | null = null;
 
   /** Mega puzzles: per line, the first line of its pair (-1: a plain line), and each pair's clue */
   readonly rowPair: Int32Array;
@@ -46,15 +55,25 @@ export class Board {
   readonly bands = new Map<string, BandItem[]>();
   readonly mega: MegaPairs | null;
 
-  constructor(rows: string[], rules: 'easy' | 'normal' | 'free', mega: MegaPairs | null = null) {
+  constructor(rows: string[], rules: 'easy' | 'normal' | 'free', mega: MegaPairs | null = null, color: ColorPuzzle | null = null) {
     this.h = rows.length;
     this.w = rows[0].length;
     this.rules = rules;
+    this.color = color;
+    this.colors = new Uint8Array(this.w * this.h);
     this.solution = new Uint8Array(this.w * this.h);
     for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) this.solution[y * this.w + x] = rows[y][x] === '#' ? 1 : 0;
     this.cells = new Uint8Array(this.w * this.h);
     this.rowClues = [...Array(this.h)].map((_, y) => lineClues(this.solution.subarray(y * this.w, y * this.w + this.w)));
     this.colClues = [...Array(this.w)].map((_, x) => lineClues([...Array(this.h)].map((_, y) => this.solution[y * this.w + x])));
+    if (color) {
+      // colour clues: blocks of different colours may touch, so a line can have more numbers than in black and white
+      this.rowColorClues = [...Array(this.h)].map((_, y) => colorClues(color.cells.subarray(y * this.w, y * this.w + this.w)));
+      this.colColorClues = [...Array(this.w)].map((_, x) => colorClues([...Array(this.h)].map((_, y) => color.cells[y * this.w + x])));
+      this.rowClues = this.rowColorClues.map(c => c.length ? c.map(q => q.n) : [0]);
+      this.colClues = this.colColorClues.map(c => c.length ? c.map(q => q.n) : [0]);
+      mega = null;
+    }
     this.mega = mega && (mega.rows.length || mega.cols.length) ? mega : null;
     this.rowPair = pairOf(this.mega?.rows, this.h);
     this.colPair = pairOf(this.mega?.cols, this.w);
@@ -82,9 +101,16 @@ export class Board {
   }
 
   isTrialCell(x: number, y: number): boolean { return !!this.trial?.[y * this.w + x]; }
+  /** colour puzzles: the colour index of a filled cell (as the player sees it) */
+  colorAt(x: number, y: number): number {
+    const i = y * this.w + x;
+    return this.trial?.[i] ? this.trialColors?.[i] ?? 0 : this.colors[i];
+  }
+  /** colour puzzles: the solution's colour index of a cell (-1: empty) */
+  solColor(i: number): number { return this.color ? this.color.cells[i] - 1 : this.solution[i] ? 0 : -1; }
 
   pushUndo() {
-    this.undoStack.push({ cells: this.cells.slice(), trial: this.trial ? this.trial.slice() : null });
+    this.undoStack.push({ cells: this.cells.slice(), trial: this.trial ? this.trial.slice() : null, colors: this.colors.slice(), trialColors: this.trialColors ? this.trialColors.slice() : null });
     if (this.undoStack.length > 300) this.undoStack.shift();
   }
 
@@ -94,6 +120,7 @@ export class Board {
     this.touch();
     this.cells = s.cells;
     this.trial = s.trial;
+    this.colors = s.colors; this.trialColors = s.trialColors;
     return true;
   }
 
@@ -101,8 +128,8 @@ export class Board {
    * Apply a mark. Returns 'mistake' if Normal rules caught a wrong fill.
    * value: FILL, CROSS or EMPTY (erase).
    */
-  set(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
-    const r = this.set0(x, y, value);
+  set(x: number, y: number, value: Cell, color = 0): 'ok' | 'mistake' | 'nochange' {
+    const r = this.set0(x, y, value, color);
     // only this cell's row and column can change their clue state
     if (r !== 'nochange') {
       this.version++;
@@ -111,9 +138,10 @@ export class Board {
     }
     return r;
   }
-  private set0(x: number, y: number, value: Cell): 'ok' | 'mistake' | 'nochange' {
+  private set0(x: number, y: number, value: Cell, color = 0): 'ok' | 'mistake' | 'nochange' {
     if (this.solved || x < 0 || y < 0 || x >= this.w || y >= this.h) return 'nochange';
     const i = y * this.w + x;
+    if (!this.color) color = 0;
     // marks belong to the board itself, also while trying something out
     if (value === MARK || (value === EMPTY && this.cells[i] === MARK && !this.trial?.[i])) {
       if (value === MARK && this.cells[i] !== EMPTY) return 'nochange';
@@ -123,24 +151,36 @@ export class Board {
     }
     if (this.trial) {
       if (!blank(this.cells[i])) return 'nochange';
-      if (this.trial[i] === value) return 'nochange';
+      if (this.trial[i] === value && (value !== FILL || this.trialColors?.[i] === color)) return 'nochange';
       this.trial[i] = value;
+      (this.trialColors ??= new Uint8Array(this.w * this.h))[i] = value === FILL ? color : 0;
       return 'ok';
     }
-    if (this.cells[i] === value) return 'nochange';
-    if (this.rules !== 'free' && value === FILL && !this.solution[i]) {
-      this.cells[i] = CROSS;
+    if (this.cells[i] === value && (value !== FILL || this.colors[i] === color)) return 'nochange';
+    // Easy / Normal: a fill where the picture has no cell (or another colour) is caught
+    if (this.rules !== 'free' && value === FILL && (!this.solution[i] || (this.color && this.solColor(i) !== color))) {
       this.mistakes++;
       if (this.rules === 'normal') this.penaltyMs += Board.penaltyFor(this.mistakes);
+      // black and white: the cell is crossed out; colour: the right colour is shown (the cell is known now)
+      if (this.color && this.solution[i]) { this.cells[i] = FILL; this.colors[i] = this.solColor(i); }
+      else { this.cells[i] = CROSS; this.colors[i] = 0; }
       return 'mistake';
     }
     // Normal rules: a correctly filled cell stays filled (the game knows it is right)
-    if (this.rules !== 'free' && this.cells[i] === FILL && this.solution[i] && value !== FILL) return 'nochange';
+    if (this.rules !== 'free' && this.cells[i] === FILL && this.solution[i] && (!this.color || this.colors[i] === this.solColor(i)) && value !== FILL) return 'nochange';
     this.cells[i] = value;
+    this.colors[i] = value === FILL ? color : 0;
     return 'ok';
   }
 
   hasMarks(): boolean { return this.cells.includes(MARK); }
+  /** colour puzzles: what is left to fill per colour (cells of the solution not yet filled with that colour) */
+  colorsLeft(): number[] {
+    const left = (this.color?.palette ?? []).map(() => 0);
+    if (!this.color) return left;
+    for (let i = 0; i < this.cells.length; i++) { const k = this.color.cells[i] - 1; if (k >= 0 && !(this.cells[i] === FILL && this.colors[i] === k)) left[k]++; }
+    return left;
+  }
   clearMarks() { this.touch(); for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === MARK) this.cells[i] = EMPTY; this.version++; this.cache.clear(); }
   /** turn every mark into a fill (as if each was filled by hand: wrong ones count as mistakes under the rules) */
   fillMarks(): number {
@@ -149,14 +189,14 @@ export class Board {
     this.touch();
     return mistakes;
   }
-  startTrial() { this.touch(); if (!this.trial) this.trial = new Uint8Array(this.w * this.h); }
+  startTrial() { this.touch(); if (!this.trial) { this.trial = new Uint8Array(this.w * this.h); this.trialColors = new Uint8Array(this.w * this.h); } }
   /** keep the trial marks */
   commitTrial() { this.touch();
     if (!this.trial) return;
-    for (let i = 0; i < this.trial.length; i++) if (this.trial[i]) this.cells[i] = this.trial[i];
-    this.trial = null;
+    for (let i = 0; i < this.trial.length; i++) if (this.trial[i]) { this.cells[i] = this.trial[i]; this.colors[i] = this.trialColors?.[i] ?? 0; }
+    this.trial = null; this.trialColors = null;
   }
-  discardTrial() { this.touch(); this.trial = null; }
+  discardTrial() { this.touch(); this.trial = null; this.trialColors = null; }
 
   filledAt(i: number): boolean {
     const t = this.trial?.[i];
@@ -172,6 +212,11 @@ export class Board {
     if (pair >= 0) return this.band(kind, pair);
     const key = kind + k;
     let li = this.cache.get(key);
+    if (!li && this.color) {
+      const xs = kind === 'r' ? [...Array(this.w)].map((_, x) => [x, k]) : [...Array(this.h)].map((_, y) => [k, y]);
+      li = analyzeColorLine(kind === 'r' ? this.rowColorClues[k] : this.colColorClues[k], xs.map(([x, y]) => this.at(x, y)), xs.map(([x, y]) => this.colorAt(x, y)), this.color.palette.length);
+      this.cache.set(key, li);
+    }
     if (!li) {
       const cells = kind === 'r' ? [...Array(this.w)].map((_, x) => this.at(x, k)) : [...Array(this.h)].map((_, y) => this.at(k, y));
       li = analyzeLine(kind === 'r' ? this.rowClues[k] : this.colClues[k], cells);
@@ -212,6 +257,14 @@ export class Board {
   /** Solved when filled cells reproduce every clue (so puzzles with several solutions are fair). */
   checkSolved(): boolean {
     if (this.trial) return false;
+    if (this.color) {
+      const v = (i: number) => (this.cells[i] === FILL ? this.colors[i] + 1 : 0);
+      const key = (cl: ColorClue[]) => cl.map(c => c.n + ':' + c.c).join();
+      for (let y = 0; y < this.h; y++) if (key(colorClues([...Array(this.w)].map((_, x) => v(y * this.w + x)))) !== key(this.rowColorClues[y])) return false;
+      for (let x = 0; x < this.w; x++) if (key(colorClues([...Array(this.h)].map((_, y) => v(y * this.w + x)))) !== key(this.colColorClues[x])) return false;
+      this.solved = true;
+      return true;
+    }
     const f = Uint8Array.from(this.cells, v => (v === FILL ? 1 : 0));
     for (const [key, items] of this.bands) {
       const k = +key.slice(1);
@@ -236,18 +289,20 @@ export class Board {
   revealHint(rnd = Math.random, row = Math.floor(rnd() * this.h), col = Math.floor(rnd() * this.w)) { this.touch();
     this.hintRow = row;
     this.hintCol = col;
-    for (let x = 0; x < this.w; x++) { const i = this.hintRow * this.w + x; this.cells[i] = this.solution[i] ? FILL : CROSS; }
-    for (let y = 0; y < this.h; y++) { const i = y * this.w + this.hintCol; this.cells[i] = this.solution[i] ? FILL : CROSS; }
+    for (let x = 0; x < this.w; x++) { const i = this.hintRow * this.w + x; this.cells[i] = this.solution[i] ? FILL : CROSS; this.colors[i] = Math.max(0, this.solColor(i)); }
+    for (let y = 0; y < this.h; y++) { const i = y * this.w + this.hintCol; this.cells[i] = this.solution[i] ? FILL : CROSS; this.colors[i] = Math.max(0, this.solColor(i)); }
   }
 
   snapshot(): BoardSnapshot {
-    return { cells: [...this.cells], trial: this.trial ? [...this.trial] : null, mistakes: this.mistakes, elapsedMs: this.elapsedMs, penaltyMs: this.penaltyMs, hintRow: this.hintRow, hintCol: this.hintCol };
+    return { cells: [...this.cells], trial: this.trial ? [...this.trial] : null, ...(this.color ? { colors: [...this.colors], trialColors: this.trialColors ? [...this.trialColors] : null } : {}), mistakes: this.mistakes, elapsedMs: this.elapsedMs, penaltyMs: this.penaltyMs, hintRow: this.hintRow, hintCol: this.hintCol };
   }
 
   restore(s: BoardSnapshot) { this.touch();
     if (s.cells.length !== this.cells.length) return;
     this.cells = Uint8Array.from(s.cells);
     this.trial = s.trial ? Uint8Array.from(s.trial) : null;
+    if (s.colors?.length === this.cells.length) this.colors = Uint8Array.from(s.colors);
+    this.trialColors = s.trialColors ? Uint8Array.from(s.trialColors) : this.trial ? new Uint8Array(this.cells.length) : null;
     this.mistakes = s.mistakes; this.elapsedMs = s.elapsedMs; this.penaltyMs = s.penaltyMs;
     this.hintRow = s.hintRow; this.hintCol = s.hintCol;
   }
@@ -349,4 +404,36 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
   let progress = false;
   for (let i = 0; i < n && !progress; i++) if (blank(cells[i]) && (!canFill[i] || !canEmpty[i])) progress = true;
   return { feasible, done, progress, canFill, canEmpty };
+}
+
+/**
+ * A colour line as the player sees it: which clue numbers are certainly done, and whether a cell can be deduced
+ * (logic hints). cells: EMPTY / FILL / CROSS / MARK, colors: the colour of each filled cell.
+ */
+export function analyzeColorLine(clues: ColorClue[], cells: number[], colors: number[], nCol: number): LineInfo {
+  const n = cells.length, all = (1 << (nCol + 1)) - 1;
+  const mask = cells.map((v, i) => (v === FILL ? 1 << (colors[i] + 1) : v === CROSS ? 1 : all));
+  const r = colorLine(clues, mask);
+  const done = clues.map(() => false);
+  if (!r.ok) return { feasible: false, done, progress: false };
+  const filledAs = (i: number, c: number) => cells[i] === FILL && colors[i] === c;
+  const closed = (i: number, c: number) => i < 0 || i >= n || cells[i] === CROSS || (cells[i] === FILL && colors[i] !== c);
+  clues.forEach((cl, k) => {
+    const s = r.only[k];
+    if (s < 0) return;
+    let full = true;
+    for (let i = s; i < s + cl.n; i++) if (!filledAs(i, cl.c)) full = false;
+    done[k] = full && closed(s - 1, cl.c) && closed(s + cl.n, cl.c);
+  });
+  // the filled cells are exactly the clue: the whole line is done
+  const got = colorClues(cells.map((v, i) => (v === FILL ? colors[i] + 1 : 0)));
+  if (got.length === clues.length && got.every((g, i) => g.n === clues[i].n && g.c === clues[i].c)) done.fill(true);
+  let progress = false;
+  for (let i = 0; i < n && !progress; i++) {
+    if (!blank(cells[i])) continue;
+    const m = r.out[i];
+    // forced: only empty, or only one colour
+    if (m === 1 || (!(m & 1) && (m & (m - 1)) === 0)) progress = true;
+  }
+  return { feasible: true, done, progress };
 }

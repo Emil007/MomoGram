@@ -1,6 +1,7 @@
 // Canvas view of a puzzle: clues pinned to the edges, zoom/pan for large grids, mouse/touch/keyboard/gamepad input.
 import { bandSlots } from './mega';
 import { Board, CROSS, EMPTY, FILL, MARK, Cell, blank } from './board';
+import { inkOn } from './color';
 
 export type Tool = 'fill' | 'cross' | 'mark';
 
@@ -51,6 +52,8 @@ export class BoardView {
   private ctx: CanvasRenderingContext2D;
   board: Board;
   tool: Tool = 'fill';
+  /** colour puzzles: the colour the fill tool paints with */
+  color = 0;
   private ev: ViewEvents;
   private dpr = 1;
   private cssW = 0;
@@ -73,7 +76,7 @@ export class BoardView {
   /** lines a tutorial points at (drawn like the cursor's row and column) */
   focus: { rows: number[]; cols: number[] } | null = null;
   // stroke state
-  private stroke: null | { x0: number; y0: number; axis: 0 | 1 | 2; value: Cell; erase: Cell; pointer: number } = null;
+  private stroke: null | { x0: number; y0: number; axis: 0 | 1 | 2; value: Cell; erase: Cell; eraseColor: number; pointer: number } = null;
   private pointers = new Map<number, { x: number; y: number }>();
   private pinch: null | { d: number; cell: number; cx: number; cy: number; sx: number; sy: number; gx?: number; gy?: number } = null;
   private raf = 0;
@@ -319,10 +322,10 @@ export class BoardView {
     this.showCursor = false;
     const tool: Tool = e.button === 2 ? (this.tool === 'fill' ? 'cross' : 'fill') : this.tool;
     const cur = this.board.at(c.x, c.y);
-    const value = valueFor(tool, cur);
+    const value = this.valueAt(tool, c.x, c.y);
     if (value === null) return;
     this.board.pushUndo();
-    this.stroke = { x0: c.x, y0: c.y, axis: 0, value, erase: cur, pointer: e.pointerId };
+    this.stroke = { x0: c.x, y0: c.y, axis: 0, value, erase: cur, eraseColor: this.board.colorAt(c.x, c.y), pointer: e.pointerId };
     this.cursorX = c.x; this.cursorY = c.y;
     this.paint(c.x, c.y);
     e.preventDefault();
@@ -370,7 +373,10 @@ export class BoardView {
     this.dragLen = Math.abs(b - a) + 1;
     // filling: count the whole block in this line the stroke is part of (filled cells already next to it too)
     if (s.value === FILL && this.stroke) {
-      const at = (i: number) => s.axis === 1 ? this.board.at(i, s.y0) : this.board.at(s.x0, i);
+      const col = (i: number) => s.axis === 1 ? this.board.colorAt(i, s.y0) : this.board.colorAt(s.x0, i);
+      const at0 = (i: number) => s.axis === 1 ? this.board.at(i, s.y0) : this.board.at(s.x0, i);
+      // colour puzzles: only cells of the same colour belong to the block
+      const at = (i: number) => (at0(i) === FILL && (!this.board.color || col(i) === this.color) ? FILL : EMPTY);
       const n = s.axis === 1 ? this.board.w : this.board.h;
       let lo = Math.min(a, b), hi = Math.max(a, b);
       if ([...Array(hi - lo + 1)].every((_, k) => at(lo + k) === FILL)) {
@@ -413,10 +419,13 @@ export class BoardView {
     // a stroke only changes cells that are empty (when marking) or carry the same mark (when erasing)
     if (s) {
       // fills and crosses go over marks; marks only onto empty cells
-      if (s.value === MARK ? cur !== EMPTY : s.value !== EMPTY && !blank(cur)) return;
+      // colour: the first cell may be painted over in another colour (a tap recolours a cell)
+      const recolor = this.board.color && s.value === FILL && cur === FILL && x === s.x0 && y === s.y0;
+      if (!recolor && (s.value === MARK ? cur !== EMPTY : s.value !== EMPTY && !blank(cur))) return;
       if (s.value === EMPTY && cur !== s.erase) return;
+      if (s.value === EMPTY && this.board.color && cur === FILL && this.board.colorAt(x, y) !== s.eraseColor) return;
     }
-    const r = this.board.set(x, y, s ? s.value : FILL);
+    const r = this.board.set(x, y, s ? s.value : FILL, this.color);
     if (r === 'nochange') return;
     if (r === 'mistake') {
       this.mistakeFlash.set(y * this.board.w + x, performance.now());
@@ -441,19 +450,25 @@ export class BoardView {
   pressAtCursor(tool: Tool): Cell {
     if (this.spin) return EMPTY;
     this.showCursor = true;
-    const cur = this.board.at(this.cursorX, this.cursorY);
-    const value = valueFor(tool, cur);
+    const value = this.valueAt(tool, this.cursorX, this.cursorY);
     if (value === null) return EMPTY;
     this.board.pushUndo();
     this.applyAtCursor(value, false);
     return value;
   }
 
+  /** what a tap does here: like valueFor, but in colour puzzles a fill of another colour is painted over */
+  private valueAt(tool: Tool, x: number, y: number): Cell | null {
+    const cur = this.board.at(x, y);
+    if (this.board.color && tool === 'fill' && cur === FILL && this.board.colorAt(x, y) !== this.color) return FILL;
+    return valueFor(tool, cur);
+  }
+
   private applyAtCursor(value: Cell, continuing: boolean) {
     const cur = this.board.at(this.cursorX, this.cursorY);
     if (continuing && (value === MARK ? cur !== EMPTY : value !== EMPTY && !blank(cur))) return;
     if (continuing && value === EMPTY && cur === EMPTY) return;
-    const r = this.board.set(this.cursorX, this.cursorY, value);
+    const r = this.board.set(this.cursorX, this.cursorY, value, this.color);
     if (r === 'mistake') this.mistakeFlash.set(this.cursorY * this.board.w + this.cursorX, performance.now());
     if (r !== 'nochange') { this.dirty = true; this.ev.onChange(r); }
   }
@@ -555,7 +570,14 @@ export class BoardView {
       const v = b.at(x, y), px = ox + x * cs, py = oy + y * cs, i = y * b.w + x;
       const trial = b.isTrialCell(x, y);
       if (v !== FILL && T.cellStyle === 'bevel' && T.cellBevel) bevel(px, py, T.cellBevel);
-      if (v === FILL) {
+      if (v === FILL && b.color) {
+        // colour puzzles: the cell in its colour, a soft light edge; trial cells with a dashed frame
+        const c = b.color.palette[b.colorAt(x, y)] ?? T.fill;
+        ctx.fillStyle = c; ctx.fillRect(px, py, cs, cs);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)'; ctx.fillRect(px, py, cs, Math.max(1, cs / 10)); ctx.fillRect(px, py, Math.max(1, cs / 10), cs);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'; ctx.fillRect(px, py + cs - Math.max(1, cs / 10), cs, Math.max(1, cs / 10)); ctx.fillRect(px + cs - Math.max(1, cs / 10), py, Math.max(1, cs / 10), cs);
+        if (trial) { ctx.save(); ctx.strokeStyle = inkOn(c); ctx.setLineDash([cs / 6, cs / 8]); ctx.lineWidth = Math.max(1, cs / 14); ctx.strokeRect(px + cs * 0.15, py + cs * 0.15, cs * 0.7, cs * 0.7); ctx.restore(); }
+      } else if (v === FILL) {
         const col = trial ? T.trialFill : T.fill;
         if (T.fillStyle === 'inset') {
           // a square inside the cell, like the Game Boy games
@@ -651,6 +673,18 @@ export class BoardView {
     const frameW = Math.max(2, cs / 10);
     const gap = frameW + Math.max(4, Math.min(cs * 0.22, 9));
     const text = (str: string, x: number, y: number, col: string) => { ctx.fillStyle = col; ctx.fillText(str, x, y); };
+    /** a colour clue number: a chip in the block's colour (faded when done, ringed on the cursor's line) */
+    const chip = (str: string, x: number, y: number, ci: number, done: boolean, cur: boolean, blue: boolean, wide: number, tall: number) => {
+      const c = b.color!.palette[ci] ?? '#000';
+      ctx.save();
+      ctx.globalAlpha = done ? 0.28 : 1;
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.roundRect(x - wide / 2, y - tall / 2, wide, tall, Math.min(wide, tall) * 0.25); ctx.fill();
+      if (cur || blue) { ctx.globalAlpha = 1; ctx.strokeStyle = cur ? T.cursor : T.hint; ctx.lineWidth = Math.max(1.5, cs / 12); ctx.stroke(); }
+      ctx.globalAlpha = done ? 0.55 : 1;
+      ctx.fillStyle = inkOn(c); ctx.fillText(str, x, y + 1);
+      ctx.restore();
+    };
     const cc = Math.max(cs, 14);
     ctx.save();
     ctx.beginPath(); ctx.rect(this.clueW, 0, viewW - this.clueW, this.clueH - frameW); ctx.clip();
@@ -683,6 +717,12 @@ export class BoardView {
         continue;
       }
       const clues = b.colClues[x], done = b.colDone(x), blue = this.logicHints && b.colCanProgress(x);
+      if (b.color) {
+        const cl = b.colColorClues[x];
+        cl.forEach((q, k) => chip(String(q.n), ox + x * cs + cs / 2, this.clueH - gap - (cl.length - k - 0.5) * stepV + 1, q.c, !!done[k], x === cueX, blue, cs * 0.86, stepV * 0.9));
+        if (!cl.length) text('0', ox + x * cs + cs / 2, this.clueH - gap - stepV / 2 + 1, T.clueDone);
+        continue;
+      }
       for (let k = 0; k < clues.length; k++) {
         const col = this.ink(done[k] ? T.clueDone : x === cueX ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(x, cueX), done[k]);
         text(String(clues[k] || 0), ox + x * cs + cs / 2, this.clueH - gap - (clues.length - k - 0.5) * stepV + 1, col);
@@ -711,6 +751,12 @@ export class BoardView {
         continue;
       }
       const clues = b.rowClues[y], done = b.rowDone(y), blue = this.logicHints && b.rowCanProgress(y);
+      if (b.color) {
+        const cl = b.rowColorClues[y];
+        cl.forEach((q, k) => chip(String(q.n), this.clueW - gap - (cl.length - k - 0.5) * stepH, oy + y * cs + cs / 2, q.c, !!done[k], y === cueY, blue, stepH * 0.92, cs * 0.86));
+        if (!cl.length) text('0', this.clueW - gap - stepH / 2, oy + y * cs + cs / 2 + 1, T.clueDone);
+        continue;
+      }
       for (let k = 0; k < clues.length; k++) {
         const col = this.ink(done[k] ? T.clueDone : y === cueY ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(y, cueY), done[k]);
         text(String(clues[k] || 0), this.clueW - gap - (clues.length - k - 0.5) * stepH, oy + y * cs + cs / 2 + 1, col);

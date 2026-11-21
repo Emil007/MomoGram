@@ -39,7 +39,7 @@ const VOLS: Record<string, { id: string; vol: number; ja: string }> = {
 
 registerImporter({
   name: 'SIMPLE DS: THE Illust Puzzle (DS)',
-  version: 1, // raise when the importer reads more or reads differently
+  version: 2, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && !!VOLS[new NdsRom(d).gameCode.slice(0, 3)],
   read: d => {
     const rom = new NdsRom(d);
@@ -60,7 +60,7 @@ registerImporter({
         const pz: PackPuzzle = {
           id: `${group}-${String(i + 1).padStart(3, '0')}`, width: p.w, height: p.h,
           rows: rowsFromBits(p.w, p.h, (x, y) => p.cells[y * 15 + x] > 0),
-          color: { palette: COLOURS, rows: [...Array(p.h)].map((_, y) => [...Array(p.w)].map((_, x) => { const c = p.cells[y * 15 + x]; return c ? String(c - 1) : '.'; }).join('')) },
+          colorGame: true, color: { palette: COLOURS, rows: [...Array(p.h)].map((_, y) => [...Array(p.w)].map((_, x) => { const c = p.cells[y * 15 + x]; return c ? String(c - 1) : '.'; }).join('')) },
         };
         if (nm[i]?.trim()) pz.name = { ja: nm[i].trim() };
         const sz = `${p.w}x${p.h}`;

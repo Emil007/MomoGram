@@ -4,6 +4,7 @@ import { oggLength } from './audio/fsb5';
 import { bcstmLength } from './audio/bcstm';
 import { fullTitle } from './packs/importers/ctr-picross';
 import { MegaPairs, generateMega, megaSolutionCount, MEGA_GEN } from './game/mega';
+import { colorOf, colorSolutionCount, inkOn } from './game/color';
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
@@ -89,7 +90,7 @@ export function levelUnlocked(pack: Pack, lv: PackLevel): boolean {
 export async function boot() {
   applyLook();
   const want = (settings.lang || navigator.language.slice(0, 2)) as Lang;
-  setLang(['en', 'de', 'fr', 'it', 'es', 'ja', 'ko'].includes(want) ? want : 'en');
+  setLang((want in LANG_NAMES ? want : 'en') as Lang);
   storage.persist();
   ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
   // older versions: a stored Picross DS ROM becomes a pack once, then the ROM is removed
@@ -113,7 +114,7 @@ export async function boot() {
   }
   home();
   // a new player (nothing solved yet) is offered the tutorial once
-  if (localStats('normal').points === 0 && localStats('mega').points === 0) setTimeout(() => { if (document.querySelector('.home')) offerTutorial(); }, 600);
+  setTimeout(() => { if (document.querySelector('.home')) offerTutorial(); }, 600);
   setTimeout(backfillPoints, 1500);
   // installed web app: .momopack files opened with it (File Handling API, Chromium)
   (window as any).launchQueue?.setConsumer(async (p: { files?: Array<{ getFile(): Promise<File> }> }) => {
@@ -182,12 +183,16 @@ export function pickFiles(accept: string, multiple = true): Promise<File[]> {
 function logo(): HTMLElement {
   // original MomoGram mark: an hourglass drawn in grid cells
   const rows = ['#######', '.#####.', '..###..', '...#...', '..#.#..', '.#...#.', '#######'];
+  const m = curMode();
   const g = h('div', { class: 'logo-grid', 'aria-hidden': 'true' });
-  rows.forEach(r => [...r].forEach(c => g.append(h('i', { class: c === '#' ? 'on' : '' }))));
-  return h('div', { class: 'logo' + (settings.mega ? ' mega' : '') }, g, h('div', {},
-    // "MEGA" is a stamp over the name: the logo keeps its size and place in both modes
-    h('div', { class: 'logo-text' }, settings.mega ? h('span', { class: 'logo-mega', 'aria-label': 'Mega' }, 'MEGA') : null,
-      h('div', { class: 'logo-name' }, 'MomoGram'),
+  rows.forEach((r, y) => [...r].forEach((c, x) => g.append(h('i', { class: c === '#' ? 'on' : '', style: c === '#' && m === 'color' ? `--k:${(x + y * 3) % 6}` : undefined }))));
+  // Colour mode: every letter of the name in its own colour
+  const name = m === 'color' ? h('div', { class: 'logo-name rainbow' }, ...[...'MomoGram'].map((ch, i) => h('span', { style: `--k:${i % 6}` }, ch))) : h('div', { class: 'logo-name' }, 'MomoGram');
+  return h('div', { class: 'logo' + (m !== 'normal' ? ' ' + m : '') }, g, h('div', {},
+    // "MEGA" / "COLOR" is a stamp over the name: the logo keeps its size and place in every mode
+    h('div', { class: 'logo-text' },
+      m === 'mega' ? h('span', { class: 'logo-mega', 'aria-label': 'Mega' }, 'MEGA') : m === 'color' ? h('span', { class: 'logo-mega logo-color', 'aria-label': 'Color' }, 'COLOR') : null,
+      name,
       h('div', { class: 'tagline' }, t('tagline')))));
 }
 
@@ -268,13 +273,13 @@ async function backfillPoints() {
   setPoints(out);
 }
 
-/** the switch between normal and Mega puzzles for the whole game */
+/** the switch between plain, Mega and Colour puzzles for the whole game */
 function megaSwitch(): HTMLElement {
-  const b = h('button', { class: 'mega-switch' + (settings.mega ? ' on' : ''), role: 'switch', 'aria-checked': String(settings.mega), title: t('megaHelp'),
-    onClick: () => { settings.mega = !settings.mega; saveSettings(); home(); } },
-    h('span', { class: 'ms-opt' + (settings.mega ? '' : ' cur') }, t('megaOff')),
-    h('span', { class: 'ms-opt' + (settings.mega ? ' cur' : '') }, t('megaOn')));
-  return b;
+  const m = curMode();
+  const opt = (v: Mode, label: string) => h('button', { class: 'ms-opt ms-' + v + (m === v ? ' cur' : ''), role: 'radio', 'aria-checked': String(m === v),
+    onClick: () => { if (m !== v) { setMode(v); home(); if (v !== 'normal') offerTutorial(v); } } }, label);
+  return h('div', { class: 'mega-switch three', role: 'radiogroup', title: t('megaHelp') },
+    opt('normal', t('megaOff')), opt('mega', t('megaOn')), opt('color', t('colorOn')));
 }
 
 // ---------------------------------------------------------------- home: the game library
@@ -386,8 +391,12 @@ darkMq?.addEventListener?.('change', () => applyLook());
 /** Mega mode: a small glowing dot on games (and folders) whose Mega puzzles come from the game itself */
 const hasGameMega = (p: Pack) => p.levels.some(l => l.puzzles.some(z => z.mega));
 function megaOrb(packs: Pack[]): HTMLElement | null {
-  if (curMode() !== 'mega' || !packs.some(hasGameMega)) return null;
+  if (curMode() !== 'mega' || settings.megaMark !== 'mark' || !packs.some(hasGameMega)) return null;
   return h('span', { class: 'mega-orb', title: t('megaFromGameHelp'), 'aria-label': t('megaFromGame') });
+}
+/** the same dot on a game's modes and levels, so the way to its own Mega puzzles is marked all along */
+function megaOrbLevels(lvs: PackLevel[]): HTMLElement | null {
+  return megaOrb([{ levels: lvs } as Pack]);
 }
 
 function gameCard(p: Pack, onOpen: () => void): HTMLElement {
@@ -526,7 +535,7 @@ function packLevels(pack: Pack, back: () => void = home) {
     const lvs = pack.levels.filter(l => (l.group ?? '') === g);
     // a mode with a single level (Picross DS "Easy") opens its puzzles directly
     const open = () => lvs.length === 1 ? puzzleList(pack, lvs[0], self) : groupLevels(pack, g, self, back);
-    list.append(h('button', { class: 'btn level mode-' + g, onClick: open }, h('b', {}, groupTitle(pack, g)), h('small', {}, progressText(pack, lvs))));
+    list.append(h('button', { class: 'btn level mode-' + g, onClick: open }, h('b', {}, groupTitle(pack, g), megaOrbLevels(lvs)), h('small', {}, progressText(pack, lvs))));
   }
   screen(header(pickAny(pack.title, packLang()), back), packInfo(pack), list, packFooter(pack, self));
 }
@@ -560,7 +569,7 @@ function groupLevels(pack: Pack, g: string, back: () => void, packBack: () => vo
       class: 'btn level' + (open ? '' : ' locked') + (done === lv.puzzles.length ? ' complete' : ''),
       disabled: open ? undefined : true, title: open ? '' : hint,
       onClick: () => puzzleList(pack, lv, self),
-    }, h('b', {}, pickAny(lv.title, packLang())), h('small', {}, open ? `${sz} · ${done}/${lv.puzzles.length}` : '🔒 ' + hint)));
+    }, h('b', {}, pickAny(lv.title, packLang()), megaOrbLevels([lv])), h('small', {}, open ? `${sz} · ${done}/${lv.puzzles.length}` : '🔒 ' + hint)));
   }
   const title = g ? `${pickAny(pack.title, packLang())} · ${groupTitle(pack, g)}` : pickAny(pack.title, packLang());
   screen(header(title, back), list, back === packBack ? packFooter(pack, self) : null);
@@ -619,6 +628,14 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))));
 }
 
+/** colour puzzles: how many solutions (worked out once per picture, with a step budget: the same everywhere) */
+function colorCountOf(pz: PackPuzzle): 0 | 1 | 2 {
+  const cp = colorOfPz(pz)!;
+  const k = 'c' + pz.rows.join('/') + '|' + Array.from(cp.cells).join('') + '|' + cp.palette.join();
+  let c = solutionCounts.get(k);
+  if (c === undefined) { c = colorSolutionCount(cp, 30000); solutionCounts.set(k, c); }
+  return c;
+}
 /** whether a puzzle has more than one solution (worked out once per pattern) */
 const solutionCounts = new Map<string, 0 | 1 | 2>();
 function solutionCountOf(rows: string[], mega: MegaPairs | null = null): 0 | 1 | 2 {
@@ -657,7 +674,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     fastestRow(pack.id, pz.id),
     difficultyPicker(lv, () => puzzleStart(pack, lv, i, back)),
     h('p', { class: 'rules' }, rulesText(rulesFor(lv))),
-    solutionCountOf(pz.rows, megaPairsOf(pz)) === 2 ? h('p', { class: 'warn-multi' }, '⚠ ' + t('multiSolution')) : null,
+    (colorOfPz(pz) ? colorCountOf(pz) : solutionCountOf(pz.rows, megaPairsOf(pz))) === 2 ? h('p', { class: 'warn-multi' }, '⚠ ' + t('multiSolution')) : null,
     megaBadge(pz),
     h('button', { class: 'btn primary big start', onClick: go }, icon('play'), saved ? t('continue') + ' · ' + formatTime(saved.state.elapsedMs + saved.state.penaltyMs) : t('start')),
     saved ? h('button', { class: 'btn ghost', onClick: () => { clearBoard(pack.id, lv.id, pz.id); play(pack, lv, i, back, undefined, true); } }, t('restart')) : null));
@@ -684,15 +701,26 @@ function toolSwitchArt(): Element {
 type TutStep = { text: string; rows?: number[]; cols?: number[]; done?: (b: Board) => boolean };
 const TUT_PUZZLE = ['#####', '#.#.#', '#####', '.###.', '..#..'];
 const TUT_MEGA = ['#..##', '#..##', '#.#..', '###..', '.###.'];
-function tutorialScreen(back: () => void, lesson: 'basic' | 'mega' = 'basic') {
+const TUT_COLOR = ['.R.R.', 'RRRRR', '.RRR.', '..G..', '.GGG.'];
+const TUT_PAL = ['#e0413a', '#3aa64c'];
+type Lesson = 'basic' | 'mega' | 'color';
+function tutorialScreen(back: () => void, lesson: Lesson = 'basic') {
   themeRoot(null);
-  const mega = lesson === 'mega';
-  const rowsOf = mega ? TUT_MEGA : TUT_PUZZLE;
-  const board = new Board(rowsOf, 'easy', mega ? { rows: [1], cols: [] } : null);
+  const mega = lesson === 'mega', colorL = lesson === 'color';
+  const rowsOf = mega ? TUT_MEGA : colorL ? TUT_COLOR.map(r => r.replace(/[A-Z]/g, '#')) : TUT_PUZZLE;
+  const cp = colorL ? { w: 5, h: 5, palette: TUT_PAL, cells: Uint8Array.from(TUT_COLOR.join(''), c => (c === 'R' ? 1 : c === 'G' ? 2 : 0)) } : null;
+  const board = new Board(rowsOf, 'easy', mega ? { rows: [1], cols: [] } : null, cp);
+  const colorRow = (b: Board, y: number, want: string) => [...want].every((c, x) => c === '.' || (b.at(x, y) === FILL && b.colorAt(x, y) === (c === 'R' ? 0 : 1)));
   const row = (b: Board, y: number) => [...Array(b.w)].map((_, x) => b.at(x, y));
   const col = (b: Board, x: number) => [...Array(b.h)].map((_, y) => b.at(x, y));
   const filled = (cells: number[], want: number[]) => want.every(i => cells[i] === FILL);
-  const steps: TutStep[] = mega ? [
+  const steps: TutStep[] = colorL ? [
+    { text: t('tutC1') },
+    { text: t('tutC2'), rows: [1], done: b => colorRow(b, 1, 'RRRRR') },
+    { text: t('tutC3'), cols: [2], done: b => [1, 2, 3, 4].every(y => b.at(2, y) === FILL && b.colorAt(2, y) === (y < 3 ? 0 : 1)) },
+    { text: t('tutC4'), done: b => b.checkSolved() },
+    { text: t('tutCEnd') },
+  ] : mega ? [
     { text: t('tutM1') },
     { text: t('tutM2'), rows: [1, 2] },
     { text: t('tutM3'), rows: [1, 2], done: b => b.at(0, 1) === FILL && b.at(0, 2) === FILL },
@@ -719,16 +747,24 @@ function tutorialScreen(back: () => void, lesson: 'basic' | 'mega' = 'basic') {
   const view: BoardView = new BoardView(canvas, board, {
     onChange: r => { Snd.sfx(r === 'mistake' ? 'mistake' : 'tap'); check(); },
   });
+  // colour lesson: the palette
+  const palette = cp ? h('div', { class: 'palette' }) : null;
+  const drawPalette = () => { if (cp) toolBtn.style.setProperty('--tf', cp.palette[view.color]); palette?.replaceChildren(...cp!.palette.map((c, k) => h('button', {
+    class: 'swatch' + (view.color === k && view.tool === 'fill' ? ' on' : ''), style: `--sw:${c}; --ink:${inkOn(c)}`,
+    onClick: () => { view.color = k; setTool('fill'); },
+  }, h('span', {}, String(board.colorsLeft()[k] || '✓'))))); };
   function setTool(tool: 'fill' | 'cross') {
     view.tool = tool;
     toolBtn.classList.toggle('crossing', tool === 'cross');
+    drawPalette();
   }
   function check() {
+    drawPalette();
     const st = steps[at];
     if (st.done?.(board)) setTimeout(() => { if (steps[at] === st) { Snd.sfx('clear'); go(at + 1); } }, 350);
   }
   function go(i: number) {
-    if (i >= steps.length) { localStorage.setItem('momogram.tutorialDone', '1'); leave(); return; }
+    if (i >= steps.length) { leave(); return; }
     at = i;
     const st = steps[i];
     textEl.textContent = st.text;
@@ -739,13 +775,13 @@ function tutorialScreen(back: () => void, lesson: 'basic' | 'mega' = 'basic') {
     nextBtn.style.visibility = st.done && !last ? 'hidden' : ''; // keeps its space: the board doesn't move
     nextBtn.textContent = last ? t('done') : t('tutNext');
     extra.replaceChildren();
-    if (last && !mega) extra.append(h('button', { class: 'btn', onClick: () => { ro.disconnect(); view.destroy(); tutorialScreen(back, 'mega'); } }, t('tutMegaToo')));
+    if (last && lesson === 'basic') extra.append(h('button', { class: 'btn', onClick: () => { ro.disconnect(); view.destroy(); tutorialScreen(back, 'mega'); } }, t('tutMegaToo')));
     check();
   }
   const extra = h('div', { class: 'tut-extra' });
-  screen(header(mega ? t('tutorialMega') : t('tutorial'), leave),
+  screen(header(mega ? t('tutorialMega') : colorL ? t('tutorialColor') : t('tutorial'), leave),
     h('div', { class: 'tut' }, h('div', { class: 'tut-card card' }, dots, textEl, h('div', { class: 'row wrap tut-btns' }, nextBtn, extra)),
-      wrap, h('nav', { class: 'tools tut-tools' }, toolBtn, h('span', { class: 'gap' }), undoBtn)));
+      wrap, palette, h('nav', { class: 'tools tut-tools' }, toolBtn, h('span', { class: 'gap' }), undoBtn)));
   const ro = new ResizeObserver(() => {
     const w = wrap.clientWidth, hh = wrap.clientHeight; // inside the frame
     if (w !== view.width || hh !== view.height) view.resize(w, hh);
@@ -754,13 +790,14 @@ function tutorialScreen(back: () => void, lesson: 'basic' | 'mega' = 'basic') {
   go(0);
 }
 
-/** first start: offer the tutorial once (afterwards it's in the options) */
-async function offerTutorial() {
-  if (localStorage.getItem('momogram.tutorialAsked')) return;
-  localStorage.setItem('momogram.tutorialAsked', '1');
+/** the first visit (and the first switch to Mega or Colour): offer that tutorial once; afterwards it's in the options */
+async function offerTutorial(lesson: Lesson = 'basic') {
+  const key = 'momogram.tutorialAsked' + (lesson === 'basic' ? '' : '.' + lesson);
+  if (localStorage.getItem(key)) return;
+  localStorage.setItem(key, '1');
   let yes = false;
-  await choose(t('tutAsk'), [[t('tutYes'), () => { yes = true; }], [t('tutNo'), () => {}]]);
-  if (yes) tutorialScreen(home);
+  await choose(t(lesson === 'mega' ? 'tutAskMega' : lesson === 'color' ? 'tutAskColor' : 'tutAsk'), [[t('tutYes'), () => { yes = true; }], [t('tutNo'), () => {}]]);
+  if (yes) tutorialScreen(home, lesson);
 }
 
 /** home: is this profile in sync with the server? tap to sync now */
@@ -844,7 +881,7 @@ async function scoresScreen() {
     const seg = <T extends string>(cur: T, opts: Array<[T, string]>, set: (v: T) => void) => h('div', { class: 'seg mini' }, ...opts.map(([v, l]) =>
       h('button', { class: 'segbtn' + (cur === v ? ' on' : ''), onClick: () => { set(v); draw(); } }, l)));
     body.append(h('div', { class: 'score-switches' },
-      seg<Mode>(mode, [['normal', t('normalMode')], ['mega', 'Mega']], v => { scoreMode = v; }),
+      seg<Mode>(mode, [['normal', t('normalMode')], ['mega', 'Mega'], ['color', t('colorOn')]], v => { scoreMode = v; }),
       seg<'elo' | 'points'>(scoreSort, [['elo', 'PixElo'], ['points', t('pointsTab')]], v => { scoreSort = v; })));
     if (!users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); if (note) body.append(h('p', { class: 'fine' }, note)); return; }
 
@@ -937,37 +974,87 @@ function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
 }
 
 /** every game in the library: MomoGram's starter puzzles first, then the imported games */
-function allPacks(): Pack[] { const ps = [STARTER, ...ctx.packs]; return ps.map(settings.mega ? megaView : plainView); }
+function allPacks(): Pack[] {
+  const ps = [STARTER, ...ctx.packs], m = curMode();
+  if (m === 'mega') return ps.map(megaView).filter(p => p.levels.length);
+  if (m === 'color') return ps.map(colorView).filter(p => p.levels.length);
+  return ps.map(plainView);
+}
 
 // ---------------------------------------------------------------- Mega mode
 // The whole game switches: every game shows its puzzles as Mega puzzles. A puzzle's Mega version is the game's
 // own (PICROSS e6–e9, the Switch games, S+ for every e game) or chosen by MomoGram (game/mega.ts: the same on
 // every device). Mega puzzles are puzzles of their own for progress and scores: their ids end in "@mega".
 const MEGA = '@mega';
-const curMode = (): Mode => (settings.mega ? 'mega' : 'normal');
+const curMode = (): Mode => settings.mode ?? (settings.mega ? 'mega' : 'normal');
+function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); }
+const COLOR = '@color';
 /** which rules a medal is earned with (its time is what points look at) */
 const RULES_OF: Record<string, string> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'free' };
 const views = new WeakMap<Pack, Pack>(), megaViews = new WeakMap<Pack, Pack>(), originals = new WeakMap<Pack, Pack>();
 const keep = (levels: PackLevel[]) => levels.filter(l => l.puzzles.length);
 function plainView(p: Pack): Pack {
-  if (!p.levels.some(l => l.puzzles.some(z => z.megaOnly))) return p;
+  if (!p.levels.some(l => l.puzzles.some(z => z.megaOnly || z.colorOnly))) return p;
   let v = views.get(p);
-  if (!v) { v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.megaOnly) }))) }; views.set(p, v); originals.set(v, p); }
+  if (!v) { v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.megaOnly && !z.colorOnly) }))) }; views.set(p, v); originals.set(v, p); }
   return v;
 }
+/** Mega mode: every puzzle (or, with "only the games' own", the ones the game has as Mega puzzles) */
+const megaViewsOnly = new WeakMap<Pack, Pack>();
 function megaView(p: Pack): Pack {
-  let v = megaViews.get(p);
+  const only = settings.megaMark === 'only', cache = only ? megaViewsOnly : megaViews;
+  let v = cache.get(p);
   if (!v) {
-    v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.map(z => ({ ...z, id: z.id + MEGA, origin: z.origin && z.origin + MEGA })) }))) };
-    megaViews.set(p, v); originals.set(v, p);
+    v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.colorOnly && (!only || z.mega)).map(z => ({ ...z, id: z.id + MEGA, origin: z.origin && z.origin + MEGA })) }))) };
+    cache.set(p, v); originals.set(v, p);
   }
   return v;
 }
+/** Colour mode: the puzzles with a colour version (the game's own colour puzzles, or a colour picture with few colours) */
+const colorViews = new WeakMap<Pack, Pack>();
+function colorView(p: Pack): Pack {
+  let v = colorViews.get(p);
+  if (!v) {
+    v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.megaOnly && colorPlayable(z)).map(z => ({ ...z, mega: undefined, id: z.id + COLOR, origin: z.origin && z.origin + COLOR })) }))) };
+    colorViews.set(p, v); originals.set(v, p);
+  }
+  return v;
+}
+/**
+ * Whether a puzzle has a colour version: the game's own colour puzzles always; a colour picture of a game (few
+ * colours) only when it has exactly one solution as a colour puzzle. Worked out once per picture and kept on this
+ * device; the solver works with a step budget, so every device decides the same.
+ */
+const COLOR_KEY = 'momogram.colorOk';
+let colorOkCache: Record<string, 0 | 1> = (() => { try { return JSON.parse(localStorage.getItem(COLOR_KEY) || '{}'); } catch { return {}; } })();
+let colorOkDirty = false;
+function colorPlayable(z: PackPuzzle): boolean {
+  const cp = colorOf(z);
+  if (!cp) return false;
+  if (z.colorGame) return true;
+  let hsh = 2166136261;
+  for (const c of z.rows.join('/') + Array.from(cp.cells).join('') + cp.palette.join()) { hsh ^= c.charCodeAt(0); hsh = Math.imul(hsh, 16777619); }
+  const k = `1:${z.width}x${z.height}:${(hsh >>> 0).toString(36)}`;
+  if (!(k in colorOkCache)) {
+    colorOkCache[k] = colorSolutionCount(cp, 30000) === 1 ? 1 : 0;
+    if (!colorOkDirty) { colorOkDirty = true; setTimeout(() => { colorOkDirty = false; try { localStorage.setItem(COLOR_KEY, JSON.stringify(colorOkCache)); } catch { /* full */ } }, 500); }
+  }
+  return colorOkCache[k] === 1;
+}
+/** the colour version a puzzle is played with in Colour mode */
+function colorOfPz(pz: PackPuzzle) { return pz.id.endsWith(COLOR) ? colorOf(pz) : null; }
 /** the stored pack behind a view (for changes that are saved) */
 const original = (p: Pack) => originals.get(p) ?? p;
 
+/** where a Colour puzzle comes from: the game's own colour puzzles, or MomoGram's colour version of a picture */
+function colorBadge(pz: PackPuzzle): HTMLElement | null {
+  if (!pz.id.endsWith(COLOR)) return null;
+  const own = !!pz.colorGame;
+  return h('p', { class: 'mega-src ' + (own ? 'src-game' : 'src-momo'), title: own ? t('colorFromGameHelp') : t('colorByMomoHelp') }, own ? '🎨 ' + t('colorFromGame') : '✨ ' + t('colorByMomo'));
+}
 /** where a Mega puzzle's mega numbers come from: the game itself, or MomoGram */
 function megaBadge(pz: PackPuzzle): HTMLElement | null {
+  if (pz.id.endsWith(COLOR)) return colorBadge(pz);
   if (!pz.id.endsWith(MEGA)) return null;
   const own = !!pz.mega, none = !own && !megaPairsOf(pz);
   return h('p', { class: 'mega-src ' + (own ? 'src-game' : 'src-momo'), title: own ? t('megaFromGameHelp') : t('megaByMomoHelp') },
@@ -1241,7 +1328,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // a board left earlier is picked up again
   if (!restore && !fresh) restore = getBoard(pack.id, lv.id, pz.id)?.state;
   const rules = rulesFor(lv);
-  const board = new Board(pz.rows, rules, megaPairsOf(pz));
+  const board = new Board(pz.rows, rules, megaPairsOf(pz), colorOfPz(pz));
   if (restore) board.restore(restore); else board.crossEmptyLines();
   playMusicFor(pack);
 
@@ -1317,7 +1404,21 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const tools = h('nav', { class: 'tools' }, h('div', { class: 'tool-main' }, toolBtn, markBtn, lensBtn), h('span', { class: 'gap' }), h('div', { class: 'tool-side' }, undoBtn, trialBtn));
 
   top.append(menuBtn);
-  screen(h('div', { class: 'play side-bottom' + (settings.toolsRight ? ' tools-right' : '') }, top, boardWrap, tools));
+  // colour puzzles: the colours to paint with, with the tools at the bottom (or beside the board in landscape),
+  // each showing how many of its cells are still missing
+  const palette = board.color ? h('div', { class: 'palette', role: 'radiogroup', 'aria-label': t('colorOn') }) : null;
+  const drawPalette = () => {
+    if (!palette || !board.color) return;
+    toolBtn.style.setProperty('--tf', board.color.palette[view.color] ?? '#1a1a1a'); // the fill tool in the colour it paints
+    const left = board.colorsLeft();
+    palette.replaceChildren(...board.color.palette.map((c, k) => h('button', {
+      class: 'swatch' + (view.color === k && view.tool === 'fill' ? ' on' : '') + (left[k] === 0 ? ' done' : ''),
+      style: `--sw:${c}; --ink:${inkOn(c)}`, role: 'radio', 'aria-checked': String(view.color === k), title: `${k + 1}`,
+      onClick: () => { view.color = k; setTool('fill'); drawPalette(); },
+    }, h('span', {}, left[k] ? String(left[k]) : '✓'))));
+  };
+  if (palette) tools.prepend(palette);
+  screen(h('div', { class: 'play side-bottom' + (settings.toolsRight ? ' tools-right' : '') + (palette ? ' colored' : '') }, top, boardWrap, tools));
   const colors = packColors(pack);
 
   const view = new BoardView(canvas, board, {
@@ -1358,6 +1459,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
       toolBtn.classList.add('swapping'); setTimeout(() => toolBtn.classList.remove('swapping'), 160);
     }
     toolBtn.classList.toggle('crossing', lastTool === 'cross');
+    drawPalette();
     const l = lastTool === 'fill' ? t('fill') : t('cross');
     toolBtn.title = l; toolBtn.setAttribute('aria-label', l);
   }
@@ -1376,6 +1478,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   }
 
   function updateInfo() {
+    drawPalette();
     timeEl.textContent = formatTime(Math.min(board.totalMs, 99 * 60_000 + 59_000));
     timeEl.classList.toggle('over', board.totalMs >= TIME_LIMIT);
     mistakesEl.textContent = board.mistakes ? `✕${board.mistakes}` : '';
@@ -1390,7 +1493,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     const ox = (W - board.w * sc) / 2, oy = (H - board.h * sc) / 2;
     for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) {
       const v = board.at(x, y);
-      if (v === FILL) { pc.fillStyle = board.isTrialCell(x, y) ? '#e08a2c' : '#1a1a1a'; pc.fillRect(ox + x * sc, oy + y * sc, Math.ceil(sc), Math.ceil(sc)); }
+      if (v === FILL) { pc.fillStyle = board.isTrialCell(x, y) ? '#e08a2c' : board.color ? board.color.palette[board.colorAt(x, y)] ?? '#1a1a1a' : '#1a1a1a'; pc.fillRect(ox + x * sc, oy + y * sc, Math.ceil(sc), Math.ceil(sc)); }
     }
     if (view.zoomed) {
       const v = view.visibleCells();
@@ -1480,7 +1583,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
         box.replaceChildren(h('h3', {}, t('menu')));
         box.append(btn(t('resume'), end, 'btn primary'));
         if (board.hasMarks()) {
-          box.append(btn(t('fillMarks'), () => { end(); board.pushUndo(); if (board.fillMarks()) Snd.sfx('mistake'); view.invalidate(); updateInfo(); if (board.checkSolved()) solved(); }));
+          if (!board.color) box.append(btn(t('fillMarks'), () => { end(); board.pushUndo(); if (board.fillMarks()) Snd.sfx('mistake'); view.invalidate(); updateInfo(); if (board.checkSolved()) solved(); }));
           box.append(btn(t('clearMarks'), () => { end(); board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }));
         }
         // music: pause / continue the same song, or the next one; the menu stays open
@@ -1912,7 +2015,8 @@ function optionsScreen() {
     h('button', { class: 'btn big opt-packs', onClick: () => packsScreen(optionsScreen) }, h('b', {}, '📦 ' + t('packs')), h('small', {}, t('packsHelp'))),
     h('div', { class: 'row tut-opts' },
       h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen) }, '🎓 ' + t('tutorial')),
-      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'mega') }, '🎓 ' + t('tutorialMega'))),
+      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'mega') }, '🎓 ' + t('tutorialMega')),
+      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'color') }, '🎓 ' + t('tutorialColor'))),
     card(t('secSound'),
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,
@@ -1926,6 +2030,7 @@ function optionsScreen() {
     card(t('secLook'),
       row(t('look'), seg('look', [['auto', t('lookAuto')], ['light', t('lookLight')], ['dark', t('lookDark')]], () => applyLook())),
       row(t('packColors'), toggle('packColors')),
+      row(t('megaOrbOpt'), seg('megaMark', [['none', t('megaMarkNone')], ['mark', t('megaMarkDot')], ['only', t('megaMarkOnly')]])),
       row(t('toolsRight'), toggle('toolsRight')),
       row(t('language'), langSel)),
     card(t('secSave'), saveSection()),
@@ -1970,7 +2075,7 @@ function galleryScreen() {
 
 /** a picture of a puzzle's board, half solved (filled and crossed cells, greyed clues), in its game's look */
 async function boardShot(pack: Pack, pz: PackPuzzle): Promise<HTMLImageElement> {
-  const board = new Board(pz.rows, 'free', megaPairsOf(pz));
+  const board = new Board(pz.rows, 'free', megaPairsOf(pz), colorOfPz(pz));
   for (let y = 0; y < board.h; y++) for (let x = 0; x < board.w; x++) {
     if (y >= board.h / 2 && (x + y) % 3) continue;
     board.cells[y * board.w + x] = board.solution[y * board.w + x] ? FILL : CROSS;

@@ -25,6 +25,10 @@ export interface PackPuzzle {
   mega?: { rows: number[]; cols: number[] };
   /** a puzzle the game has only as a Mega puzzle: shown in Mega mode only */
   megaOnly?: boolean;
+  /** the colour picture is the game's own colour puzzle (played in Colour mode as it is) */
+  colorGame?: boolean;
+  /** a puzzle the game has only as a colour puzzle: shown in Colour mode only */
+  colorOnly?: boolean;
 }
 
 export interface PackLevel {
@@ -182,7 +186,7 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   for (const l of b.levels) for (const p of l.puzzles) {
     const q = matched.get(p);
     // the Mega version of a puzzle may come from the other release (PICROSS S+ has one for every e game)
-    if (q) { const n = { ...p.name, ...q.name }; if (Object.keys(n).length) q.name = n; else delete q.name; if (!q.mega && p.mega) q.mega = p.mega; continue; }
+    if (q) { const n = { ...p.name, ...q.name }; if (Object.keys(n).length) q.name = n; else delete q.name; if (!q.mega && p.mega) q.mega = p.mega; if (p.color && (!q.color || (p.colorGame && !q.colorGame))) { q.color = p.color; if (p.colorGame) q.colorGame = true; } continue; }
     // exclusive to the other version: into the level it has there, or a level of its own
     const x: PackPuzzle = JSON.parse(JSON.stringify(p));
     delete (x as any).anim; // animation data belongs to the other version's files

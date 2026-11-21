@@ -17,7 +17,8 @@
 //   16 BGR555 colours, width × height cells (bit 7 = filled, bits 0-6 = colour), the column clues, the row clues.
 // Format B (questNN.bin): records one after another, each padded to an even length: u8 width, u8 height, u16 0,
 //   20 BGR555 colours (the picture's 16 colours are entries 4-19), width × height cells (bit 4 = filled,
-//   bits 0-3 = colour; the colour puzzles use bits 4-7 for the clue colour). A 300-byte note ends each file.
+//   bits 0-3 = colour; the colour puzzles (quest06*.bin, Colorful Logic) use bits 4-7 for the clue colour:
+//   1 = black, 2-4 = the record's first three colours). A 300-byte note ends each file.
 //   The answers of these games are drawn as pictures of text, so they have no names yet.
 // Music: snd/sound_data.sdat.
 import { registerImporter } from './index';
@@ -76,15 +77,28 @@ function readA(rom: NdsRom): PackLevel[] {
 
 function readB(rom: NdsRom): PackLevel[] {
   const levels: PackLevel[] = [];
-  const files = rom.fileNames().filter(n => /^quest\/quest\d\d(_\d)?\.bin$/.test(n) && !/quest06/.test(n)).sort();
+  const files = rom.fileNames().filter(n => /^quest\/quest\d\d(_\d)?\.bin$/.test(n)).sort();
   files.forEach((name, li) => {
     const f = rom.fileByName(name)!, puzzles: PackPuzzle[] = [];
     const tag = name.match(/quest(\d\d(?:_\d)?)/)![1];
+    const colorful = tag.startsWith('06');
     for (let o = 0, i = 0; o + 44 <= f.length; i++) {
       const w = f[o], h = f[o + 1];
       if (!w || !h || w > 40 || h > 40 || o + 44 + w * h > f.length) break;
       const cells = f.subarray(o + 44, o + 44 + w * h);
       const pal = Array.from({ length: 16 }, (_, k) => bgr555Hex(u16(f, o + 12 + k * 2)));
+      if (colorful) {
+        // Colorful Logic: the high nibble is the clue colour (1 = black, 2-4 = the record's colours 0-2)
+        const clue = Array.from({ length: 4 }, (_, k) => bgr555Hex(u16(f, o + 4 + k * 2)));
+        const palette = [clue[3], clue[0], clue[1], clue[2]];
+        puzzles.push({
+          id: `c${tag}-${String(i + 1).padStart(2, '0')}`, width: w, height: h, colorGame: true, colorOnly: true,
+          rows: rowsFromBits(w, h, (x, y) => (cells[y * w + x] >> 4) !== 0),
+          color: { palette, rows: [...Array(h)].map((_, y) => [...cells.subarray(y * w, y * w + w)].map(v => (v >> 4 ? String((v >> 4) - 1) : '.')).join('')) },
+        });
+        o += (44 + w * h + 1) & ~1;
+        continue;
+      }
       puzzles.push({
         id: `${tag}-${String(i + 1).padStart(2, '0')}`, width: w, height: h,
         rows: rowsFromBits(w, h, (x, y) => (cells[y * w + x] & 0x10) !== 0),
@@ -92,14 +106,16 @@ function readB(rom: NdsRom): PackLevel[] {
       });
       o += (44 + w * h + 1) & ~1;
     }
-    if (puzzles.length) levels.push({ id: `quest-${tag}`, title: { en: `Stage ${li + 1}`, ja: `ステージ${li + 1}` }, rules: 'normal', puzzles });
+    if (puzzles.length) levels.push(colorful
+      ? { id: `colorful-${tag}`, title: { en: `Colorful Logic ${tag.slice(3) || '1'}`, ja: `カラフルロジック ${tag.slice(3) || '1'}` }, group: 'colorful', rules: 'normal', puzzles }
+      : { id: `quest-${tag}`, title: { en: `Stage ${li + 1}`, ja: `ステージ${li + 1}` }, rules: 'normal', puzzles });
   });
   return levels;
 }
 
 registerImporter({
   name: 'Illust Logic (Hudson, DS / DSiWare)',
-  version: 2, // raise when the importer reads more or reads differently
+  version: 3, // raise when the importer reads more or reads differently
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.slice(0, 4) in GAMES,
   read: d => {
     const rom = new NdsRom(d), g = GAMES[rom.gameCode];

@@ -17,6 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 $cfg = require __DIR__ . '/config.php';
 
+/** which game a puzzle id belongs to: Mega ("@mega"), Colour ("@color") or the plain one */
+function modeOf(string $id): string { return substr($id, -5) === '@mega' ? 'mega' : (substr($id, -6) === '@color' ? 'color' : 'normal'); }
+
 function out($data, int $code = 200): void {
   http_response_code($code);
   // the server's clock: the app uses it, so devices with a wrong clock can't win every merge
@@ -192,13 +195,13 @@ switch ($a) {
     $empty = fn() => ['solved' => 0, 'week' => 0, 'medals' => ['bronze' => 0, 'silver' => 0, 'gold' => 0, 'platinum' => 0], 'packs' => [], 'time' => 0, 'records' => 0, 'points' => 0, 'rated' => []];
     foreach (q('SELECT u.name, s.data FROM momo_saves s JOIN momo_users u ON u.id = s.user_id')->fetchAll() as $r) {
       $s = json_decode($r['data'], true);
-      // normal and Mega puzzles (ids ending in "@mega") are counted apart: two games
-      $m = ['normal' => $empty(), 'mega' => $empty()];
+      // normal, Mega and Colour puzzles (ids ending in "@mega" / "@color") are counted apart: three games
+      $m = ['normal' => $empty(), 'mega' => $empty(), 'color' => $empty()];
       foreach (($s['packs'] ?? []) as $pid => $pk) {
         if (strncmp((string)$pid, 'my-', 3) === 0) continue; // packs made in the editor don't count
         foreach (($pk['progress'] ?? []) as $pz => $v) {
           if (empty($v['cleared'])) continue;
-          $mode = substr((string)$pz, -5) === '@mega' ? 'mega' : 'normal';
+          $mode = modeOf((string)$pz);
           $x = &$m[$mode];
           $x['solved']++; $x['packs'][$pid] = ($x['packs'][$pid] ?? 0) + 1;
           if (!empty($v['at']) && $v['at'] >= $week) $x['week']++;
@@ -234,7 +237,7 @@ switch ($a) {
     unset($l);
     // records: puzzles where someone has the best time (only counted when two or more played it)
     foreach ($best as $key => $l) if (count($l) > 1) {
-      $mode = substr((string)$key, -5) === '@mega' ? 'mega' : 'normal';
+      $mode = modeOf((string)$key);
       foreach ($users as &$u) if ($u['name'] === $l[0][0]) { $u['modes'][$mode]['records']++; if ($mode === 'normal') $u['records']++; }
       unset($u);
     }
