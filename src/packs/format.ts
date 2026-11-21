@@ -186,15 +186,17 @@ export function mergePacks(a: Pack, b: Pack): Pack {
     // exclusive to the other version: into the level it has there, or a level of its own
     const x: PackPuzzle = JSON.parse(JSON.stringify(p));
     delete (x as any).anim; // animation data belongs to the other version's files
-    x.exclusive = x.exclusive ?? region;
+    // Mega-only puzzles stored before Mega was read are new, not exclusive to a region
+    if (!x.megaOnly) x.exclusive = x.exclusive ?? region;
     let id = x.id;
     for (let n = 2; ids.has(id); n++) id = `${x.id}~${region.toLowerCase()}${n > 2 ? n : ''}`;
     x.id = id; ids.add(id);
     const mine = out.levels.find(v => v.id === l.id);
     if (mine) mine.puzzles.push(x);
     else {
-      let lv = out.levels.find(v => v.id === l.id + '~' + region.toLowerCase());
-      if (!lv) { lv = JSON.parse(JSON.stringify({ ...l, id: l.id + '~' + region.toLowerCase(), puzzles: [] })) as PackLevel; out.levels.push(lv); }
+      const lid = x.megaOnly ? l.id : l.id + '~' + region.toLowerCase();
+      let lv = out.levels.find(v => v.id === lid);
+      if (!lv) { lv = JSON.parse(JSON.stringify({ ...l, id: lid, puzzles: [] })) as PackLevel; out.levels.push(lv); }
       lv.puzzles.push(x);
     }
   }
