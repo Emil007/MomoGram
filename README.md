@@ -162,11 +162,12 @@ The numbers below are what MomoGram reads from the games (all regions together w
 | Picross Lord of the Nazarick (Color Picross) | 27 | 3–4 |
 | Illust Logic DS + Colorful Logic (Colorful Logic) | 100 | 2–5 |
 | Illu-Logi VOW (Colour Logic) | 166 | 2–5 |
+| Puzzle Mate DS: Oekaki Mate | 8 of its 10 colour puzzles | 4–5 |
 | SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | 1,400 each (the games' own colour pictures) | 1–5 |
 | MomoGram starter puzzles | 9 | 2–5 |
 | Hudson's Illust Logic games (pictures) | colour versions by MomoGram where they have one solution (95 in Illust Logic DS) | up to 8 |
 
-Still to come: the 11 colour puzzles of Puzzle Mate DS and Animal Color Cross (DSiWare).
+Still to come: Animal Color Cross (DSiWare; its puzzles are in a compressed archive of its own) and two of Puzzle Mate's colour puzzles.
 
 To add another game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
