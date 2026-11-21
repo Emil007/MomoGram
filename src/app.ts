@@ -214,7 +214,19 @@ function showUpdate(slot: HTMLElement) {
     if (!newVersion) return;
     slot.append(h('button', { class: 'btn update-banner', onClick: async () => {
       if (!isWeb()) { window.open(RELEASES, '_blank'); return; }
-      try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* reload anyway */ }
+      // the browser may still have the old files in its cache (GitHub Pages lets it keep them for 10 minutes):
+      // fetch them fresh first, so the reload gets the new ones, then let the new service worker take over
+      const b = document.querySelector<HTMLButtonElement>('.update-banner');
+      if (b) { b.disabled = true; b.querySelector('small')!.textContent = '…'; }
+      try { await Promise.all(['./', 'index.html', 'app.js', 'app.css', 'worklet.js', 'version.json'].map(u => fetch(u, { cache: 'reload' }).catch(() => null))); } catch { /* reload anyway */ }
+      try {
+        const sw = navigator.serviceWorker, reg = await sw?.getRegistration();
+        if (reg) {
+          const changed = new Promise<void>(res => { sw.addEventListener('controllerchange', () => res(), { once: true }); setTimeout(res, 4000); });
+          await reg.update();
+          if (reg.installing || reg.waiting) await changed;
+        }
+      } catch { /* reload anyway */ }
       location.reload();
     } }, h('b', {}, '⬆ ' + t('updateReady', { v: newVersion })), h('small', {}, isWeb() ? t('updateTap') : t('updateDownload'))));
   };
