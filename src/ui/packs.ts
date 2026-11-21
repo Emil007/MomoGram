@@ -184,7 +184,17 @@ export function openPackManager(pm: PM) {
           } else made = (await readEntries(unzipAll(await Sync.downloadPack(sps[i].id)), lang(), t)).made;
           // a pack from the server keeps its revision (old uploads without one count as 1)
           for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
-          if (made.length) pm.setPacks(await storePacks(pm.packs(), made));
+          if (made.length) {
+            const stored = await storePacks(pm.packs(), made);
+            // a download that brought nothing new (this device already had the same content) still takes the
+            // server's revision, else the pack is offered as an update again and again
+            const rev = sps[i].meta?.rev ?? 1;
+            for (let k = 0; k < stored.length; k++) {
+              const q = stored[k];
+              if (made.some(m => m.id === q.id) && packRev(q) < rev) { stored[k] = { ...q, rev }; await storage.savePack(stored[k]); }
+            }
+            pm.setPacks(stored);
+          }
         }
         render(); renderOnline();
       } catch (e) { bad(e); btn.disabled = false; btn.textContent = label; }
