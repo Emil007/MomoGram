@@ -52,7 +52,7 @@ const en: Dict = {
   version: 'Version', titlesOnly: 'game titles only', loggedOutChip: 'logged out', loggedOutMsg: 'The server logged "{name}" out (e.g. after a new password). Please log in again.',
   accounts: 'Accounts', newPassword: 'new password', newPasswordFor: 'New password for {name} (at least 6 characters):', passwordSet: '{name} has a new password and is logged out everywhere.',
   scores: 'High scores', fastest: 'Fastest', perGame: 'Per game', noScores: 'Nobody has solved a puzzle yet.', scoresOffline: 'Showing the last known scores.',
-  imported: 'Added: {list}', downloadAll: 'Download all', updateAll: 'Update all', update: 'Update', updateAvailable: 'newer version on the server', newerHere: 'newer here', older: 'older',
+  imported: 'Added: {list}', waiting: 'waiting for the connection …', downloadBroken: 'A file arrived damaged, please try again.', filesMissing: 'files missing', downloadAll: 'Download all', updateAll: 'Update all', update: 'Update', updateAvailable: 'newer version on the server', newerHere: 'newer here', older: 'older',
   onServer: 'On the server', serverEmpty: 'No packs on the server yet.', upload: 'Upload', uploadPacks: 'Upload packs',
   uploadedBy: 'by {name}', serverLogin: 'Log in under Options → Server to share packs between your devices.', installed: 'installed',
   // options
@@ -126,7 +126,7 @@ const de: Dict = {
   version: 'Version', titlesOnly: 'nur Spieltitel', loggedOutChip: 'abgemeldet', loggedOutMsg: 'Der Server hat "{name}" abgemeldet (z. B. nach einem neuen Passwort). Bitte melde dich wieder an.',
   accounts: 'Konten', newPassword: 'neues Passwort', newPasswordFor: 'Neues Passwort für {name} (mindestens 6 Zeichen):', passwordSet: '{name} hat ein neues Passwort und ist überall abgemeldet.',
   scores: 'Bestenliste', fastest: 'Am schnellsten', perGame: 'Pro Spiel', noScores: 'Noch niemand hat ein Rätsel gelöst.', scoresOffline: 'Zuletzt bekannter Stand.',
-  imported: 'Hinzugefügt: {list}', downloadAll: 'Alle herunterladen', updateAll: 'Alle aktualisieren', update: 'Aktualisieren', updateAvailable: 'neuere Version am Server', newerHere: 'hier neuer', older: 'älter',
+  imported: 'Hinzugefügt: {list}', waiting: 'warte auf Verbindung …', downloadBroken: 'Eine Datei kam beschädigt an, bitte nochmal versuchen.', filesMissing: 'Dateien fehlen', downloadAll: 'Alle herunterladen', updateAll: 'Alle aktualisieren', update: 'Aktualisieren', updateAvailable: 'neuere Version am Server', newerHere: 'hier neuer', older: 'älter',
   onServer: 'Auf dem Server', serverEmpty: 'Noch keine Pakete auf dem Server.', upload: 'Hochladen', uploadPacks: 'Pakete hochladen',
   uploadedBy: 'von {name}', serverLogin: 'Melde dich unter Optionen → Server an, um Pakete zwischen deinen Geräten zu teilen.', installed: 'installiert',
   tryIt: 'Probieren', keep: 'Behalten', discard: 'Verwerfen',

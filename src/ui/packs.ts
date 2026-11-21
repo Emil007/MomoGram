@@ -154,10 +154,14 @@ export function openPackManager(pm: PM) {
     let list: Sync.ServerPack[];
     try { list = await Sync.serverPacks(); } catch (e) { bad(e); return; }
     const local = new Map(pm.packs().map(p => [p.id, p]));
+    // installed packs that miss a file their download should have brought (not music, which can be left out)
+    const incomplete = new Set<string>();
+    for (const sp of list) if (local.has(sp.id) && await missingFiles(sp.id)) incomplete.add(sp.id);
     const state = (sp: Sync.ServerPack) => {
       const mine = local.get(sp.id);
       if (!mine) return 'new';
       const a = packRev(mine), b = sp.meta?.rev ?? 1;
+      if (incomplete.has(sp.id)) return 'update';
       return b > a ? 'update' : a > b ? 'newer-here' : 'same';
     };
     // download (install or update) one or several: one after the other, with the progress in the button.
@@ -165,10 +169,11 @@ export function openPackManager(pm: PM) {
     const fetchPacks = async (sps: Sync.ServerPack[], btn: HTMLButtonElement, music = true) => {
       const label = btn.textContent;
       btn.disabled = true;
+      const lock = keepAwake();
       try {
         for (let i = 0; i < sps.length; i++) {
           btn.textContent = `${i + 1}/${sps.length} …`;
-          const split = sps[i].split ? await Sync.packSplit(sps[i].id) : null;
+          const split = sps[i].split ? await steady(sig => Sync.packSplit(sps[i].id), () => { btn.textContent = `${i + 1}/${sps.length} · ${t('waiting')}`; }) : null;
           let made: Pack[];
           if (split) {
             const p = split.pack as Pack;
@@ -177,11 +182,17 @@ export function openPackManager(pm: PM) {
             for (let k = 0; k < want.length; k++) {
               const a = want[k];
               btn.textContent = `${i + 1}/${sps.length} · ${k + 1}/${want.length}`;
-              const data = (await storage.loadBlob(a.hash).catch(() => undefined)) ?? await Sync.downloadBlob(a.hash);
+              // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again
+              let data = await storage.loadBlob(a.hash).catch(() => undefined);
+              if (!data) {
+                data = await steady(sig => Sync.downloadBlob(a.hash, sig), () => { btn.textContent = `${i + 1}/${sps.length} · ${k + 1}/${want.length} · ${t('waiting')}`; });
+                if (await sha1(data) !== a.hash) throw new Error(t('downloadBroken'));
+                await storage.saveDownload(data);
+              }
               p.assets.push({ name: a.name, data });
             }
             made = [p];
-          } else made = (await readEntries(unzipAll(await Sync.downloadPack(sps[i].id)), lang(), t)).made;
+          } else made = (await readEntries(unzipAll(await steady(() => Sync.downloadPack(sps[i].id))), lang(), t)).made;
           // a pack from the server keeps its revision (old uploads without one count as 1)
           for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
           if (made.length) {
@@ -194,10 +205,17 @@ export function openPackManager(pm: PM) {
               if (made.some(m => m.id === q.id) && packRev(q) < rev) { stored[k] = { ...q, rev }; await storage.savePack(stored[k]); }
             }
             pm.setPacks(stored);
+            // what a later look checks: the files (not music) this download stored
+            if (split) {
+              const plain = new Set(split.assets.filter(a => !a.music).map(a => a.name));
+              setExpected(split.pack.id, (await storage.assetNames(split.pack.id)).filter(n => plain.has(n)));
+            }
           }
         }
+        await storage.dropDownloads().catch(() => {});
         render(); renderOnline();
       } catch (e) { bad(e); btn.disabled = false; btn.textContent = label; }
+      finally { lock(); }
     };
     const withMusic = h('input', { type: 'checkbox', checked: true }) as HTMLInputElement;
     const mb = (n: number) => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -226,7 +244,7 @@ export function openPackManager(pm: PM) {
       if (sp.split && sp.music && mine0 && (st === 'same' || st === 'newer-here')) musicMissing(mine0).then(m => { addMusic.hidden = !m; });
       const acc = Sync.account();
       const mine = sp.by === acc?.name || acc?.admin;
-      const note = st === 'same' ? '✓ ' + t('installed') : st === 'update' ? '⬆ ' + t('updateAvailable') : st === 'newer-here' ? '⇧ ' + t('newerHere') : '';
+      const note = st === 'same' ? '✓ ' + t('installed') : incomplete.has(sp.id) ? '⚠ ' + t('filesMissing') : st === 'update' ? '⬆ ' + t('updateAvailable') : st === 'newer-here' ? '⇧ ' + t('newerHere') : '';
       online.append(h('div', { class: 'pack' + (st === 'update' ? ' has-update' : '') },
         h('div', { class: 'btn packbtn static' },
           h('b', {}, title),
@@ -347,6 +365,57 @@ async function storedFiles(id: string): Promise<Map<string, string>> {
 /** packs that an import left as they were (it brought nothing new), filled by storePacks */
 export const unchanged = new Set<string>();
 
+// ---- downloads that survive a phone going to sleep or a dropped connection ----
+
+/** files a pack's download brought (by name, music not counted), so a later look can tell if one is missing */
+const EXPECT_KEY = 'momogram.packFiles';
+function expected(): Record<string, string[]> { try { return JSON.parse(localStorage.getItem(EXPECT_KEY) || '{}'); } catch { return {}; } }
+function setExpected(id: string, names: string[]) { const e = expected(); if (names.length) e[id] = names; else delete e[id]; try { localStorage.setItem(EXPECT_KEY, JSON.stringify(e)); } catch { /* full */ } }
+async function missingFiles(id: string): Promise<boolean> {
+  const want = expected()[id];
+  if (!want?.length) return false;
+  const have = new Set(await storage.assetNames(id).catch(() => [] as string[]));
+  return want.some(n => !have.has(n));
+}
+
+const visible = () => new Promise<void>(res => {
+  if (!document.hidden && navigator.onLine !== false) { res(); return; }
+  const go = () => { if (!document.hidden && navigator.onLine !== false) { document.removeEventListener('visibilitychange', go); window.removeEventListener('online', go); res(); } };
+  document.addEventListener('visibilitychange', go); window.addEventListener('online', go);
+});
+
+/**
+ * A request that doesn't give up: while the page is hidden (phone asleep, other app) or offline it waits and then
+ * tries again; a request still running when the page is hidden is cancelled and repeated once it's back (a
+ * phone that slept may never answer it). Other failures are tried five times, a little later each time.
+ */
+async function steady<T>(run: (signal: AbortSignal) => Promise<T>, waiting?: () => void): Promise<T> {
+  for (let fails = 0; ; ) {
+    if (document.hidden || navigator.onLine === false) { waiting?.(); await visible(); }
+    const ctl = new AbortController();
+    let hid = false;
+    const onHide = () => { if (document.hidden) { hid = true; ctl.abort(); } };
+    document.addEventListener('visibilitychange', onHide);
+    try { return await run(ctl.signal); }
+    catch (e) {
+      if (hid || document.hidden || navigator.onLine === false) { waiting?.(); continue; }
+      if (e instanceof Sync.ServerError && e.status >= 400 && e.status < 500) throw e;
+      if (++fails >= 5) throw e;
+      waiting?.();
+      await new Promise(r => setTimeout(r, 1000 * 2 ** fails));
+    } finally { document.removeEventListener('visibilitychange', onHide); }
+  }
+}
+
+/** keeps the screen on while something downloads (where the browser allows it); returns the release */
+function keepAwake(): () => void {
+  let lock: any = null, done = false;
+  const take = async () => { try { if (!done && !document.hidden) lock = await (navigator as any).wakeLock?.request('screen'); } catch { /* not allowed */ } };
+  const again = () => { if (!document.hidden) take(); };
+  take(); document.addEventListener('visibilitychange', again);
+  return () => { done = true; document.removeEventListener('visibilitychange', again); lock?.release?.().catch(() => {}); };
+}
+
 export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
   const merged = new Map<string, Pack>();
   // a game added again is read fresh: the new import is the base of the merge (so everything newer versions of
@@ -359,6 +428,7 @@ export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pa
   }
   const ps = [...merged.values()];
   unchanged.clear();
+  for (const p of ps) setExpected(p.id, []);
   for (let i = 0; i < ps.length; i++) {
     const p = ps[i];
     const drop = await oneRelease(p);

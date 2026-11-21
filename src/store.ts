@@ -96,6 +96,18 @@ export const storage = {
     const d = await tx<Uint8Array | undefined>('assets', 'readonly', s => s.get('@' + sha1hex));
     return d && decompressAsset(d);
   },
+  /** a downloaded file kept by its hash before its pack is stored (an interrupted download resumes from there);
+   *  "~dl/<hash>" keeps it from being swept until dropDownloads() */
+  saveDownload: async (data: Uint8Array) => {
+    const h = await sha1(data), ref = '@' + h;
+    if (await tx<IDBValidKey | undefined>('assets', 'readonly', s => s.getKey(ref)) === undefined) {
+      const z = await compressAsset(data);
+      await tx('assets', 'readwrite', s => s.put(z, ref));
+    }
+    await tx('assets', 'readwrite', s => s.put(ref, '~dl/' + h));
+    return h;
+  },
+  dropDownloads: async () => { await tx('assets', 'readwrite', s => s.delete(IDBKeyRange.bound('~dl/', '~dl/\uffff'))); },
   /** the content hash of a stored file (without loading it); undefined for files stored before linking */
   assetHash: async (packId: string, name: string) => {
     const d = await tx<Uint8Array | string | undefined>('assets', 'readonly', s => s.get(packId + '/' + name));

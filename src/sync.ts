@@ -34,7 +34,7 @@ function endpoint(a: string, args: Record<string, string | number> = {}): string
   return api + '?' + new URLSearchParams({ a, ...Object.fromEntries(Object.entries(args).map(([k, v]) => [k, String(v)])) });
 }
 
-async function call(a: string, opts: { method?: string; json?: unknown; body?: BodyInit; args?: Record<string, string | number>; raw?: boolean; keepalive?: boolean; token?: string } = {}): Promise<any> {
+async function call(a: string, opts: { method?: string; json?: unknown; body?: BodyInit; args?: Record<string, string | number>; raw?: boolean; keepalive?: boolean; token?: string; signal?: AbortSignal } = {}): Promise<any> {
   const headers: Record<string, string> = {};
   const tok = opts.token ?? account()?.token;
   if (tok) headers['X-Momo-Token'] = tok;
@@ -43,6 +43,7 @@ async function call(a: string, opts: { method?: string; json?: unknown; body?: B
   else if (body) headers['Content-Type'] = 'application/octet-stream';
   // a request that never answers (phone put away mid-request) must not block all later syncs
   const ctl = new AbortController();
+  opts.signal?.addEventListener('abort', () => ctl.abort());
   const timeout = window.setTimeout(() => ctl.abort(), opts.raw || a === 'upload_part' ? 300000 : 30000);
   let r: Response;
   try { r = await fetch(endpoint(a, opts.args), { method: opts.method ?? (body ? 'POST' : 'GET'), headers, body, keepalive: opts.keepalive, signal: ctl.signal }); }
@@ -223,7 +224,7 @@ export async function packSplit(id: string): Promise<{ pack: any; assets: SplitA
   const r = await call('pack_split', { args: { id } });
   return r.kind === 'split' ? { pack: r.pack, assets: r.assets } : null;
 }
-export async function downloadBlob(hash: string): Promise<Uint8Array> { return call('blob', { args: { hash }, raw: true }); }
+export async function downloadBlob(hash: string, signal?: AbortSignal): Promise<Uint8Array> { return call('blob', { args: { hash }, raw: true, signal }); }
 
 /**
  * Upload as pack.json + files: only the files the server doesn't have yet are sent (the same song in nine packs
