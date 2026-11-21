@@ -816,52 +816,77 @@ function strictestTime(p: { best?: number; times?: Partial<Record<string, number
  * Everyone on the server (up to 10 players), for the mode that is on (normal and Mega are two games): ranked by
  * points, PixElo or puzzles solved; medals; and per game.
  */
-let scoreSort: 'points' | 'elo' | 'solved' = 'points';
+let scoreSort: 'elo' | 'points' = 'elo';
+let scoreMode: Mode | null = null;
+/**
+ * High scores: a ranking (PixElo or points) for Normal or Mega, then one card per player with everything at a
+ * glance (PixElo and peak, points, solved, medals, this week, records); a card opens that player's games.
+ */
 async function scoresScreen() {
   const body = h('div', { class: 'scores' });
-  const mode = curMode();
-  screen(header(t('scores') + (mode === 'mega' ? ' · MEGA' : ''), home), body);
+  screen(header(t('scores'), home), body);
   let sc = Sync.scores(), note = '';
   const draw = () => {
-    body.innerHTML = '';
+    const mode: Mode = scoreMode ?? curMode();
+    body.replaceChildren();
     const me = Sync.account()?.name;
     type Row = Sync.ScoreStats & { name: string };
     const of = (u: NonNullable<typeof sc>['users'][0]): Row => ({ name: u.name, ...(u.modes?.[mode] ?? (mode === 'normal' ? u : { solved: 0, medals: {}, packs: {}, time: 0 })) });
     let users: Row[] = sc ? sc.users.map(of) : [];
     // this profile's own numbers come from this device: they may be newer than the server's
-    const mine: Row = { ...(users.find(u => u.name === me) ?? {}), ...localStats(mode), name: me ?? activeProfile().name };
+    const mine: Row = { ...(users.find(u => u.name === me) ?? { medals: {}, packs: {}, time: 0 }), ...localStats(mode), name: me ?? activeProfile().name };
     users = [...users.filter(u => u.name !== mine.name), mine];
-    const key = (u: Row) => scoreSort === 'points' ? [u.points ?? 0, u.solved] : scoreSort === 'elo' ? [(u.rated ?? 0) ? u.elo ?? 0 : -1, u.rated ?? 0] : [u.solved, u.medals.platinum ?? 0, u.medals.gold ?? 0, -u.time];
+    const elo = (u: Row) => (u.rated ? u.elo ?? 1000 : -1);
+    const key = (u: Row) => scoreSort === 'points' ? [u.points ?? 0, u.solved] : [elo(u), u.rated ?? 0, u.points ?? 0];
     users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
-    body.append(h('div', { class: 'score-tabs' }, ...([['points', t('pointsTab')], ['elo', 'PixElo'], ['solved', t('solvedTab')]] as const).map(([k, label]) =>
-      h('button', { class: 'chip' + (scoreSort === k ? ' on' : ''), onClick: () => { scoreSort = k; draw(); } }, label))));
-    if (!users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); return; }
-    const medal = (m: string, n: number | undefined) => n ? h('span', { class: 'mcount' }, medalEl(m as Medal, false), '×' + n) : null;
-    const main = (u: Row) => scoreSort === 'points' ? String(u.points ?? 0) : scoreSort === 'elo' ? (u.rated ? String(u.elo) : '–') : String(u.solved);
-    body.append(h('ol', { class: 'ranking' }, ...users.map((u, k) => h('li', { class: u.name === me ? 'me' : '' },
-      h('span', { class: 'rank' }, String(k + 1)),
-      h('div', { class: 'who' }, h('b', {}, u.name),
-        h('small', {}, medal('platinum', u.medals.platinum), medal('gold', u.medals.gold), medal('silver', u.medals.silver), medal('bronze', u.medals.bronze)),
-        h('small', { class: 'extra' }, [
-          scoreSort !== 'points' ? `${u.points ?? 0} ${t('pointsShort')}` : '',
-          scoreSort !== 'elo' && u.rated ? `PixElo ${u.elo}` : '',
-          scoreSort === 'elo' && u.rated ? t('peakN', { n: u.peak ?? u.elo ?? 0 }) + (u.rated < 15 ? ' · ' + t('provisional') : '') : '',
-          scoreSort !== 'solved' ? t('solvedN', { n: u.solved }) : '',
-          u.week ? t('thisWeek', { n: u.week }) : '', u.records ? t('recordsN', { n: u.records }) : ''].filter(Boolean).join(' · '))),
-      h('b', { class: 'num' }, main(u))))));
-    // per game: the installed packs anyone has played (a column per player: up to 10, the table scrolls sideways)
-    const packs = allPacks().filter(p => users.some(u => u.packs?.[p.id]));
-    if (packs.length) {
-      body.append(h('h2', { class: 'section-title' }, t('perGame')), h('div', { class: 'score-table' }, h('table', {},
-        h('thead', {}, h('tr', {}, h('th', {}), ...users.map(u => h('th', { class: u.name === me ? 'me' : '', title: u.name }, u.name)))),
-        h('tbody', {}, ...packs.map(p => {
-          const total = countPack(p)[1];
-          const top = Math.max(...users.map(u => u.packs?.[p.id] ?? 0));
-          return h('tr', {}, h('th', {}, pickAny(p.title, packLang())),
-            ...users.map(u => { const n = u.packs?.[p.id] ?? 0; return h('td', { class: (n && n === top ? 'top' : '') + (u.name === me ? ' me' : '') }, n ? `${n}/${total}` : '–'); }));
-        })))));
-    }
+
+    // switches: Normal / Mega, PixElo / points
+    const seg = <T extends string>(cur: T, opts: Array<[T, string]>, set: (v: T) => void) => h('div', { class: 'seg mini' }, ...opts.map(([v, l]) =>
+      h('button', { class: 'segbtn' + (cur === v ? ' on' : ''), onClick: () => { set(v); draw(); } }, l)));
+    body.append(h('div', { class: 'score-switches' },
+      seg<Mode>(mode, [['normal', t('normalMode')], ['mega', 'Mega']], v => { scoreMode = v; }),
+      seg<'elo' | 'points'>(scoreSort, [['elo', 'PixElo'], ['points', t('pointsTab')]], v => { scoreSort = v; })));
+    if (!users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); if (note) body.append(h('p', { class: 'fine' }, note)); return; }
+
+    // the ranking: one line per player, the number that's ranked big
+    const main = (u: Row) => scoreSort === 'points' ? String(u.points ?? 0) : u.rated ? String(u.elo) + (u.rated < 15 ? '?' : '') : '–';
+    body.append(h('ol', { class: 'ranking' }, ...users.map((u, k) => h('li', { class: (u.name === me ? 'me ' : '') + (k < 3 ? 'top' + (k + 1) : '') },
+      h('span', { class: 'rank' }, k < 3 ? ['🥇', '🥈', '🥉'][k] : String(k + 1)),
+      h('b', { class: 'who-name' }, u.name),
+      h('b', { class: 'num' }, main(u), h('small', {}, scoreSort === 'points' ? ' ' + t('pointsShort') : ''))))));
+    body.append(h('p', { class: 'fine center' }, scoreSort === 'elo' ? t('eloExplain') : t('pointsExplain')));
+
+    // a card per player
+    const medalCount = (m: Medal, n: number | undefined) => h('span', { class: 'mcount' + (n ? '' : ' none') }, medalEl(m, false), String(n ?? 0));
+    const fact = (label: string, value: string) => h('div', { class: 'fact' }, h('b', {}, value), h('small', {}, label));
+    body.append(h('h2', { class: 'section-title' }, t('players')), h('div', { class: 'player-cards' }, ...users.map(u =>
+      h('button', { class: 'player-card' + (u.name === me ? ' me' : ''), onClick: () => playerGames(u, mode) },
+        h('div', { class: 'pc-head' }, h('b', {}, '👤 ' + u.name), u.week ? h('small', { class: 'pc-week' }, t('thisWeek', { n: u.week })) : null),
+        h('div', { class: 'pc-facts' },
+          fact('PixElo' + (u.rated && u.rated < 15 ? ' (' + t('provisional') + ')' : ''), u.rated ? String(u.elo) : '–'),
+          fact(t('peak'), u.rated ? String(u.peak ?? u.elo) : '–'),
+          fact(t('pointsTab'), String(u.points ?? 0)),
+          fact(t('solvedTab'), String(u.solved))),
+        h('div', { class: 'pc-medals' }, medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze),
+          u.records ? h('small', { class: 'pc-rec' }, t('recordsN', { n: u.records })) : null)))));
     if (note) body.append(h('p', { class: 'fine' }, note));
+
+    /** one player's games: solved per game, compared with you */
+    function playerGames(u: Row, m: Mode) {
+      const packs = allPacks().filter(p => u.packs?.[p.id]).sort((a, b) => (u.packs[b.id] ?? 0) - (u.packs[a.id] ?? 0));
+      const mineRow = users.find(x => x.name === mine.name)!;
+      panel((box, close) => {
+        box.append(h('h3', {}, u.name + (m === 'mega' ? ' · Mega' : '')));
+        if (!packs.length) box.append(h('p', { class: 'fine' }, t('noScores')));
+        box.append(h('div', { class: 'pg-list' }, ...packs.map(p => {
+          const total = countPack(p)[1], n = u.packs[p.id] ?? 0, mineN = mineRow.packs?.[p.id] ?? 0;
+          return h('div', { class: 'pg-row' }, h('b', {}, pickAny(p.title, packLang())),
+            h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` })),
+            h('small', {}, `${n}/${total}` + (u.name !== mine.name ? ` · ${t('you')} ${mineN}` : '')));
+        })));
+        box.append(h('button', { class: 'btn primary', onClick: close }, t('ok')));
+      });
+    }
   };
   draw();
   if (!Sync.account()) return;

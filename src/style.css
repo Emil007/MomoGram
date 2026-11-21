@@ -599,3 +599,30 @@ body.dark .medal.big { color: #1a1a1a; }
 .tut-tools { margin: 0 -.6rem; }
 .tut-opts { gap: .5rem; }
 .tut-opts .btn { flex: 1; }
+/* high scores */
+.score-switches { display: flex; flex-direction: column; gap: .4rem; align-items: stretch; }
+.score-switches .seg { width: 100%; margin: 0; }
+.ranking li { padding: .55rem .9rem; }
+.ranking .who-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.05rem; }
+.ranking .num small { font-size: .7rem; color: var(--muted); }
+.ranking li.top1 { border-color: #c98a00; box-shadow: 0 3px 0 #c98a00; }
+.fine.center { text-align: center; margin: 0; }
+.player-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .6rem; }
+.player-card { font: inherit; color: var(--ink); text-align: left; cursor: pointer; background: var(--surface); border: 2px solid var(--line); border-radius: 14px;
+  box-shadow: 0 3px 0 var(--line); padding: .7rem .8rem; display: flex; flex-direction: column; gap: .5rem; }
+.player-card.me { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.pc-head { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; }
+.pc-week { color: var(--easy); font-weight: 800; }
+.pc-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; }
+.fact { display: flex; flex-direction: column; align-items: center; }
+.fact b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.fact small { font-size: .62rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; text-align: center; }
+.pc-medals { display: flex; gap: .55rem; align-items: center; flex-wrap: wrap; }
+.pc-medals .mcount { display: inline-flex; align-items: center; gap: .2rem; font-weight: 800; }
+.pc-medals .mcount.none { opacity: .35; }
+.pc-rec { margin-left: auto; color: var(--muted); font-weight: 800; }
+.pg-list { display: flex; flex-direction: column; gap: .5rem; max-height: 60vh; overflow: auto; }
+.pg-row { display: grid; grid-template-columns: 1fr auto; gap: .15rem .6rem; align-items: center; }
+.pg-row b { grid-column: 1 / -1; font-size: .9rem; }
+.pg-row small { color: var(--muted); font-weight: 700; }
+body.dark .player-card { border-color: #4a5563; }
