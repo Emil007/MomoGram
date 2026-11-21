@@ -12,10 +12,17 @@ export function unzipAll(data: Uint8Array): Array<{ name: string; data: Uint8Arr
   return Object.entries(files).filter(([n]) => !n.endsWith('/')).map(([name, d]) => ({ name, data: d }));
 }
 
+/** files that are compressed already (deflating them again only costs time): stored as they are */
+const PACKED = /\.(ogg|opus|mp3|m4a|png|jpe?g|webp|gif|zip|7z|rar|gz|momopack|spcsnap)$/i;
+
 export function makeZip(entries: Array<{ name: string; text?: string; data?: Uint8Array }>): Uint8Array {
-  const o: Record<string, Uint8Array> = {};
-  for (const e of entries) o[e.name] = e.data ?? strToU8(e.text ?? '');
-  return zipSync(o, { level: 6 });
+  const o: Record<string, [Uint8Array, { level: 0 | 6 | 9 }]> = {};
+  for (const e of entries) {
+    const d = e.data ?? strToU8(e.text ?? '');
+    // text and small files: the best compression; big binaries (DS sound data, ADPCM streams): a faster level
+    o[e.name] = [d, { level: PACKED.test(e.name) ? 0 : d.length < 1 << 20 ? 9 : 6 }];
+  }
+  return zipSync(o);
 }
 
 export function download(name: string, data: Uint8Array | string, type = 'application/octet-stream') {

@@ -69,7 +69,11 @@ export async function captureSongs(rom: Uint8Array, songs: number[], yieldFn: ()
     await yieldFn();
   }
   if (!states.length) return null;
-  // RAM images after the first are stored as differences to it (mostly zero), then everything is deflated
+  return encodeSongs(states, rams);
+}
+
+/** RAM images after the first are stored as differences to it (mostly zero), then everything is deflated */
+function encodeSongs(states: Array<{ song: number; state: unknown }>, rams: Uint8Array[]): Uint8Array {
   const json = strToU8(JSON.stringify({ v: 1, songs: states }));
   const out = new Uint8Array(8 + json.length + rams.length * 0x10000);
   out.set([0x4d, 0x53, 0x50, 0x43]);
@@ -80,6 +84,22 @@ export async function captureSongs(rom: Uint8Array, songs: number[], yieldFn: ()
     for (let k = 0; k < 0x10000; k++) out[o + k] = i ? r[k] ^ rams[0][k] : r[k];
   });
   return zlibSync(out, { level: 9 });
+}
+
+/** the same asset with only some of its songs */
+function keepSongs(asset: Uint8Array, songs: number[]): Uint8Array {
+  const d = unzlibSync(asset);
+  const len = new DataView(d.buffer, d.byteOffset).getUint32(4, true);
+  const meta = JSON.parse(strFromU8(d.subarray(8, 8 + len))) as { songs: Array<{ song: number; state: unknown }> };
+  const base = 8 + len, first = d.slice(base, base + 0x10000);
+  const states: Array<{ song: number; state: unknown }> = [], rams: Uint8Array[] = [];
+  meta.songs.forEach((x, i) => {
+    if (!songs.includes(x.song)) return;
+    const ram = first.slice();
+    if (i) { const o = base + i * 0x10000; for (let k = 0; k < 0x10000; k++) ram[k] ^= d[o + k]; }
+    states.push(x); rams.push(ram);
+  });
+  return encodeSongs(states, rams);
 }
 
 /** restore the snapshot of `song` into a fresh SPC */
@@ -97,18 +117,39 @@ export function loadSong(asset: Uint8Array, song: number): Spc | null {
   return spc;
 }
 
-/** music for a pack made from a Super Famicom / Satellaview nonogram game */
-export async function snesPackMusic(rom: Uint8Array, yieldFn?: () => Promise<void>): Promise<{ asset: { name: string; data: Uint8Array }; music: Record<string, string> } | null> {
+/** does a song make sound in its first three seconds? */
+function audible(spc: Spc): boolean {
+  const m = new SpcMusic(spc, 8000), buf = new Float32Array(8000 * 2 * 3);
+  m.render(buf, 8000 * 3);
+  for (let i = 0; i < buf.length; i++) if (Math.abs(buf[i]) > 0.003) return true;
+  return false;
+}
+
+/**
+ * music for a pack made from a Super Famicom / Satellaview nonogram game: every song of the game (numbers $00-$1F,
+ * the silent ones are left out), looping (bit 6) except the jingles the game plays once
+ */
+export async function snesPackMusic(rom: Uint8Array, yieldFn?: () => Promise<void>): Promise<{ asset: { name: string; data: Uint8Array }; music: Record<string, string>; songs: string[] } | null> {
   const title = headerTitle(rom);
   const roles = GAMES.find(([re]) => re.test(title))?.[1] ?? (findSoundBank(rom) >= 0 ? GAMES[1][1] : null);
   if (!roles) return null;
-  const songs = [...new Set(Object.values(roles))] as number[];
-  const data = await captureSongs(rom, songs, yieldFn);
+  const once = new Set([0x05, 0x10, roles.clear ?? 0x05]);
+  const wanted = [...new Set([...Object.values(roles) as number[], ...[...Array(0x20)].map((_, n) => (once.has(n) ? n : n | 0x40))])];
+  const role = new Set(Object.values(roles) as number[]);
+  const data = await captureSongs(rom, wanted, yieldFn);
   if (!data) return null;
+  // which numbers have a song: checked on the snapshots (the role songs are always kept)
+  const songs: number[] = [];
+  for (const n of wanted) {
+    const s = loadSong(data, n);
+    if (s && (role.has(n) || audible(s))) songs.push(n);
+    await yieldFn?.();
+  }
+  const kept = songs.length < wanted.length ? keepSongs(data, songs) : data;
   const name = 'sound.spcsnap';
   const music: Record<string, string> = {};
   for (const [role, n] of Object.entries(roles)) music[role] = `${name}#spc:${n}`;
-  return { asset: { name, data }, music };
+  return { asset: { name, data: kept }, music, songs: songs.sort((a, b) => (a & 0x3f) - (b & 0x3f)).map(n => `${name}#spc:${n}`) };
 }
 
 /** plays one song from a snapshot, resampled from the S-DSP's 32 kHz to the output rate */

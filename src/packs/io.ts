@@ -1,5 +1,5 @@
-// Reading and writing packs: the .momopack file (one zip with the pack and all its files), older pack files
-// (.momopack.json, .zip exports) and the user's game files, from loose files or archives.
+// Reading and writing packs: the .momopack file (one zip with the pack and all its files) and the user's game
+// files, from loose files or archives.
 import { Pack, PackAsset, validatePack, pickAny, Lang } from './format';
 import { importGameFile, importFileSet } from './importers/index';
 import './importers/all';
@@ -32,7 +32,7 @@ export async function momopackOf(p: Pack): Promise<Uint8Array> {
 export interface ReadResult { made: Pack[]; msgs: string[]; fromPackFiles: number }
 
 /**
- * What's in a set of files (already taken out of an archive): MomoGram packs, new and old formats, with their
+ * What's in a set of files (already taken out of an archive): MomoGram packs (pack.json + assets/), with their
  * files, and games. .momopack files inside are opened too (an "export all" zip holds one per pack).
  */
 export async function readEntries(entries: Array<{ name: string; data: Uint8Array }>, lang: Lang, t: (k: string) => string): Promise<ReadResult> {
@@ -47,14 +47,13 @@ export async function readEntries(entries: Array<{ name: string; data: Uint8Arra
   }
   const used = new Set<string>();
   for (const e of entries) {
-    if (!/\.json$/i.test(e.name)) continue;
+    if (!/(^|\/)pack\.json$/i.test(e.name)) continue;
     let p: any;
     try { p = JSON.parse(new TextDecoder().decode(e.data)); } catch { continue; }
     if (!validatePack(p)) continue;
     used.add(e.name);
     const base = e.name.replace(/[^/]*$/, '');
-    // .momopack: pack.json + assets/ ; older exports: <name>.momopack.json + <name>.assets/
-    const dir = /(^|\/)pack\.json$/i.test(e.name) ? base + 'assets/' : base + e.name.slice(base.length).replace(/\.momopack\.json$|\.json$/i, '') + '.assets/';
+    const dir = base + 'assets/';
     const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => { used.add(x.name); return { name: x.name.slice(dir.length), data: x.data }; });
     if (assets.length) p.assets = assets;
     out.made.push(p); out.fromPackFiles++;

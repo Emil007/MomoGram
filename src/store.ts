@@ -1,6 +1,6 @@
 // Persistent storage: the user's ROM and packs in IndexedDB, progress/settings in localStorage.
 import type { Pack } from './packs/format';
-import { compressAsset, decompressAsset } from './util/files';
+import { compressAsset, decompressAsset, sha1 } from './util/files';
 import type { BoardSnapshot } from './game/board';
 
 const DB = 'momogram';
@@ -29,6 +29,43 @@ async function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectS
   });
 }
 
+/** remove stored files no pack links to any more (only the small links are read, never the files) */
+async function sweepAssets() {
+  const d = await db();
+  await new Promise<void>((res, rej) => {
+    const t = d.transaction('assets', 'readwrite'), s = t.objectStore('assets');
+    const used = new Set<string>();
+    const add = (r: IDBRequest<unknown[]>) => { r.onsuccess = () => { for (const v of r.result) if (typeof v === 'string') used.add(v); }; };
+    add(s.getAll(IDBKeyRange.upperBound('@', true)));
+    add(s.getAll(IDBKeyRange.lowerBound('@\uffff', true)));
+    const files = s.getAllKeys(IDBKeyRange.bound('@', '@\uffff'));
+    files.onsuccess = () => { for (const k of files.result) if (!used.has(String(k))) s.delete(k); };
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
+
+/** once: files stored before linking become links, so copies in several packs take the space of one */
+async function linkAssets(): Promise<number> {
+  const d = await db();
+  const keys = await tx<IDBValidKey[]>('assets', 'readonly', s => s.getAllKeys());
+  let saved = 0;
+  for (const k of keys.map(String).filter(k => !k.startsWith('@'))) {
+    const v = await tx<Uint8Array | string | undefined>('assets', 'readonly', s => s.get(k));
+    if (!(v instanceof Uint8Array)) continue;
+    const raw = decompressAsset(v), ref = '@' + await sha1(raw);
+    const had = await tx<IDBValidKey | undefined>('assets', 'readonly', s => s.getKey(ref)) !== undefined;
+    if (had) saved += v.length;
+    await new Promise<void>((res, rej) => {
+      const t = d.transaction('assets', 'readwrite'), s = t.objectStore('assets');
+      if (!had) s.put(v, ref);
+      s.put(ref, k);
+      t.oncomplete = () => res(); t.onerror = () => rej(t.error);
+    });
+  }
+  return saved;
+}
+
 export const storage = {
   saveRom: (key: string, data: Uint8Array) => tx('roms', 'readwrite', s => s.put(data, key)),
   loadRom: (key: string) => tx<Uint8Array | undefined>('roms', 'readonly', s => s.get(key)),
@@ -36,13 +73,37 @@ export const storage = {
   savePack: (p: Pack) => tx('packs', 'readwrite', s => s.put(p, p.id)),
   deletePack: (id: string) => tx('packs', 'readwrite', s => s.delete(id)),
   allPacks: () => tx<Pack[]>('packs', 'readonly', s => s.getAll()),
-  // music and other binary files of a pack, keyed "packId/name"
-  // assets are stored compressed where that saves space and unpacked transparently when loaded
-  saveAsset: async (packId: string, name: string, data: Uint8Array) => { const z = await compressAsset(data); return tx('assets', 'readwrite', s => s.put(z, packId + '/' + name)); },
-  loadAsset: (packId: string, name: string) => tx<Uint8Array | undefined>('assets', 'readonly', s => s.get(packId + '/' + name)).then(d => d && decompressAsset(d)),
+  // music and other binary files of a pack, keyed "packId/name". The same file in several packs (every game of a
+  // series has the same title music; the Switch and 3DS versions of a game share pictures) is kept once: the
+  // file itself is stored under "@<sha1>" and "packId/name" holds the string "@<sha1>". Files are compressed where
+  // that saves space and unpacked transparently when loaded. Older entries (the file itself) still load.
+  saveAsset: async (packId: string, name: string, data: Uint8Array) => {
+    const ref = '@' + await sha1(data);
+    if (await tx<IDBValidKey | undefined>('assets', 'readonly', s => s.getKey(ref)) === undefined) {
+      const z = await compressAsset(data);
+      await tx('assets', 'readwrite', s => s.put(z, ref));
+    }
+    await tx('assets', 'readwrite', s => s.put(ref, packId + '/' + name));
+  },
+  loadAsset: async (packId: string, name: string) => {
+    let d = await tx<Uint8Array | string | undefined>('assets', 'readonly', s => s.get(packId + '/' + name));
+    if (typeof d === 'string') d = await tx<Uint8Array | undefined>('assets', 'readonly', s => s.get(d as string));
+    return d && decompressAsset(d);
+  },
+  /** the content hash of a stored file (without loading it); undefined for files stored before linking */
+  assetHash: async (packId: string, name: string) => {
+    const d = await tx<Uint8Array | string | undefined>('assets', 'readonly', s => s.get(packId + '/' + name));
+    return typeof d === 'string' ? d.slice(1) : undefined;
+  },
   assetNames: (packId: string) => tx<IDBValidKey[]>('assets', 'readonly', s => s.getAllKeys(IDBKeyRange.bound(packId + '/', packId + '/\uffff')))
     .then(k => k.map(x => String(x).slice(packId.length + 1))),
-  deleteAssets: (packId: string) => tx('assets', 'readwrite', s => s.delete(IDBKeyRange.bound(packId + '/', packId + '/\uffff'))),
+  deleteAssets: async (packId: string) => {
+    await tx('assets', 'readwrite', s => s.delete(IDBKeyRange.bound(packId + '/', packId + '/\uffff')));
+    await sweepAssets();
+  },
+  deleteAsset: async (packId: string, name: string) => { await tx('assets', 'readwrite', s => s.delete(packId + '/' + name)); await sweepAssets(); },
+  linkAssets,
+  sweepAssets,
   async persist() { try { await navigator.storage?.persist?.(); } catch { /* ignore */ } },
 };
 

@@ -302,13 +302,14 @@ function music3ds(files: CtrFile[]): { theme: PackTheme; assets: PackAsset[] } {
   const theme: PackTheme = {};
   const assets: PackAsset[] = [];
   const streams = files.filter(f => /\.bcstm$/i.test(f.path) && isBcstm(f.data));
+  const nameOf = (f: CtrFile) => f.path.split('/').pop()!.replace(/\.dspadpcm/i, '');
+  // every stream is a song of the game; the roles pick the ones it plays where
+  for (const f of streams) if (!assets.some(a => a.name === nameOf(f))) assets.push({ name: nameOf(f), data: f.data.slice() });
   for (const [role, re] of ROLES) {
-    const f = streams.find(s => re.test(s.path.split('/').pop()!.replace(/\.dspadpcm/i, '').replace(/\.bcstm$/i, '')));
-    if (!f) continue;
-    const name = f.path.split('/').pop()!.replace(/\.dspadpcm/i, '');
-    if (!assets.some(a => a.name === name)) assets.push({ name, data: f.data.slice() });
-    (theme.music ??= {})[role] = name;
+    const f = streams.find(s => re.test(nameOf(s).replace(/\.bcstm$/i, '')));
+    if (f) (theme.music ??= {})[role] = nameOf(f);
   }
+  if (assets.length) theme.songs = assets.map(a => a.name);
   return { theme, assets };
 }
 

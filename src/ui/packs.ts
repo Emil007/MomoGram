@@ -86,7 +86,11 @@ export function openPackManager(pm: PM) {
     }
   }
 
-  /** a folder: Switch games are folders (their RomFS); other games in it are read one by one */
+  /**
+   * a folder with everything in it (also subfolders): Switch games are folders (their RomFS), every other file
+   * (ROMs, archives, .momopack) is read on its own. Each game is stored as soon as it is read, so a big folder
+   * doesn't need all games in memory at once.
+   */
   async function addFolder() {
     const files = await new Promise<File[]>(res => {
       const i = h('input', { type: 'file', multiple: true }) as HTMLInputElement;
@@ -98,31 +102,30 @@ export function openPackManager(pm: PM) {
     const results = h('ul', { class: 'results' });
     status.innerHTML = '';
     status.append(results);
-    const li = h('li', {}, t('analyzing'));
-    results.append(li);
     const byName = new Map(files.map(f => [(f as any).webkitRelativePath || f.name, f]));
     const names = [...byName.keys()];
-    const made: Pack[] = [];
-    const sets = await importFileSet({ names, get: async n => { const f = byName.get(n); return f ? new Uint8Array(await f.arrayBuffer()) : undefined; } });
-    li.remove();
-    for (const r of sets.results) {
-      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; made.push(p); } }
-      results.append(h('li', {}, r.file + ': ' + (r.ok ? '✓ ' + r.packs.map(p => pickAny(p.title, lang())).join(', ') : '✕ ' + (r.message === 'unsupported' ? t('unsupported') : r.message))));
-    }
-    // everything else: like single files (folders of ROMs)
-    for (const n of names) {
-      if (sets.used(n) || !/\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|zip|7z|rar|momopack|json)$/i.test(n)) continue;
+    const loose = names.filter(n => /\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|app|zip|7z|rar|momopack)$/i.test(n));
+    let done = 0, added = 0;
+    const progress = h('li', { class: 'progress' });
+    results.append(progress);
+    const step = (what: string) => { progress.textContent = `${t('analyzing')} ${what}`; };
+    step('');
+    await importFileSet({ names, get: async n => { const f = byName.get(n); return f ? new Uint8Array(await f.arrayBuffer()) : undefined; } }, async r => {
+      if (r.ok) { const rev = newRev(); for (const p of r.packs) { p.source.file = r.file; p.rev = rev; } await addPacks(r.packs); added += r.packs.length; }
+      results.insertBefore(h('li', {}, r.file + ': ' + (r.ok ? '✓ ' + r.packs.map(p => pickAny(p.title, lang())).join(', ') : '✕ ' + (r.message === 'unsupported' ? t('unsupported') : r.message))), progress);
+    }).then(s => { for (let i = loose.length - 1; i >= 0; i--) if (s.used(loose[i])) loose.splice(i, 1); });
+    for (const n of loose) {
       const f = byName.get(n)!;
-      const line = h('li', {}, n + ' … ' + t('analyzing'));
-      results.append(line);
+      step(`${++done}/${loose.length} · ${n}`);
+      const line = h('li', {}, n + ' … ');
+      results.insertBefore(line, progress);
       try {
         const r = await readEntries(await filesToEntries({ name: f.name, file: f }), lang(), t);
-        made.push(...r.made);
+        if (r.made.length) { await addPacks(r.made); added += r.made.length; }
         line.textContent = n + ': ' + (r.msgs.join(' · ') || '✕ ' + t('unsupported'));
       } catch (e: any) { line.textContent = n + ': ✕ ' + (e.message || e); }
     }
-    if (made.length) await addPacks(made);
-    else if (!results.children.length) results.append(h('li', {}, '✕ ' + t('unsupported')));
+    progress.textContent = t('folderDone', { n: added });
   }
 
   /** several packs: one .zip holding a .momopack per pack (one pack: just its .momopack) */
@@ -241,21 +244,21 @@ export function openPackManager(pm: PM) {
 export async function storePacks(existing: Pack[], incoming: Pack[]): Promise<Pack[]> {
   const merged = new Map<string, Pack>();
   // a game added again is read fresh: the new import is the base of the merge (so everything newer versions of
-  // MomoGram read from a game, like icons, pictures or music, arrives), and names and region exclusives of the
-  // version already stored are merged in. Only the base's assets fit its puzzles (animation indices differ
-  // between regions), so assets of the other versions are dropped.
-  const baseAssets = new Map<string, Pack['assets'] | null>();
+  // MomoGram read from a game, like icons, pictures or music, arrives), and names, region exclusives and songs of
+  // the versions already stored are merged in. A file both versions have comes from the base (animation indices
+  // differ between regions); the other version's other files (its music) stay.
   for (const p of [...incoming, ...existing.filter(x => incoming.some(i => i.id === x.id))]) {
     const m = merged.get(p.id);
-    if (!baseAssets.has(p.id)) baseAssets.set(p.id, existing.includes(p) ? null : p.assets ?? null);
     merged.set(p.id, m ? mergePacks(m, p) : p);
   }
   const ps = [...merged.values()];
   for (const p of ps) {
-    const { assets: _, ...rest } = p;
-    for (const a of baseAssets.get(p.id) ?? []) await storage.saveAsset(p.id, a.name, a.data);
+    const { assets, ...rest } = p;
+    for (const a of assets ?? []) await storage.saveAsset(p.id, a.name, a.data);
     delete (p as any).assets;
     await storage.savePack(rest as Pack);
   }
+  // files a new version of a pack replaced
+  await storage.sweepAssets().catch(() => {});
   return [...existing.filter(x => !merged.has(x.id)), ...ps].sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en')));
 }

@@ -57,6 +57,12 @@ export interface PackTheme {
   pictures?: boolean;
   /** every in-game track the game offers (random music picks from these); defaults to play / play2 */
   tracks?: string[];
+  /** every song of the game, also those it plays nowhere MomoGram knows of (for the sound test) */
+  songs?: string[];
+  /** songs the player switched off: never played */
+  off?: string[];
+  /** when the player last changed where songs are played (sound test): such a pack keeps its tags on a new import */
+  edited?: number;
 }
 
 /** small picture of the game: width × height RGBA pixels, base64 */
@@ -87,12 +93,6 @@ export interface Pack {
   rev?: number;
   /** only while importing: assets the importer extracted (stored separately, stripped before saving) */
   assets?: PackAsset[];
-}
-
-export function assetDir(p: Pack): string { return packFileName(p).replace(/\.momopack\.json$/, '') + '.assets/'; }
-
-export function packFileName(p: Pack): string {
-  return p.id.replace(/[^a-z0-9._-]+/gi, '_') + '.momopack.json';
 }
 
 export function rowsFromBits(w: number, h: number, bit: (x: number, y: number) => boolean): string[] {
@@ -132,10 +132,11 @@ export function pickText(t: Text | undefined, lang: Lang, fallback = ''): string
 export function mergePacks(a: Pack, b: Pack): Pack {
   const { assets: aa, ...aj } = a;
   const out: Pack = JSON.parse(JSON.stringify(aj));
-  // keep the theme (and its music) of whichever version has one
-  if (!out.theme && b.theme) out.theme = JSON.parse(JSON.stringify(b.theme));
-  const assets = aa?.length ? aa : b.assets;
-  if (assets?.length) out.assets = assets;
+  // keep the theme (and its music) of whichever version has one; the songs of both (a game read from its 3DS and
+  // its Switch release has the music of both), and where songs are played as the player set it
+  out.theme = mergeThemes(out.theme, b.theme);
+  const assets = [...(aa ?? []), ...(b.assets ?? []).filter(x => !aa?.some(y => y.name === x.name))];
+  if (assets.length) out.assets = assets;
   out.title = { ...b.title, ...a.title };
   const regions = new Set([a.source.region, b.source.region].flatMap(r => (r ?? '').split('/')).filter(Boolean));
   out.source.region = [...regions].join('/');
@@ -176,6 +177,29 @@ export function mergePacks(a: Pack, b: Pack): Pack {
     }
   }
   return out;
+}
+
+function mergeThemes(a: PackTheme | undefined, b: PackTheme | undefined): PackTheme | undefined {
+  if (!a || !b) return JSON.parse(JSON.stringify(a ?? b ?? null)) ?? undefined;
+  const out: PackTheme = JSON.parse(JSON.stringify(a));
+  const songs = [...new Set([...songsOf(a), ...songsOf(b)])];
+  if (songs.length) out.songs = songs;
+  if (!out.music && b.music) { out.music = { ...b.music }; out.tracks = b.tracks?.slice(); }
+  const newer = (b.edited ?? 0) > (a.edited ?? 0) ? b : a;
+  if (newer.edited) {
+    out.edited = newer.edited;
+    out.music = newer.music && { ...newer.music };
+    out.tracks = newer.tracks?.slice();
+    out.off = newer.off?.slice();
+  }
+  return out;
+}
+
+/** every song of a theme: its song list, then the songs it plays */
+export function songsOf(th: PackTheme | undefined): string[] {
+  if (!th) return [];
+  const m = th.music ?? {};
+  return [...new Set([...(th.songs ?? []), m.title, m.menu, ...(th.tracks ?? []), m.play, m.play2, m.clear].filter((r): r is string => !!r))];
 }
 
 /** for pack and level titles: any language is better than nothing */

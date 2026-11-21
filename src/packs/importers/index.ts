@@ -31,17 +31,20 @@ const setImporters: SetImporter[] = [];
 export function registerSetImporter(i: SetImporter) { setImporters.push(i); }
 
 /** read the folder games among the files; returns the results and which files they took */
-export async function importFileSet(files: GameFiles): Promise<{ results: ImportResult[]; used: (name: string) => boolean }> {
+export async function importFileSet(files: GameFiles, each?: (r: ImportResult) => Promise<void>): Promise<{ results: ImportResult[]; used: (name: string) => boolean }> {
   const results: ImportResult[] = [], roots: string[] = [];
+  // with `each`, every game is handed over as soon as it is read (and its packs are dropped from the result), so a
+  // folder with many games never holds all of them in memory
+  const push = async (r: ImportResult) => { if (each) { await each(r); r = { ...r, packs: [] }; } results.push(r); };
   for (const imp of setImporters) {
     for (const root of imp.find(files.names)) {
       if (roots.some(r => root.startsWith(r))) continue;
       roots.push(root);
       try {
         const packs = await imp.read(files, root);
-        results.push({ file: root.replace(/\/$/, '') || imp.name, ok: packs.length > 0, packs, message: packs.length ? imp.name : 'unsupported' });
+        await push({ file: root.replace(/\/$/, '') || imp.name, ok: packs.length > 0, packs, message: packs.length ? imp.name : 'unsupported' });
       } catch (e: any) {
-        results.push({ file: root.replace(/\/$/, '') || imp.name, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` });
+        await push({ file: root.replace(/\/$/, '') || imp.name, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` });
       }
     }
   }

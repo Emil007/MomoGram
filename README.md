@@ -65,7 +65,9 @@ Nonograms do that too.
 **Puzzle packs → Add games or packs**: choose game files you own (raw, or in `.zip` / `.7z` / `.rar`).
 MomoGram finds the puzzles and makes one pack per game, with the original level structure and the puzzle
 names where the game has them. Regional versions of the same game become **one** pack with every
-language's names. Do it once: export the packs, or keep them on your server, and use them on every device.
+language's names. **Add a folder (everything in it)** takes a whole folder with its subfolders: every ROM,
+archive, `.momopack` and Switch RomFS folder in it is read and stored one game at a time. The same song in
+several games is kept only once on the device. Do it once: export the packs, or keep them on your server, and use them on every device.
 
 | Game | Platform | Puzzles | Music & colours |
 |---|---|---|---|
@@ -103,17 +105,20 @@ no game data are included.
   4-point interpolation, ADSR / GAIN, noise, pitch modulation, 8-tap FIR echo, 32 kHz) and, for pack creation
   only, a 65C816 with the parts of the console a game touches while starting. The boot-ROM upload protocol is
   emulated instead of included. When you create a pack, your ROM boots until the game has loaded its sound
-  driver, then the game's own play-song routine is called for each song MomoGram uses, and a compressed snapshot
-  of the sound system (about 150–230 KB) is stored with the pack. Playback runs the SPC700 / S-DSP from there.
+  driver, then the game's own play-song routine is called for every song of the game, and a compressed snapshot
+  of the sound system (about 1 MB) is stored with the pack. Playback runs the SPC700 / S-DSP from there.
 
-| Game | Songs found | Used for |
+All songs a game has are stored with its pack and listed in the sound test (Options); the column on the right is
+where MomoGram plays them by default. You can change that per song in the sound test, or switch songs off.
+
+| Game | Songs | Played by default for |
 |---|---|---|
 | Mario's Picross | 19 (1–$13) | title, menu, two puzzle tracks, clear jingle |
 | Picross 2 | 28 (1–$1C) | title, menu, two puzzle tracks, clear jingle |
 | Pokémon Picross (prototype) | 36 ($01–$19, $81–$8B) | title, menu, puzzle, clear jingle |
 | Mario no Super Picross | 24 ($00–$19, bit 6 = looping) | title, menu, puzzle, clear jingle |
-| Picross NP Vol. 1–8 | same engine | title, menu, two puzzle tracks, clear jingle |
-| Tamori no Picross | same engine | title, menu, two puzzle tracks, clear jingle |
+| Picross NP Vol. 1–8 | 17–24 (same engine; silent numbers left out) | title, menu, two puzzle tracks, clear jingle |
+| Tamori no Picross | 17 (same engine) | title, menu, two puzzle tracks, clear jingle |
 
 Which song plays where was found by tracing the songs each game requests on its own screens (and its puzzle
 music table); clear jingles were picked by their length where the game could not be traced to that screen.
@@ -160,7 +165,7 @@ The desktop app takes `--rom <file.nds>` (or a ROM dropped on the program) to lo
 
 ## Pack files
 
-A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a hidden version) and `assets/` (music, pictures, the game's icon). Double-clicking one opens it in the desktop app, or in the installed web version where the browser supports it. Older `.momopack.json` files and `.zip` exports still work. The format is described in [docs/momopack-format.md](docs/momopack-format.md).
+A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a hidden version) and `assets/` (music, pictures, the game's icon). Double-clicking one opens it in the desktop app, or in the installed web version where the browser supports it. The format is described in [docs/momopack-format.md](docs/momopack-format.md).
 
 ## Your own server
 

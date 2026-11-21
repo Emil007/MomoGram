@@ -1,5 +1,5 @@
 // Reads the puzzle set, names and level structure out of the user's Picross DS ROM.
-import { NdsRom, Overlay, u32 } from './nds';
+import { NdsRom, Overlay, u32, sdatSongs } from './nds';
 import { Lang, Pack, PackLevel, PackPuzzle, Text, rowsFromBits } from '../packs/format';
 
 const REC = 140; // w u32, h u32, title utf16[16], unused, rows u32[20] at +60; column x is bit 24-x
@@ -394,7 +394,7 @@ export function dsToPack(d: PicrossDsData): Pack & { ds: DsPackMeta } {
   return {
     ...d.pack,
     levels: d.pack.levels.map(l => ({ ...l, groupTitle: l.group ? LEVEL_TITLES[l.group] : undefined })),
-    theme: dsTheme(),
+    theme: { ...dsTheme(), ...(d.sdat ? { songs: sdatSongs(d.sdat) } : {}) },
     assets,
     ds: { region: d.region, gameCode: d.gameCode, languages: d.languages, daily7: d.daily7, daily10: d.daily10, pckOffsets: d.pckOffsets },
   };

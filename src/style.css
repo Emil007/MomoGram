@@ -435,7 +435,16 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 
 /* sound test */
 .soundtest { display: flex; flex-direction: column; gap: .8rem; padding: 1rem; max-width: 720px; margin: 0 auto; width: 100%; }
-.soundtest .tracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .45rem; }
+.soundtest .tracks { display: flex; flex-direction: column; gap: .4rem; }
+.soundtest .song { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; }
+.soundtest .song .track { flex: 1 1 180px; padding: .3em .7em; min-height: 0; }
+.soundtest .song.dup .track { padding: .3em .7em; opacity: .75; }
+.soundtest .song.is-off .track { opacity: .45; text-decoration: line-through; }
+.soundtest .chips { display: flex; flex-wrap: wrap; gap: .25rem; }
+.soundtest .chip { font: inherit; font-size: .72rem; padding: .25em .6em; border-radius: 999px; border: 1px solid var(--line, #ccc); background: transparent; color: inherit; cursor: pointer; }
+.soundtest .chip.on { background: var(--accent, #1f9be0); border-color: var(--accent, #1f9be0); color: #fff; }
+.soundtest .chip.off.on { background: #c0392b; border-color: #c0392b; }
+.soundtest .chip:disabled { opacity: .4; cursor: default; }
 .soundtest .track { flex-direction: column; align-items: flex-start; text-align: left; padding: .5em .7em; }
 .soundtest .track b { font-size: .9rem; }
 .soundtest .track small { color: var(--muted); font-size: .72rem; }

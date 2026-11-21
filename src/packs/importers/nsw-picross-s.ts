@@ -341,7 +341,11 @@ async function gameMusic(g: string, sound: Map<string, string>, audio: Map<strin
   };
   let play = e ? [pick('Gm_Bgm_Prs' + e)] : [...sound.entries()].filter(([k]) => /^Gm_Bgm(\d+|_Relaxing)?$/.test(k)).map(([, v]) => v);
   if (!e && !play.length) play = ['bgm_01', 'bgm_02', 'bgm_03', 'bgm_04', 'bgm_05', 'bgm_06'].filter(c => exists(c) && c !== roles.menu);
-  const clips = [...new Set([roles.menu, roles.clear, ...play].filter((x): x is string => !!x))];
+  // every song of the game (S+ keeps the songs of each 3DS game it contains under "e1_…" and so on)
+  const own = (c: string) => e ? c.startsWith(g.toLowerCase() + '_') : !/^e\d_/.test(c);
+  const music = (c: string) => !/(^|_)(se|voice|puzzletitlevoice)(_|\d|$)|^snd_/.test(c);
+  const every = [...new Set([...audio.keys(), ...clipFiles.keys()])].filter(c => own(c) && music(c)).sort();
+  const clips = [...new Set([roles.menu, roles.clear, ...play, ...every].filter((x): x is string => !!x))];
   const assets: PackAsset[] = [], made = new Set<string>();
   for (const c of clips) {
     // the clip's bundle (snd/<name>) unless the clip was found in a file already read
@@ -371,7 +375,7 @@ async function gameMusic(g: string, sound: Map<string, string>, audio: Map<strin
   const f = (c?: string) => (c && made.has(c) ? c + '.ogg' : undefined);
   const tracks = play.filter(c => c && made.has(c)).map(c => c + '.ogg');
   return {
-    theme: { music: { title: f(roles.menu), menu: f(roles.menu), play: tracks[0], clear: f(roles.clear) }, tracks },
+    theme: { music: { title: f(roles.menu), menu: f(roles.menu), play: tracks[0], clear: f(roles.clear) }, tracks, songs: clips.filter(c => made.has(c)).sort().map(c => c + '.ogg') },
     assets,
   };
 }

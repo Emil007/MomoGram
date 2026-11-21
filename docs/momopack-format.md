@@ -15,19 +15,20 @@ assets/<name>      binary files the pack refers to: music, pictures, animations
 
 An "Export all" file is a plain `.zip` holding one `.momopack` per pack.
 
+Files are deflated, except those that are compressed already (`.ogg`, images, `.spcsnap`, `.momopack`): they are
+stored as they are, which saves time and costs no space. `pack.json` and small files use the strongest level.
+
+A `.momopack` always carries all of its files, even when the app on a device keeps a file only once for several
+packs (the same title music in every game of a series). Each pack file stands on its own.
+
 ## Versions
 
 `pack.json` carries a hidden revision in `rev`: the time this version of the pack was made, in milliseconds since 1970. It is set when a game is read (or read again) and every time a pack is saved in the editor. The player never sees it.
 
 - A higher `rev` is a newer version. The app offers an update when a server has a pack with a higher `rev` than the installed one, and the server keeps only the newest.
-- A pack without `rev` counts as revision 1. All older pack files are like this.
+- A pack without `rev` counts as revision 1.
 
-## Older formats (still read)
-
-- `<id>.momopack.json`: a bare `pack.json`.
-- A `.zip` with `<id>.momopack.json` and its files in `<id>.assets/`.
-
-Both are revision 1.
+The bare `.momopack.json` files of early versions are no longer read.
 
 ## pack.json
 
@@ -93,6 +94,9 @@ Puzzle ids must never change between versions of a pack. Otherwise players lose 
     "menu": "sound.spcsnap#spc:68", "play": "…", "play2": "…", "clear": "…", "title": "…"
   },
   "tracks": ["…"],                    // every in-game track (random music picks from these)
+  "songs": ["…"],                     // every song of the game, also unused ones (sound test)
+  "off": ["…"],                       // songs the player switched off (never played)
+  "edited": 1795219200000,            // when the player last changed the tags above in the sound test
   "pictures": true                    // the pack has assets/pictures.bin
 }
 ```

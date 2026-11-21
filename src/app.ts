@@ -3,9 +3,9 @@ import { solutionCount } from './game/unique';
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
-import { Pack, PackLevel, PackPuzzle, Lang, pickText, pickAny } from './packs/format';
+import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf } from './packs/format';
 import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
-import { readEntries, packRev } from './packs/io';
+import { readEntries, packRev, newRev } from './packs/io';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats } from './store';
 import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
 import { Gamepads } from './input';
@@ -657,11 +657,13 @@ function packTracks(pack: Pack): Track[] {
   const m = pack.theme?.music;
   if (!m || !settings.packMusic) return [];
   const refs = pack.theme?.tracks?.length ? pack.theme.tracks : [...new Set([m.play, m.play2].filter((r): r is string => !!r))];
-  return refs.map(ref => ({ pack, ref }));
+  return refs.filter(ref => !isOff(pack, ref)).map(ref => ({ pack, ref }));
 }
+/** a song the player switched off in the sound test */
+const isOff = (pack: Pack, ref: string) => !!pack.theme?.off?.includes(ref);
 // ---- the same song in several games (every 3DS game has the same title music …) counts as one track ----
 // A music file's content hash, per pack and file; computed once in the background, kept on this device.
-const HASH_KEY = 'momogram.trackHash';
+const HASH_KEY = 'momogram.trackHash2';
 let fileHash: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem(HASH_KEY) || '{}'); } catch { return {}; } })();
 let hashing = false;
 /** hash the music files not hashed yet (one at a time, so the app stays responsive) */
@@ -670,19 +672,27 @@ async function hashTracks() {
   hashing = true;
   try {
     for (const p of allPacks()) {
-      const m = p.theme?.music;
-      const files = new Set([...Object.values(m ?? {}), ...(p.theme?.tracks ?? [])].filter((r): r is string => typeof r === 'string').map(r => r.split('#')[0]));
+      const files = new Set(songsOf(p.theme).map(r => r.split('#')[0]));
       for (const f of files) {
         const k = p.id + '/' + f;
         const rev = String(packRev(p));
         if (fileHash[k]?.startsWith(rev + '|')) continue; // a new version of a pack may have other music
-        const d = await storage.loadAsset(p.id, f).catch(() => undefined);
-        if (!d) continue;
-        const sum = new Uint8Array(await crypto.subtle.digest('SHA-1', d as BufferSource));
-        fileHash[k] = rev + '|' + Array.from(sum.subarray(0, 8), b => b.toString(16).padStart(2, '0')).join('') + ':' + d.length;
+        // stored files are linked by their content hash: no need to read them
+        let sum = await storage.assetHash(p.id, f).catch(() => undefined);
+        if (!sum) {
+          const d = await storage.loadAsset(p.id, f).catch(() => undefined);
+          if (!d) continue;
+          sum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-1', d as BufferSource)), b => b.toString(16).padStart(2, '0')).join('');
+          await new Promise(r => setTimeout(r, 50));
+        }
+        fileHash[k] = rev + '|' + sum.slice(0, 16);
         try { localStorage.setItem(HASH_KEY, JSON.stringify(fileHash)); } catch { /* full */ }
-        await new Promise(r => setTimeout(r, 50));
       }
+    }
+    // files stored before linking: linked once, so copies in several games take the space of one
+    if (!localStorage.getItem('momogram.assetsLinked')) {
+      await storage.linkAssets();
+      localStorage.setItem('momogram.assetsLinked', '1');
     }
   } finally { hashing = false; }
 }
@@ -700,7 +710,7 @@ function uniqTracks(list: Track[]): Track[] {
 /** the games that have this song */
 function gamesWith(id: string): Pack[] {
   const k = idKey(id);
-  return allPacks().filter(p => [...menuTracks(p), ...packTracks(p)].some(x => trackKey(p.id, x.ref) === k));
+  return allPacks().filter(p => songsOf(p.theme).some(ref => trackKey(p.id, ref) === k));
 }
 
 let lastTrack = '';
@@ -729,14 +739,14 @@ function usePack(pack: Pack | null, role: 'menu' | 'play' | 'clear', loop = true
   applyThemeCss(root(), packColors(pack));
   if (role === 'menu') return menuMusic(pack);
   const ref = pack?.theme?.music?.[role];
-  if (pack && ref && settings.packMusic) Snd.playPack(pack.id, ref, loop);
+  if (pack && ref && settings.packMusic && !isOff(pack, ref)) Snd.playPack(pack.id, ref, loop);
 }
 
 /** readable name of a track ref: "stage_jazz_SEQ" → "stage jazz", "Bgm_Home.bcstm" → "Bgm Home", "x#gb:5" → "Song 5" */
 function trackName(ref: string): string {
   const [file, seq] = ref.split('#');
-  const m = seq?.match(/^(?:gb|spc|snes):(\d+)/i);
-  if (m) return `Song ${m[1]}`;
+  const m = seq?.match(/^(gb|spc|snes):(\d+)/i);
+  if (m) return `Song ${m[1] === 'gb' ? +m[2] : (+m[2] & 0x3f) + 1}`;
   return (seq ?? file).replace(/\.(bcstm|sdat|gbsnd|spc|ogg)$/i, '').replace(/_SEQ$/i, '').replace(/[_-]+/g, ' ').trim();
 }
 
@@ -768,7 +778,7 @@ function nowPlaying(): HTMLElement {
 function menuTracks(pack: Pack): Track[] {
   const m = pack.theme?.music;
   if (!m || !settings.packMusic) return [];
-  return [...new Set([m.title, m.menu].filter((r): r is string => !!r))].map(ref => ({ pack, ref }));
+  return [...new Set([m.title, m.menu].filter((r): r is string => !!r && !isOff(pack, r)))].map(ref => ({ pack, ref }));
 }
 
 /**
@@ -1331,34 +1341,91 @@ function profileDialog(after: () => void) {
 // ---------------------------------------------------------------- options
 
 /** every game's songs, with what they play for; tap one to hear it */
+/** where a song file comes from, for games with the songs of several releases (3DS and Switch) */
+function songPlatform(ref: string): string {
+  const f = ref.split('#')[0].toLowerCase();
+  return f.endsWith('.bcstm') ? '3DS' : f.endsWith('.ogg') ? 'Switch' : f.endsWith('.sdat') ? 'DS' : f.endsWith('.gbsnd') ? 'Game Boy' : f.endsWith('.spcsnap') ? 'Super Famicom' : '';
+}
+
+/** change where a game plays its songs (sound test): saved in the pack as a new revision, so it goes to the server */
+async function editSongs(p: Pack, fn: (th: PackTheme) => void) {
+  const th: PackTheme = p.theme = { ...(p.theme ?? {}) };
+  th.music = { ...(th.music ?? {}) };
+  fn(th);
+  for (const k of Object.keys(th.music) as Array<keyof NonNullable<PackTheme['music']>>) if (!th.music[k]) delete th.music[k];
+  th.edited = Date.now();
+  p.rev = newRev();
+  await storage.savePack(p);
+}
+
+/**
+ * Every song of every game, playable. The buttons beside a song set where the game plays it (title, menu, puzzle,
+ * clear) or switch it off. The same song in several games is listed in full once, later as a short line.
+ */
 function soundTest() {
   const body = h('div', { class: 'soundtest' });
   screen(header(t('soundTest'), optionsScreen), body);
   if (!settings.music || !settings.packMusic) body.append(h('p', { class: 'fine' }, t('soundTestOff')));
-  const ROLE: Record<string, string> = { title: t('roleTitle'), menu: t('roleMenu'), play: t('rolePlay'), play2: t('rolePlay'), clear: t('roleClear') };
+  body.append(h('p', { class: 'fine' }, t('soundTestHelp')));
+  const ROLES: Array<['title' | 'menu' | 'play' | 'clear', string]> = [['title', t('roleTitle')], ['menu', t('roleMenu')], ['play', t('rolePlay')], ['clear', t('roleClear')]];
   const buttons: Array<[string, HTMLElement]> = [];
   body.append(h('button', { class: 'btn ghost', onClick: () => Snd.stop() }, '■ ' + t('stop')));
+  // the first game (in library order) that has each song
+  const firstGame = new Map<string, Pack>();
+  const games = new Map<string, Set<Pack>>();
+  for (const p of allPacks()) for (const ref of songsOf(p.theme)) {
+    const k = trackKey(p.id, ref);
+    if (!firstGame.has(k)) firstGame.set(k, p);
+    games.set(k, (games.get(k) ?? new Set()).add(p));
+  }
   for (const p of allPacks()) {
-    const m = p.theme?.music;
-    if (!m) continue;
-    // each song once, with every role it has
-    const roles = new Map<string, string[]>();
-    const add = (ref: string | undefined, role: string) => { if (!ref) return; const r = roles.get(ref) ?? []; if (role && !r.includes(role)) r.push(role); roles.set(ref, r); };
-    add(m.title, ROLE.title); add(m.menu, ROLE.menu); add(m.play, ROLE.play); add(m.play2, ROLE.play);
-    for (const ref of p.theme?.tracks ?? []) add(ref, ROLE.play);
-    add(m.clear, ROLE.clear);
+    const songs = songsOf(p.theme);
+    if (!songs.length) continue;
+    const several = new Set(songs.map(songPlatform)).size > 1;
     const list = h('div', { class: 'tracks' });
-    for (const [ref, rs] of roles) {
-      const id = p.id + '/' + ref;
-      const b = h('button', { class: 'btn track', onClick: () => { void Snd.playPack(p.id, ref, ref !== m.clear); } },
-        h('b', {}, '▶ ' + trackName(ref)), h('small', {}, rs.join(' · ')));
-      buttons.push([id, b]);
-      list.append(b);
-    }
+    const draw = () => {
+      list.replaceChildren();
+      const th = p.theme ?? {}, m = th.music ?? {};
+      const play = th.tracks?.length ? th.tracks : [m.play, m.play2].filter(Boolean);
+      const has = (role: string, ref: string) => role === 'play' ? play.includes(ref) : (m as any)[role] === ref;
+      const seen = new Set<string>();
+      for (const ref of songs) {
+        const id = p.id + '/' + ref, key = trackKey(p.id, ref);
+        if (seen.has(key)) continue; // the same song twice in one game
+        seen.add(key);
+        const first = firstGame.get(key) !== p ? firstGame.get(key) : undefined;
+        const off = isOff(p, ref);
+        const others = (games.get(key)?.size ?? 1) - 1;
+        const note = [several ? songPlatform(ref) : '', first ? t('sameAs', { game: pickAny(first.title, packLang()) }) : others ? t('alsoIn', { n: others }) : ''].filter(Boolean).join(' · ');
+        const playBtn = h('button', { class: 'btn track', onClick: () => { void Snd.playPack(p.id, ref, m.clear !== ref && !/jingle|jng|_j_|jg_\d/i.test(ref)); } },
+          h('b', {}, '▶ ' + trackName(ref)), note ? h('small', {}, note) : null);
+        buttons.push([id, playBtn]);
+        const chips = h('div', { class: 'chips' }, ...ROLES.map(([role, label]) => h('button', {
+          class: 'chip' + (has(role, ref) ? ' on' : ''), 'aria-pressed': String(has(role, ref)), disabled: p === STARTER || off ? true : undefined,
+          onClick: async () => {
+            const on = !has(role, ref);
+            await editSongs(p, th => {
+              const mm = th.music!;
+              if (role === 'play') {
+                const list = (th.tracks?.length ? th.tracks : [mm.play, mm.play2].filter((r): r is string => !!r)).filter(r => r !== ref);
+                if (on) list.push(ref);
+                th.tracks = list; mm.play = list[0]; delete mm.play2;
+              } else if (on) mm[role] = ref;
+              else if (mm[role] === ref) delete mm[role];
+            });
+            draw();
+          } }, label)),
+          h('button', { class: 'chip off' + (off ? ' on' : ''), title: t('songOffTitle'), 'aria-pressed': String(off), disabled: p === STARTER ? true : undefined,
+            onClick: async () => { await editSongs(p, th => { const o = new Set(th.off ?? []); if (off) o.delete(ref); else o.add(ref); th.off = [...o]; if (!th.off.length) delete th.off; }); draw(); } }, '⊘ ' + t('songOff')));
+        list.append(h('div', { class: 'song' + (first ? ' dup' : '') + (off ? ' is-off' : '') }, playBtn, chips));
+      }
+      mark(Snd.current());
+    };
+    draw();
     body.append(h('section', { class: 'opt-card' }, h('h2', {}, pickAny(p.title, packLang())), list));
   }
   if (!buttons.length) body.append(h('p', { class: 'fine' }, t('soundTestNone')));
-  const mark = (cur: string) => { for (const [id, b] of buttons) b.classList.toggle('on', id === cur); };
+  function mark(cur: string) { for (const [id, b] of buttons) b.classList.toggle('on', id === cur); }
   mark(Snd.current());
   const on = (id: string) => { if (body.isConnected) mark(id); else Snd.offChange(on); };
   queueMicrotask(() => Snd.onChange(on));

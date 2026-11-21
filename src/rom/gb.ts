@@ -11,6 +11,6 @@ export const isGb = (d: Uint8Array) => d.length >= 0x8000 && d[0x104] === 0xce &
 export function gbWithMusic(p: Pack, rom: Uint8Array): Pack {
   let m = null;
   try { m = gbPackMusic(rom); } catch (e) { console.warn('GB music', e); }
-  if (m) { p.theme = { ...p.theme, music: m.music }; p.assets = [...(p.assets ?? []), m.asset]; }
+  if (m) { p.theme = { ...p.theme, music: m.music, songs: m.songs }; p.assets = [...(p.assets ?? []), m.asset]; }
   return p;
 }

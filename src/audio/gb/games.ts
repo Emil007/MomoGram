@@ -79,20 +79,25 @@ export function unpackSoundRom(d: Uint8Array): Uint8Array {
 // ------------------------------------------------------------------ songs per game
 // Song numbers were found by tracing which songs each game requests on its title screen, menus, puzzle screen
 // (the game's own music table) and after a solved puzzle, then checked numerically (looping vs. one-shot).
+// Every song of a game: the numbers that start music (found by starting each number and listening; numbers
+// above the last song repeat the list, the rest are sound effects).
 type Roles = Partial<Record<'menu' | 'play' | 'play2' | 'clear' | 'title', number>>;
-const ROLES: Array<[RegExp, Roles]> = [
-  [/^MARIO'?S PICROSS/, { title: 0x0a, menu: 0x0d, play: 0x02, play2: 0x05, clear: 0x08 }],
-  [/^PICROSS 2/, { title: 0x14, menu: 0x05, play: 0x0c, play2: 0x0d, clear: 0x15 }],
-  [/^POKEPICROSS/, { title: 0x01, menu: 0x03, play: 0x04, clear: 0x0b }],
+const range = (a: number, b: number) => [...Array(b - a + 1)].map((_, i) => a + i);
+const ROLES: Array<[RegExp, Roles, number[]]> = [
+  [/^MARIO'?S PICROSS/, { title: 0x0a, menu: 0x0d, play: 0x02, play2: 0x05, clear: 0x08 }, range(0x01, 0x13)],
+  [/^PICROSS 2/, { title: 0x14, menu: 0x05, play: 0x0c, play2: 0x0d, clear: 0x15 }, range(0x01, 0x1c)],
+  // Pokémon Picross has a second copy of the driver for songs from $81
+  [/^POKEPICROSS/, { title: 0x01, menu: 0x03, play: 0x04, clear: 0x0b }, [...range(0x01, 0x19), ...range(0x81, 0x8b)]],
 ];
 
 /** music for a pack made from a Game Boy nonogram game: the sound asset and the refs per role */
-export function gbPackMusic(rom: Uint8Array): { asset: { name: string; data: Uint8Array }; music: Record<string, string> } | null {
+export function gbPackMusic(rom: Uint8Array): { asset: { name: string; data: Uint8Array }; music: Record<string, string>; songs: string[] } | null {
   const title = String.fromCharCode(...rom.subarray(0x134, 0x143)).replace(/\0.*$/, '');
-  const roles = ROLES.find(([re]) => re.test(title))?.[1];
-  if (!roles || !findDseq(rom)) return null;
+  const game = ROLES.find(([re]) => re.test(title));
+  if (!game || !findDseq(rom)) return null;
+  const [, roles, songs] = game;
   const name = 'sound.gbsnd';
   const music: Record<string, string> = {};
   for (const [role, n] of Object.entries(roles)) music[role] = `${name}#gb:${n}`;
-  return { asset: { name, data: packSoundRom(rom) }, music };
+  return { asset: { name, data: packSoundRom(rom) }, music, songs: songs.map(n => `${name}#gb:${n}`) };
 }

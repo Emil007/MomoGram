@@ -9,7 +9,7 @@ export const sfcHeaderTitle = (d: Uint8Array) => d.length >= 0x10000 ? String.fr
 export async function sfcWithMusic(p: Pack, rom: Uint8Array): Promise<Pack> {
   try {
     const m = await snesPackMusic(rom, () => new Promise(r => setTimeout(r, 0)));
-    if (m) { p.theme = { ...p.theme, music: m.music }; p.assets = [...(p.assets ?? []), m.asset]; }
+    if (m) { p.theme = { ...p.theme, music: m.music, songs: m.songs }; p.assets = [...(p.assets ?? []), m.asset]; }
   } catch (e) { console.warn('SNES music', e); }
   return p;
 }
