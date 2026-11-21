@@ -20,12 +20,12 @@ Add your games once: MomoGram turns each into a pack with its levels, puzzle nam
 <img alt="No game data included" src="https://img.shields.io/badge/game%20data-not%20included-f39a2c">
 </p>
 
-| Your library | Pick a puzzle | Play, one-handed | Solved |
-|---|---|---|---|
-| <img src="docs/screenshots/phone-home.png" alt="Home screen: the music bar, the daily nonogram and random buttons, the game library" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="A level: solved puzzles with their pictures and medals, the Easy / Normal / Hard picker" width="100%"> | <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, a highlighted row and column, the tools at the bottom" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name and the time" width="100%"> |
+| Your library | Pick a puzzle | Play, one-handed | Colour mode | Solved |
+|---|---|---|---|---|
+| <img src="docs/screenshots/phone-home.png" alt="Home screen: the mode switch, the daily nonogram and random buttons, the game library" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="A level: solved puzzles with their pictures and medals, the Easy / Normal / Hard picker" width="100%"> | <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, greyed-out clue numbers, the tools at the bottom" width="100%"> | <img src="docs/screenshots/phone-color.png" alt="A colour nonogram: coloured clue numbers and the colour palette with the tools" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name, the time, points and PixElo" width="100%"> |
 
-<p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in landscape: the tool column beside the board" width="80%"><br>
-<em>Desktop / Steam Deck: keyboard, mouse and gamepad. The screenshots show MomoGram's own starter puzzles.</em></p>
+<p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in dark mode, a Mega puzzle: framed Mega numbers span two rows or columns, the tool column beside the board" width="80%"><br>
+<em>Desktop / Steam Deck in dark mode, playing Mega: keyboard, mouse and gamepad. The screenshots show MomoGram's own starter puzzles.</em></p>
 
 > **No game data is included.** Start with MomoGram's own starter puzzles, then add the games you own:
 > MomoGram reads the puzzles, names, pictures and music from your files. Everything stays on your device
@@ -65,109 +65,27 @@ Nonograms do that too.
 
 **Options → Puzzle packs → Add games or packs** reads game files you own (raw, or in `.zip` / `.7z` / `.rar`), or a whole folder with everything in it. MomoGram makes one pack per game, with the original level structure; regional versions of a game become **one** pack with every language's names, and the same song in several games is stored only once. Do it once: export the packs, or keep them on your own server, and use them on every device.
 
-The numbers below are what MomoGram reads from the games (all regions together where there are several):
+One importer reads each group of games below. The numbers are what MomoGram reads from the games, with all regions together where there are several:
 
-### Nintendo DS and DSiWare
+| Games | System | Puzzles | Mega from the game | Colour puzzles | Songs |
+|---|---|---:|---:|---:|---:|
+| Picross DS and its demos (Download Station, Nintendo Channel) | DS | 366 | – | – | 27 |
+| Picross e – e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross: Zelda TP, Sanrio Characters Picross | 3DS (decrypted) | 2,062 | 1,956 | – | 88 |
+| PICROSS S – S8, S+, S GENESIS, S Doraemon, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 2,222 | 1,761 | 267 | 237 |
+| Hudson's Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and + Nihon no Mukashi Banashi (DSiWare) | DS, DSiWare | 1,000 | – | 100 + MomoGram's | 80 |
+| DS Puzzler / Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS | 1,000 | – | – | 7 |
+| SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | DS | 2,801 | – | 2,800 | 17 |
+| Illu-Logi VOW | DS | 139 | – | 166 | 40 |
+| Puzzle Mate DS: Oekaki Mate | DS | 443 | – | 8 | 4 |
+| Hello Kitty no Paku Paku & Logic | DS | 122 | – | – | 4 |
+| Puzzle Iro Iro: Gekkan Crossword House Vol. 1 – 6 | DSiWare | 18 | – | – | 36 |
+| Mario's Picross, Picross 2 | Game Boy | 1,104 | – | – | 47 |
+| Pokémon Picross (unreleased prototype) | Game Boy Color | 490 | – | – | 36 |
+| Mario's Super Picross, Tamori no Picross | Super Famicom, Satellaview | 397 | – | – | 41 |
+| Picross NP Vol. 1 – 8 | Super Famicom (Nintendo Power) | 1,320 | – | – | 168 |
+| **Total** | | **13,484** | **3,717** | **3,341** | **832** |
 
-| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
-|---|---:|---:|---|:---:|---:|---|
-| Picross DS | 351 | – | ✓ 7 languages | – | 27 | solved-picture animations, daily puzzles |
-| Picross DS demos (Download Station, Nintendo Channel) | 15 | – | ✓ JA | – | – |  |
-| Puzzle Series Vol. 6: Illust Logic | 300 | – | ✓ JA | ✓ | 11 |  |
-| Illust Logic DS + Colorful Logic | 300 | – | – | ✓ | 23 | 100 colour puzzles (Colorful Logic) |
-| Illust Logic (DSiWare) | 200 | – | – | ✓ | 23 |  |
-| Illust Logic + Nihon no Mukashi Banashi (DSiWare) | 200 | – | – | ✓ | 23 |  |
-| DS Puzzler: Nanpure Fan & Oekaki Logic / Challenge Me: Brain Puzzles | 500 | – | ✓ 6 languages | – | 3 |  |
-| DS Puzzler Wi-Fi Taiou | 500 | – | ✓ JA | – | 4 |  |
-| Illu-Logi VOW | 139 | – | – | – | 40 | 166 colour puzzles |
-| Hello Kitty no Paku Paku & Logic | 122 | – | – | – | 4 |  |
-| SIMPLE DS Vol. 7: THE Illust Puzzle | 1,401 | – | ✓ JA | ✓ | 9 | colour pictures, played as nonograms |
-| SIMPLE DS Vol. 28: THE Illust Puzzle 2 | 1,400 | – | ✓ JA | ✓ | 8 | colour pictures, played as nonograms |
-| Puzzle Mate DS: Oekaki Mate | 443 | – | ✓ JA | – | 4 | up to 45×50; 8 of its 10 colour puzzles |
-| Puzzle Iro Iro Vol. 1 (DSiWare) | 3 | – | – | – | 6 |  |
-| Puzzle Iro Iro Vol. 2 (DSiWare) | 3 | – | – | – | 6 |  |
-| Puzzle Iro Iro Vol. 3 (DSiWare) | 3 | – | – | – | 6 |  |
-| Puzzle Iro Iro Vol. 4 (DSiWare) | 3 | – | – | – | 6 |  |
-| Puzzle Iro Iro Vol. 5 (DSiWare) | 3 | – | – | – | 6 |  |
-| Puzzle Iro Iro Vol. 6 (DSiWare) | 3 | – | – | – | 6 |  |
-| **Total** | **5,889** | **0** | | | **215** | |
-
-### Nintendo 3DS (decrypted)
-
-| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
-|---|---:|---:|---|:---:|---:|---|
-| Picross e | 150 | 150 (with PICROSS S+) | ✓ 7 languages | – | 5 |  |
-| Picross e2 | 150 | 150 (with PICROSS S+) | ✓ 7 languages | – | 7 |  |
-| Picross e3 | 150 | 150 (30 Mega-only) (all with S+) | ✓ 7 languages | – | 4 |  |
-| Picross e4 | 150 | 150 (63 Mega-only) (all with S+) | ✓ 7 languages | – | 4 |  |
-| Picross e5 | 150 | 150 (48 Mega-only) (all with S+) | ✓ 7 languages | – | 4 |  |
-| Picross e6 | 152 | 152 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
-| Picross e7 | 150 | 165 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
-| Picross e8 | 150 | 165 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
-| Picross e9 | 150 | 165 (15 Mega-only) (all with S+) | ✓ 7 languages | – | 5 |  |
-| Pokémon Picross | 311 | 313 (3 Mega-only) | ✓ JA | – | 22 |  |
-| Club Nintendo Picross | 90 | – | ✓ JA | – | 4 |  |
-| Club Nintendo Picross Plus | 105 | 48 (48 Mega-only) | ✓ JA | – | 5 |  |
-| My Nintendo Picross: Zelda TP | 50 | 45 (1 Mega-only) | ✓ JA | – | 8 |  |
-| Sanrio Characters Picross | 154 | 153 (1 Mega-only) | ✓ EN, JA | – | 5 |  |
-| **Total** | **2,062** | **1,956** | | | **88** | |
-
-### Nintendo Switch (decrypted RomFS folder, or a zip of it)
-
-| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
-|---|---:|---:|---|:---:|---:|---|
-| PICROSS S | 150 | 150 | ✓ 6 languages | – | 8 |  |
-| PICROSS S2 | 150 | 150 | ✓ 6 languages | – | 14 |  |
-| PICROSS S3 | 150 | 150 | ✓ 6 languages | – | 16 |  |
-| PICROSS S4 | 155 | 150 | ✓ 6 languages | – | 16 |  |
-| PICROSS S5 | 155 | 150 | ✓ 6 languages | – | 17 |  |
-| PICROSS S6 | 155 | 150 | ✓ 6 languages | – | 17 |  |
-| PICROSS S7 | 155 | 150 | ✓ 6 languages | – | 17 |  |
-| PICROSS S8 | 155 | 150 | ✓ 7 languages | – | 17 |  |
-| PICROSS S+ (own puzzles; its e1–e9 go into the e packs) | 30 | 30 | ✓ 7 languages | – | 20 |  |
-| PICROSS S GENESIS & Master System Edition | 150 | 150 | ✓ 6 languages | – | 16 |  |
-| PICROSS S Doraemon & F Characters Edition | 155 | 150 | ✓ 7 languages | – | 16 |  |
-| Kemono Friends Picross | 150 | 150 | ✓ 6 languages | – | 14 |  |
-| Picross Lord of the Nazarick | 81 | 81 | ✓ 6 languages | – | 23 |  |
-| Picross -LogiartGrimoire- | 281 | – | ✓ 7 languages | – | 14 |  |
-| Picross Juufuutei Raden’s Guide for Pixel Museum | 150 | – | ✓ EN, JA | – | 12 |  |
-| **Total** | **2,222** | **1,761** | | | **237** | |
-
-### Game Boy, Super Famicom and Satellaview
-
-| Game | Puzzles | Mega from the game | Puzzle names | Colour pictures | Songs | Notes |
-|---|---:|---:|---|:---:|---:|---|
-| Mario’s Picross | 268 | – | – | – | 19 | Super Game Boy colours |
-| Picross 2 | 836 | – | – | – | 28 | as 15×15 sections; Super Game Boy colours |
-| Pokémon Picross (GBC prototype) | 490 | – | – | – | 36 | 20×20 and 30×30 as sections |
-| Mario no Super Picross | 304 | – | – | – | 24 |  |
-| Picross NP Vol. 1 | 120 | – | – | – | 21 |  |
-| Picross NP Vol. 2 | 120 | – | – | – | 21 |  |
-| Picross NP Vol. 3 | 120 | – | – | – | 21 |  |
-| Picross NP Vol. 4 | 120 | – | – | – | 21 |  |
-| Picross NP Vol. 5 | 120 | – | – | – | 21 |  |
-| Picross NP Vol. 6 | 240 | – | – | – | 21 |  |
-| Picross NP Vol. 7 | 240 | – | – | – | 21 |  |
-| Picross NP Vol. 8 | 240 | – | – | – | 21 |  |
-| Tamori no Picross | 93 | – | – | – | 17 | broadcasts merged into one pack |
-| **Total** | **3,311** | **0** | | | **292** | |
-
-**All supported games together: 13,484 nonograms, 3,717 Mega puzzles with the games' own Mega numbers (Mega-only puzzles included), and 832 songs.** Every other puzzle can be played as Mega too, with Mega numbers chosen by MomoGram.
-
-### Colour puzzles
-
-| Game | Colour puzzles | Colours |
-|---|---:|---|
-| PICROSS S3 – S8, S GENESIS, S Doraemon (Color Picross) | 30 each | 3–4 |
-| Picross Lord of the Nazarick (Color Picross) | 27 | 3–4 |
-| Illust Logic DS + Colorful Logic (Colorful Logic) | 100 | 2–5 |
-| Illu-Logi VOW (Colour Logic) | 166 | 2–5 |
-| Puzzle Mate DS: Oekaki Mate | 8 of its 10 colour puzzles | 4–5 |
-| SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | 1,400 each (the games' own colour pictures) | 1–5 |
-| MomoGram starter puzzles | 9 | 2–5 |
-| Hudson's Illust Logic games (pictures) | colour versions by MomoGram where they have one solution (95 in Illust Logic DS) | up to 8 |
-
-Still to come: Animal Color Cross (DSiWare; its puzzles are in a compressed archive of its own) and two of Puzzle Mate's colour puzzles.
+Every other puzzle can be played as Mega too, with Mega numbers chosen by MomoGram. Colour mode also has MomoGram's own colour starter puzzles, and colour versions of Hudson's Illust Logic pictures where they have exactly one solution (95 in Illust Logic DS). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's colour puzzles.
 
 To add another game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
