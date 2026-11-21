@@ -112,6 +112,8 @@ export async function boot() {
     } catch (e) { console.warn('game from command line', e); }
   }
   home();
+  // a new player (nothing solved yet) is offered the tutorial once
+  if (localStats('normal').points === 0 && localStats('mega').points === 0) setTimeout(() => { if (document.querySelector('.home')) offerTutorial(); }, 600);
   setTimeout(backfillPoints, 1500);
   // installed web app: .momopack files opened with it (File Handling API, Chromium)
   (window as any).launchQueue?.setConsumer(async (p: { files?: Array<{ getFile(): Promise<File> }> }) => {
@@ -674,6 +676,91 @@ function toolSwitchArt(): Element {
     <g class="tool-x"><path d="M-10 -10L10 10M10 -10L-10 10"/></g>
   </svg>`;
   return tpl.content.firstElementChild!;
+}
+
+// ---------------------------------------------------------------- tutorial
+// A short guided puzzle (and one for Mega), like the first lessons of Picross DS: each step points at the lines
+// it talks about and goes on by itself once you've done what it asks. Easy rules, so mistakes are caught.
+type TutStep = { text: string; rows?: number[]; cols?: number[]; done?: (b: Board) => boolean };
+const TUT_PUZZLE = ['#####', '#.#.#', '#####', '.###.', '..#..'];
+const TUT_MEGA = ['#..##', '#..##', '#.#..', '###..', '.###.'];
+function tutorialScreen(back: () => void, lesson: 'basic' | 'mega' = 'basic') {
+  themeRoot(null);
+  const mega = lesson === 'mega';
+  const rowsOf = mega ? TUT_MEGA : TUT_PUZZLE;
+  const board = new Board(rowsOf, 'easy', mega ? { rows: [1], cols: [] } : null);
+  const row = (b: Board, y: number) => [...Array(b.w)].map((_, x) => b.at(x, y));
+  const col = (b: Board, x: number) => [...Array(b.h)].map((_, y) => b.at(x, y));
+  const filled = (cells: number[], want: number[]) => want.every(i => cells[i] === FILL);
+  const steps: TutStep[] = mega ? [
+    { text: t('tutM1') },
+    { text: t('tutM2'), rows: [1, 2] },
+    { text: t('tutM3'), rows: [1, 2], done: b => b.at(0, 1) === FILL && b.at(0, 2) === FILL },
+    { text: t('tutM4'), done: b => b.checkSolved() },
+    { text: t('tutMEnd') },
+  ] : [
+    { text: t('tut1') },
+    { text: t('tut2'), rows: [0], done: b => filled(row(b, 0), [0, 1, 2, 3, 4]) },
+    { text: t('tut3'), rows: [2], cols: [2], done: b => filled(row(b, 2), [0, 1, 2, 3, 4]) && filled(col(b, 2), [0, 1, 2, 3, 4]) },
+    { text: t('tut4'), rows: [1], done: b => filled(row(b, 1), [0, 2, 4]) },
+    { text: t('tut5'), rows: [4], done: b => [0, 1, 3, 4].every(i => row(b, 4)[i] === CROSS) },
+    { text: t('tut6'), done: b => b.checkSolved() },
+    { text: t('tutEnd') },
+  ];
+  let at = 0;
+  const canvas = h('canvas', {}) as HTMLCanvasElement;
+  const wrap = h('div', { class: 'boardwrap tut-board' }, canvas);
+  const textEl = h('p', { class: 'tut-text' });
+  const dots = h('div', { class: 'tut-dots' });
+  const nextBtn = h('button', { class: 'btn primary', onClick: () => go(at + 1) }, t('tutNext'));
+  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'fill' ? 'cross' : 'fill') }, toolSwitchArt());
+  const undoBtn = h('button', { class: 'rbtn', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) view.invalidate(); } }, icon('undo'));
+  const leave = () => { ro.disconnect(); view.destroy(); back(); };
+  const view: BoardView = new BoardView(canvas, board, {
+    onChange: r => { Snd.sfx(r === 'mistake' ? 'mistake' : 'tap'); check(); },
+  });
+  function setTool(tool: 'fill' | 'cross') {
+    view.tool = tool;
+    toolBtn.classList.toggle('crossing', tool === 'cross');
+  }
+  function check() {
+    const st = steps[at];
+    if (st.done?.(board)) setTimeout(() => { if (steps[at] === st) { Snd.sfx('clear'); go(at + 1); } }, 350);
+  }
+  function go(i: number) {
+    if (i >= steps.length) { localStorage.setItem('momogram.tutorialDone', '1'); leave(); return; }
+    at = i;
+    const st = steps[i];
+    textEl.textContent = st.text;
+    view.focus = st.rows || st.cols ? { rows: st.rows ?? [], cols: st.cols ?? [] } : null;
+    view.invalidate();
+    dots.replaceChildren(...steps.map((_, k) => h('i', { class: k === i ? 'on' : k < i ? 'past' : '' })));
+    const last = i === steps.length - 1;
+    nextBtn.style.visibility = st.done && !last ? 'hidden' : ''; // keeps its space: the board doesn't move
+    nextBtn.textContent = last ? t('done') : t('tutNext');
+    extra.replaceChildren();
+    if (last && !mega) extra.append(h('button', { class: 'btn', onClick: () => { ro.disconnect(); view.destroy(); tutorialScreen(back, 'mega'); } }, t('tutMegaToo')));
+    check();
+  }
+  const extra = h('div', { class: 'tut-extra' });
+  screen(header(mega ? t('tutorialMega') : t('tutorial'), leave),
+    h('div', { class: 'tut' }, h('div', { class: 'tut-card card' }, dots, textEl, h('div', { class: 'row wrap tut-btns' }, nextBtn, extra)),
+      wrap, h('nav', { class: 'tools tut-tools' }, toolBtn, h('span', { class: 'gap' }), undoBtn)));
+  const ro = new ResizeObserver(() => {
+    const w = wrap.clientWidth, hh = wrap.clientHeight; // inside the frame
+    if (w !== view.width || hh !== view.height) view.resize(w, hh);
+  });
+  ro.observe(wrap);
+  go(0);
+}
+
+/** first start: offer the tutorial once (afterwards it's in the options) */
+async function offerTutorial() {
+  if (localStorage.getItem('momogram.tutorialAsked')) return;
+  localStorage.setItem('momogram.tutorialAsked', '1');
+  let yes = false;
+  await choose(t('tutAsk'), [[t('tutYes'), () => { yes = true; }], [t('tutNo'), () => {}]]);
+  if (yes) tutorialScreen(home);
 }
 
 /** home: is this profile in sync with the server? tap to sync now */
@@ -1798,6 +1885,9 @@ function optionsScreen() {
   const card = (title: string, ...rows: Array<Node | null>) => h('section', { class: 'opt-card' }, h('h2', {}, title), ...rows);
   screen(header(t('options'), home), h('div', { class: 'options' },
     h('button', { class: 'btn big opt-packs', onClick: () => packsScreen(optionsScreen) }, h('b', {}, '📦 ' + t('packs')), h('small', {}, t('packsHelp'))),
+    h('div', { class: 'row tut-opts' },
+      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen) }, '🎓 ' + t('tutorial')),
+      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'mega') }, '🎓 ' + t('tutorialMega'))),
     card(t('secSound'),
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,

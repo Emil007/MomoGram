@@ -70,6 +70,8 @@ export class BoardView {
   private mistakeFlash = new Map<number, number>();
   /** mark every wrong cell (a fill outside the picture, a ✕ on it) while this is on */
   showWrong = false;
+  /** lines a tutorial points at (drawn like the cursor's row and column) */
+  focus: { rows: number[]; cols: number[] } | null = null;
   // stroke state
   private stroke: null | { x0: number; y0: number; axis: 0 | 1 | 2; value: Cell; erase: Cell; pointer: number } = null;
   private pointers = new Map<number, { x: number; y: number }>();
@@ -179,7 +181,8 @@ export class BoardView {
     // leave room for the outer frame
     const W = this.cssW - 10, H = this.cssH - 10;
     let fit = Math.min(W / (b.w + r * 0.62 + 0.3), H / (b.h + c * 0.66 + 0.3));
-    if (fit * 0.62 > 26) fit = Math.min((W - r * 26 - 10) / b.w, (H - c * 28 - 10) / b.h);
+    // capped clue numbers: their width plus the gap to the grid and the frame (about 24 px) are fixed
+    if (fit * 0.62 > 26) fit = Math.min((W - r * 26 - 24) / b.w, (H - c * 28 - 24) / b.h);
     this.fitCell = Math.max(6, Math.floor(fit));
     if (reset) this.cell = this.fitCell;
     this.updateClueArea();
@@ -610,6 +613,11 @@ export class BoardView {
         }
       }
       ctx.restore();
+    }
+    if (this.focus) {
+      ctx.fillStyle = 'rgba(255, 170, 40, 0.30)';
+      for (const y of this.focus.rows) { ctx.fillRect(ox, oy + y * cs, b.w * cs, cs); ctx.fillRect(0, oy + y * cs, this.clueW, cs); }
+      for (const x of this.focus.cols) { ctx.fillRect(ox + x * cs, oy, cs, b.h * cs); ctx.fillRect(ox + x * cs, 0, cs, this.clueH); }
     }
     // roulette / cursor beams over the grid
     if (cueY >= 0) {
