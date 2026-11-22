@@ -74,7 +74,7 @@ One importer reads each group of games below. Every number is what the games the
 |---|---|---:|---:|---:|---:|
 | Picross DS and its demos (Download Station, Nintendo Channel) | DS | 366 | – | – | 27 |
 | Picross e – e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross: Zelda TP, Sanrio Characters Picross | 3DS (decrypted) | 2,062 | 1,956 | – | 88 |
-| PICROSS S – S8, S+, S GENESIS, S Doraemon, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 2,222 | 1,761 | 267 | 237 |
+| PICROSS S – S9, S+, S GENESIS, S Doraemon, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 2,407 | 1,911 | 297 | 254 |
 | Hudson's Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and + Nihon no Mukashi Banashi (DSiWare) | DS, DSiWare | 1,000 | – | 100 | 80 |
 | DS Puzzler / Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS | 1,000 | – | – | 7 |
 | SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | DS | 2,801 | – | 2,800 | 17 |
@@ -86,7 +86,8 @@ One importer reads each group of games below. Every number is what the games the
 | Pokémon Picross (unreleased prototype) | Game Boy Color | 490 | – | – | 36 |
 | Mario's Super Picross, Tamori no Picross | Super Famicom, Satellaview | 397 | – | – | 41 |
 | Picross NP Vol. 1 – 8 | Super Famicom (Nintendo Power) | 1,320 | – | – | 168 |
-| **Total** | | **13,484** | **3,717** | **3,341** | **832** |
+| PiCross, Picross a (homebrew) | Arduboy (.hex) | 325 | – | – | – |
+| **Total** | | **13,994** | **3,867** | **3,371** | **849** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
 

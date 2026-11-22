@@ -351,7 +351,7 @@
  "platformOf": "version",
  "exportAll": "Tout exporter en .zip",
  "createPacks": "Ajouter des jeux",
- "createHelp": "Choisissez des fichiers de jeux que vous possédez (Game Boy, Super Famicom, DS, DSiWare, 3DS déchiffrée ; seuls, en zip, 7z ou rar). Les jeux Switch sont des dossiers : choisissez le dossier RomFS déchiffré avec « Ajouter un dossier », ou ajoutez-en un zip. MomoGram lit les grilles une fois et fait de chaque jeu un pack : gardez les packs et vous n’aurez plus besoin des jeux. Les packs (.momopack) passent par le même bouton.",
+ "createHelp": "Choisissez des fichiers de jeux que vous possédez (Game Boy, Super Famicom, DS, DSiWare, Arduboy, 3DS déchiffrée ; seuls, en zip, 7z ou rar). Les jeux Switch sont des dossiers : choisissez le dossier RomFS déchiffré avec « Ajouter un dossier », ou ajoutez-en un zip. MomoGram lit les grilles une fois et fait de chaque jeu un pack : gardez les packs et vous n’aurez plus besoin des jeux. Les packs (.momopack) passent par le même bouton.",
  "noPacks": "Pas encore de jeux. Ajoutez-en un et l’aventure commence.",
  "delete": "Supprimer",
  "download": "Télécharger",

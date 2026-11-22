@@ -1,4 +1,5 @@
 // Written by build.mjs: loads every import method in this folder. Do not edit.
+import './arduboy';
 import './ctr-picross';
 import './dsi-puzzle-iro-iro';
 import './gb-picross';

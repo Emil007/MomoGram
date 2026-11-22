@@ -109,7 +109,7 @@ export function openPackManager(pm: PM) {
     status.append(results);
     const byName = new Map(files.map(f => [(f as any).webkitRelativePath || f.name, f]));
     const names = [...byName.keys()];
-    const loose = names.filter(n => /\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|app|zip|7z|rar|momopack)$/i.test(n));
+    const loose = names.filter(n => /\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|app|hex|zip|7z|rar|momopack)$/i.test(n));
     let done = 0;
     // packs this run added or changed, each counted once (a game in several files is read several times)
     const changed = new Set<string>();

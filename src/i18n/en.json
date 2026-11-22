@@ -351,7 +351,7 @@
  "platformOf": "version",
  "exportAll": "Export all as .zip",
  "createPacks": "Add games",
- "createHelp": "Pick game files you own (Game Boy, Super Famicom, DS, DSiWare, decrypted 3DS; loose, zipped, 7z or rar). Switch games are folders: pick the decrypted RomFS folder with \"Add a game folder\", or add a zip of it. MomoGram reads the puzzles once and turns every game into a pack: keep the pack files and you never need the games again. Packs (.momopack, or older .json and .zip files) go through the same button.",
+ "createHelp": "Pick game files you own (Game Boy, Super Famicom, DS, DSiWare, Arduboy, decrypted 3DS; loose, zipped, 7z or rar). Switch games are folders: pick the decrypted RomFS folder with \"Add a game folder\", or add a zip of it. MomoGram reads the puzzles once and turns every game into a pack: keep the pack files and you never need the games again. Packs (.momopack, or older .json and .zip files) go through the same button.",
  "noPacks": "No games yet. Add one and the fun begins.",
  "delete": "Delete",
  "download": "Download",
