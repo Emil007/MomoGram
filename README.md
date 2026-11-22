@@ -86,8 +86,10 @@ One importer reads each group of games below. Every number is what the games the
 | Pokémon Picross (unreleased prototype) | Game Boy Color | 490 | – | – | 36 |
 | Mario's Super Picross, Tamori no Picross | Super Famicom, Satellaview | 397 | – | – | 41 |
 | Picross NP Vol. 1 – 8 | Super Famicom (Nintendo Power) | 1,320 | – | – | 168 |
+| Oekaki Logic 1, 2 | Super Famicom (Nintendo Power) | 300 | – | – | – |
+| Oh-chan no Oekaki Logic | Super Famicom | 300 | – | – | – |
 | PiCross, Picross a (homebrew) | Arduboy (.hex) | 325 | – | – | – |
-| **Total** | | **13,994** | **3,867** | **3,371** | **849** |
+| **Total** | | **14,594** | **3,867** | **3,371** | **849** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
 

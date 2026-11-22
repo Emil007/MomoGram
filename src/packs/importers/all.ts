@@ -12,5 +12,7 @@ import './nds-picross-ds';
 import './nds-puzzle-mate-oekaki';
 import './nds-simple-illust-puzzle';
 import './nsw-picross-s';
+import './sfc-oekaki-logic';
+import './sfc-ohchan-logic';
 import './sfc-picross-np';
 import './sfc-picross';
