@@ -409,5 +409,7 @@
  "tCA1": "Numeri di colori diversi possono toccarsi, quelli dello stesso colore hanno bisogno di uno spazio. Le due linee qui tornano esatte: riempile.",
  "tCA2": "Spingere verso entrambi i bordi funziona colore per colore: sono certe solo le caselle che lo stesso colore copre entrambe le volte.",
  "tCA3": "Guarda di traverso: solo la colonna centrale ha del rosso, quindi la casella rossa di questa riga può stare solo lì. Il resto resta vuoto.",
- "tCAEnd": "Colori: vicini dello stesso colore hanno bisogno di uno spazio, e le linee che si incrociano dicono quale colore va dove."
+ "tCAEnd": "Colori: vicini dello stesso colore hanno bisogno di uno spazio, e le linee che si incrociano dicono quale colore va dove.",
+ "tutorials": "Tutorial",
+ "tutorialsHelp": "Le basi e le tecniche di Normal, Mega e Color"
 }

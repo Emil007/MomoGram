@@ -1418,6 +1418,20 @@ export function serverError(e: any): string {
   return s === 'err.' + code ? t('err.other', { code }) : s;
 }
 
+/** all lessons in one place: the three tutorials and the three technique lessons, per mode */
+function tutorialsScreen() {
+  themeRoot(null);
+  const back = () => tutorialsScreen();
+  const item = (emoji: string, title: string, go: () => void) => h('button', { class: 'btn tut-item', onClick: go }, emoji + ' ' + title);
+  screen(header(t('tutorials'), optionsScreen), h('div', { class: 'tut-menu' },
+    h('section', { class: 'opt-card' }, h('h2', {}, t('normalMode')),
+      item('🎓', t('tutorial'), () => tutorialScreen(back)), item('🧠', techniqueTitle('advanced'), () => techniqueScreen(back, 'advanced'))),
+    h('section', { class: 'opt-card' }, h('h2', {}, t('megaOn')),
+      item('🎓', t('tutorialMega'), () => tutorialScreen(back, 'mega')), item('🧠', techniqueTitle('megaAdvanced'), () => techniqueScreen(back, 'megaAdvanced'))),
+    h('section', { class: 'opt-card' }, h('h2', {}, t('colorOn')),
+      item('🎓', t('tutorialColor'), () => tutorialScreen(back, 'color')), item('🧠', techniqueTitle('colorAdvanced'), () => techniqueScreen(back, 'colorAdvanced')))));
+}
+
 /** the server: its address (this device), and the active profile's account there */
 function serverSection(): HTMLElement {
   const box = h('div', { class: 'server-box' });
@@ -1642,15 +1656,7 @@ function optionsScreen() {
   const card = (title: string, ...rows: Array<Node | null>) => h('section', { class: 'opt-card' }, h('h2', {}, title), ...rows);
   screen(header(t('options'), home), h('div', { class: 'options' },
     h('button', { class: 'btn big opt-packs', onClick: () => packsScreen(optionsScreen) }, h('b', {}, '📦 ' + t('packs')), h('small', {}, t('packsHelp'))),
-    h('div', { class: 'row tut-opts' },
-      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen) }, '🎓 ' + t('tutorial')),
-      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'mega') }, '🎓 ' + t('tutorialMega')),
-      h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'color') }, '🎓 ' + t('tutorialColor'))),
-    // the advanced lessons: one technique per step
-    h('div', { class: 'row tut-opts' },
-      h('button', { class: 'btn', onClick: () => techniqueScreen(optionsScreen, 'advanced') }, '🧠 ' + techniqueTitle('advanced')),
-      h('button', { class: 'btn', onClick: () => techniqueScreen(optionsScreen, 'megaAdvanced') }, '🧠 ' + techniqueTitle('megaAdvanced')),
-      h('button', { class: 'btn', onClick: () => techniqueScreen(optionsScreen, 'colorAdvanced') }, '🧠 ' + techniqueTitle('colorAdvanced'))),
+    h('button', { class: 'btn big opt-tuts', onClick: () => tutorialsScreen() }, h('b', {}, '🎓 ' + t('tutorials')), h('small', {}, t('tutorialsHelp'))),
     card(t('secSound'),
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,

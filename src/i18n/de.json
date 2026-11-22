@@ -409,5 +409,7 @@
  "tCA1": "Zahlen verschiedener Farben dürfen sich berühren, Zahlen gleicher Farbe brauchen eine Lücke. Beide Reihen hier passen genau: Füll sie.",
  "tCA2": "Das Schieben zu beiden Enden geht pro Farbe: Sicher sind nur Felder, die dieselbe Farbe beide Male bedeckt.",
  "tCA3": "Schau quer: Nur die mittlere Spalte enthält Rot, also kann das rote Feld dieser Zeile nur dort sein. Der Rest der Zeile bleibt leer.",
- "tCAEnd": "Farben: Gleichfarbige Nachbarn brauchen eine Lücke, und die kreuzenden Reihen verraten, welche Farbe wohin kann."
+ "tCAEnd": "Farben: Gleichfarbige Nachbarn brauchen eine Lücke, und die kreuzenden Reihen verraten, welche Farbe wohin kann.",
+ "tutorials": "Tutorials",
+ "tutorialsHelp": "Grundlagen und Techniken für Normal, Mega und Color"
 }

@@ -409,5 +409,7 @@
  "tCA1": "Números de colores distintos pueden tocarse; los del mismo color necesitan un hueco. Las dos líneas encajan justo: rellénalas.",
  "tCA2": "Empujar hacia ambos bordes funciona por colores: solo son seguras las casillas que el mismo color cubre las dos veces.",
  "tCA3": "Mira en cruz: solo la columna del medio tiene rojo, así que la casilla roja de esta fila solo puede estar ahí. El resto queda vacío.",
- "tCAEnd": "Colores: los vecinos del mismo color necesitan un hueco, y las líneas que se cruzan dicen qué color puede ir dónde."
+ "tCAEnd": "Colores: los vecinos del mismo color necesitan un hueco, y las líneas que se cruzan dicen qué color puede ir dónde.",
+ "tutorials": "Tutoriales",
+ "tutorialsHelp": "Lo básico y las técnicas de Normal, Mega y Color"
 }

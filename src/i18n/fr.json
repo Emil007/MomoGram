@@ -409,5 +409,7 @@
  "tCA1": "Des nombres de couleurs différentes peuvent se toucher, ceux de même couleur ont besoin d'un espace. Les deux lignes ici tombent juste : remplis-les.",
  "tCA2": "Pousser vers les deux bords marche couleur par couleur : seules les cases couvertes les deux fois par la même couleur sont sûres.",
  "tCA3": "Regarde en travers : seule la colonne du milieu contient du rouge, donc la case rouge de cette ligne ne peut être que là. Le reste reste vide.",
- "tCAEnd": "Couleurs : des voisins de même couleur ont besoin d'un espace, et les lignes qui se croisent disent quelle couleur va où."
+ "tCAEnd": "Couleurs : des voisins de même couleur ont besoin d'un espace, et les lignes qui se croisent disent quelle couleur va où.",
+ "tutorials": "Tutoriels",
+ "tutorialsHelp": "Les bases et les techniques de Normal, Mega et Color"
 }

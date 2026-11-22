@@ -558,8 +558,8 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .library.v-list .lib-entry { flex-direction: row; align-items: center; }
 .library.v-list .lib-entry > .btn { min-width: 0; }
 .library.v-list .lib-tools { gap: .3rem; }
-.opt-packs { display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin-bottom: .2rem; }
-.opt-packs small { font-weight: 700; opacity: .75; }
+.opt-packs, .opt-tuts { display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin-bottom: .2rem; }
+.opt-packs small, .opt-tuts small { font-weight: 700; opacity: .75; }
 .update-banner { width: 100%; display: flex; flex-direction: column; align-items: flex-start; margin-bottom: .8rem; background: linear-gradient(#5fd18a, #2fae5a); color: #fff; border-color: var(--line); }
 .update-banner b, .update-banner small { color: #fff; }
 .update-banner small { font-weight: 700; opacity: .92; }
@@ -704,3 +704,9 @@ body.dark .player-card { border-color: #4a5563; }
 .url-box:focus-within { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .url-prefix { padding-left: .6em; font-weight: 700; color: var(--muted); }
 .url-box input.text { flex: 1; min-width: 0; border: 0; background: transparent; padding-left: .1em; outline: none; }
+
+/* the tutorials menu: per mode a card with its tutorial and its techniques */
+.tut-menu { display: flex; flex-direction: column; gap: .8rem; padding: .8rem; max-width: 640px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+.tut-menu .opt-card { display: flex; flex-direction: column; gap: .5rem; }
+.tut-item { text-align: left; justify-content: flex-start; }
+.opt-packs small, .opt-tuts small { text-align: left; }

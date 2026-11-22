@@ -409,5 +409,7 @@
  "tCA1": "Numbers of different colors may touch, numbers of the same color need a gap. Both lines here fit exactly: fill them in.",
  "tCA2": "Pushing to both ends works per color: only cells the same color covers both times are certain.",
  "tCA3": "Look across: only the middle column has red in it, so this row's red cell can only be there. The rest of the row stays empty.",
- "tCAEnd": "Colors: same-colored neighbours need a gap, and the crossing lines tell you which colors can go where."
+ "tCAEnd": "Colors: same-colored neighbours need a gap, and the crossing lines tell you which colors can go where.",
+ "tutorials": "Tutorials",
+ "tutorialsHelp": "The basics and the techniques of Normal, Mega and Color"
 }
