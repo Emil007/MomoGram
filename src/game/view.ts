@@ -812,7 +812,9 @@ function slotUnits(slots: ReturnType<typeof bandSlots>, wide: boolean) {
 
 /** what a tap with a tool does to a cell: set it, erase it, or nothing (null) */
 function valueFor(tool: Tool, cur: Cell): Cell | null {
-  if (tool === 'mark') return cur === MARK ? EMPTY : cur === EMPTY ? MARK : null;
+  // marking: a tap on a mark or a ✕ clears it (the next tap marks); a stroke that starts on a ✕ only clears ✕s, one
+  // that starts on an empty cell leaves the ✕s on its way alone
+  if (tool === 'mark') return cur === MARK || cur === CROSS ? EMPTY : cur === EMPTY ? MARK : null;
   const want: Cell = tool === 'fill' ? FILL : CROSS;
   // tapping a cell that already has this mark erases (and the stroke keeps erasing); marks are written over
   return cur === want ? EMPTY : blank(cur) ? want : cur === FILL && tool === 'cross' ? EMPTY : want;

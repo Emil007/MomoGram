@@ -275,12 +275,21 @@ async function backfillPoints() {
 
 /** one switch for the whole game: each tap goes on to the next mode (normal → Mega → Colour → normal) */
 const MODES: Mode[] = ['normal', 'mega', 'color'];
+function modeIcon(): Element {
+  const box = document.createElement('span');
+  box.className = 'ms-icon';
+  box.setAttribute('aria-hidden', 'true');
+  box.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M20 12a8 8 0 0 1-13.7 5.6"/><path d="M4 12a8 8 0 0 1 13.7-5.6"/><path d="M18.5 2.8v4h-4"/><path d="M5.5 21.2v-4h4"/></svg>';
+  return box;
+}
 function megaSwitch(): HTMLElement {
   const m = curMode(), next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
   const label = (v: Mode) => (v === 'mega' ? t('megaOn') : v === 'color' ? t('colorOn') : t('megaOff'));
   return h('button', { class: 'mode-switch ms-' + m, title: t('megaHelp') + ' → ' + label(next), 'aria-label': label(m) + ' → ' + label(next),
     onClick: () => { setMode(next); home(); if (next !== 'normal') offerTutorial(next); } },
-    h('span', { class: 'ms-label' }, label(m)),
+    // no words: the logo already says which mode is on; the arrows say "switch", the dots where you are
+    modeIcon(),
     h('span', { class: 'ms-dots', 'aria-hidden': 'true' }, ...MODES.map(v => h('i', { class: v === m ? 'on' : '' }))));
 }
 
@@ -411,7 +420,10 @@ function gameCard(p: Pack, onOpen: () => void): HTMLElement {
       h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : ''))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })),
-    (Sync.knownServerRevs().get(p.id) ?? 0) > packRev(p) ? h('span', { class: 'update-badge', title: t('updateAvailable') }, '⬆') : null);
+    // a newer version of this game is on the server (someone imported it again): tapping the badge opens the
+    // puzzle packs, where it can be downloaded
+    (Sync.knownServerRevs().get(p.id) ?? 0) > packRev(p) ? h('span', { class: 'update-badge', role: 'button', title: t('updateAvailable'),
+      onClick: (e: Event) => { e.stopPropagation(); packsScreen(home); } }, '⬆ ' + t('update')) : null);
 }
 
 /**
@@ -1300,11 +1312,13 @@ const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, 
 let dailyChecked = '';
 function dailyToGames() {
   const done = packProgress('daily').filter(([, p]) => p.cleared && p.best !== undefined);
-  const key = activeProfile().id + ':' + allPacks().length + ':' + done.length;
+  // the plain puzzles only: a daily solve isn't a solve of the Mega or Colour puzzle of the same picture
+  const packs = [STARTER, ...ctx.packs].map(plainView);
+  const key = activeProfile().id + ':' + packs.length + ':' + done.length;
   if (!done.length || key === dailyChecked) return;
   dailyChecked = key;
   const byPattern = new Map<string, [string, string]>();
-  for (const pk of allPacks()) if (pk.id !== 'daily') for (const lv of pk.levels) for (const pz of lv.puzzles) {
+  for (const pk of packs) if (pk.id !== 'daily') for (const lv of pk.levels) for (const pz of lv.puzzles) {
     const k = patternId(pz.rows);
     if (!byPattern.has(k)) byPattern.set(k, [pk.id, pz.id]);
   }

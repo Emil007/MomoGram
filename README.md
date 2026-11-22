@@ -4,7 +4,7 @@
 
 <p align="center"><b>One nonogram player for all the nonogram games you own</b>, on every screen: your phone (in portrait!),
 the browser, Windows, macOS, Linux, Steam Deck and Android.<br>
-Add your games once: MomoGram turns each into a pack with its levels, puzzle names, pictures, music and colours.</p>
+Add your games once: MomoGram turns each into a pack with its levels, puzzle names, pictures, music and colors.</p>
 
 <p align="center">
 <a href="https://emil007.github.io/MomoGram/"><b>▶ Play in the browser</b></a> ·
@@ -20,9 +20,11 @@ Add your games once: MomoGram turns each into a pack with its levels, puzzle nam
 <img alt="No game data included" src="https://img.shields.io/badge/game%20data-not%20included-f39a2c">
 </p>
 
-| Your library | Pick a puzzle | Play, one-handed | Colour mode | Solved |
-|---|---|---|---|---|
-| <img src="docs/screenshots/phone-home.png" alt="Home screen: the mode switch, the daily nonogram and random buttons, the game library" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="A level: solved puzzles with their pictures and medals, the Easy / Normal / Hard picker" width="100%"> | <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, greyed-out clue numbers, the tools at the bottom" width="100%"> | <img src="docs/screenshots/phone-color.png" alt="A colour nonogram: coloured clue numbers and the colour palette with the tools" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name, the time, points and PixElo" width="100%"> |
+| Your library | Pick a puzzle | Play, one-handed |
+|---|---|---|
+| <img src="docs/screenshots/phone-home.png" alt="Home screen: the mode switch, the daily nonogram and random buttons, the game library" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="A level: solved puzzles with their pictures and medals" width="100%"> | <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, greyed-out clue numbers, the tools at the bottom" width="100%"> |
+| **Mega mode** | **Color mode** | **Solved** |
+| <img src="docs/screenshots/phone-mega.png" alt="A Mega nonogram: framed Mega numbers that count two rows or columns together" width="100%"> | <img src="docs/screenshots/phone-color.png" alt="A color nonogram: colored clue numbers and the color palette with the tools" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name, the time, points and PixElo" width="100%"> |
 
 <p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in dark mode, a Mega puzzle: framed Mega numbers span two rows or columns, the tool column beside the board" width="80%"><br>
 <em>Desktop / Steam Deck in dark mode, playing Mega: keyboard, mouse and gamepad. The screenshots show MomoGram's own starter puzzles.</em></p>
@@ -40,7 +42,7 @@ Nonograms do that too.
 
 ## What you get
 
-- **All your nonogram games in one library**, each with its own modes and levels, the puzzle names, solved pictures, music and colours of the original. Series form folders (all Picross e games, the S series, Picross NP, Illust Logic …); show them as cards, tiles or a list, sorted by series or system.
+- **All your nonogram games in one library**, each with its own modes and levels, the puzzle names, solved pictures, music and colors of the original. Series form folders (all Picross e games, the S series, Picross NP, Illust Logic …); show them as cards, tiles or a list, sorted by series or system.
 - **Every puzzle on every difficulty**, with medals:
 
   | | Mistakes | Hint roulette | Medal |
@@ -51,13 +53,13 @@ Nonograms do that too.
 
 - **Three ways to play:** the mode switch on the home screen cycles through *MomoGram*, *Mega MomoGram* and *Color MomoGram*. Each mode has its own progress, medals and high scores.
 - **Mega mode** for everything: Mega numbers span two rows or columns. Games that have Mega puzzles bring their own (a glowing dot marks them); for all others MomoGram chooses the pairs, checks that each puzzle still has one solution, and makes the same choice on every device. Mega has its own progress and scores.
-- **Colour mode:** colour nonograms, where every block has a colour and blocks of different colours may touch. The games' own colour puzzles (see below), MomoGram's own colour starter puzzles, and colour versions of the games' colour pictures where they work (few, clearly different colours and exactly one solution, checked by MomoGram's colour solver). A palette with the tools shows how many cells of each colour are still missing.
+- **Color mode:** color nonograms, where every block has a color and blocks of different colors may touch. The games' own color puzzles (see below), MomoGram's own color starter puzzles, and color versions of the games' color pictures where they work (few, clearly different colors and exactly one solution, checked by MomoGram's color solver). A palette with the tools shows how many cells of each color are still missing.
 - **Points and PixElo** – points count everything you've solved, PixElo is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixElo is shown under your name.
 - **A board that feels like the handhelds:** the row and column you draw in light up into the clues, a counter shows the length of the block you're drawing, clue numbers grey out only when their block is certainly done, logic hints (💡) turn a clue blue when its line gives away a new cell, and your own marks stay while you fill and cross the rest.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
 - **A daily nonogram** (15 a day from all your games) and a **Random** button.
 - **The games' own music**, every song of every game, with a sound test to choose where each plays.
-- **Interactive tutorials** for nonograms, Mega and Colour (each offered once, all in the options), an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
+- **Interactive tutorials** for nonograms, Mega and Color (each offered once, all in the options), an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
 - **Your progress is never lost:** paused puzzles, best times per difficulty, medals, profiles with their own saves.
 - **Your own server (optional):** progress and settings on all your devices, packs shared within your family or friends, and high scores for up to 10 players.
 
@@ -65,14 +67,14 @@ Nonograms do that too.
 
 **Options → Puzzle packs → Add games or packs** reads game files you own (raw, or in `.zip` / `.7z` / `.rar`), or a whole folder with everything in it. MomoGram makes one pack per game, with the original level structure; regional versions of a game become **one** pack with every language's names, and the same song in several games is stored only once. Do it once: export the packs, or keep them on your own server, and use them on every device.
 
-One importer reads each group of games below. The numbers are what MomoGram reads from the games, with all regions together where there are several:
+One importer reads each group of games below. Every number is what the games themselves contain (all regions together where there are several):
 
-| Games | System | Puzzles | Mega from the game | Colour puzzles | Songs |
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
 |---|---|---:|---:|---:|---:|
 | Picross DS and its demos (Download Station, Nintendo Channel) | DS | 366 | – | – | 27 |
 | Picross e – e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross: Zelda TP, Sanrio Characters Picross | 3DS (decrypted) | 2,062 | 1,956 | – | 88 |
 | PICROSS S – S8, S+, S GENESIS, S Doraemon, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 2,222 | 1,761 | 267 | 237 |
-| Hudson's Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and + Nihon no Mukashi Banashi (DSiWare) | DS, DSiWare | 1,000 | – | 100 + MomoGram's | 80 |
+| Hudson's Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and + Nihon no Mukashi Banashi (DSiWare) | DS, DSiWare | 1,000 | – | 100 | 80 |
 | DS Puzzler / Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS | 1,000 | – | – | 7 |
 | SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | DS | 2,801 | – | 2,800 | 17 |
 | Illu-Logi VOW | DS | 139 | – | 166 | 40 |
@@ -85,7 +87,7 @@ One importer reads each group of games below. The numbers are what MomoGram read
 | Picross NP Vol. 1 – 8 | Super Famicom (Nintendo Power) | 1,320 | – | – | 168 |
 | **Total** | | **13,484** | **3,717** | **3,341** | **832** |
 
-Every other puzzle can be played as Mega too, with Mega numbers chosen by MomoGram. Colour mode also has MomoGram's own colour starter puzzles, and colour versions of Hudson's Illust Logic pictures where they have exactly one solution (95 in Illust Logic DS). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's colour puzzles.
+MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
 
 To add another game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
@@ -228,7 +230,7 @@ APK via Capacitor, released when `version` in `package.json` changes).
 - `src/rom/ctr.ts`: decrypted 3DS containers (NCSD / NCCH / CIA), RomFS, icon, LZ11.
 - `src/rom/unity.ts`, `lzma.ts`: Unity asset bundles and serialized files (Switch games); `src/audio/fsb5.ts`: FMOD sound banks, Vorbis rebuilt as Ogg.
 - `src/audio/`: SDAT reader and SSEQ sequencer (DS music), BCSTM DSP-ADPCM decoder (3DS music); `gb/` and `snes/`: sound hardware emulation (see *Sound emulation*), `worklet.ts` / `chipplayer.ts`: playback on the audio thread.
-- `src/packs/`: pack format, `.momopack` files, pack colours; `src/packs/importers/`: one file per import method, each starting with a table of the games it reads ([how to add one](docs/writing-importers.md)).
+- `src/packs/`: pack format, `.momopack` files, pack colors; `src/packs/importers/`: one file per import method, each starting with a table of the games it reads ([how to add one](docs/writing-importers.md)).
 - `server/`: the optional sync / high score / pack server (PHP, MySQL or SQLite).
 - `src/game/`: rules, exact line analysis (clue greying and logic hints), the board renderer.
 - `src/app.ts`, `src/ui/`: screens.

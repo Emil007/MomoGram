@@ -256,6 +256,24 @@ function loadActive() {
   try { resetTimes = JSON.parse(localStorage.getItem(pk('resets')) || '{}'); } catch { resetTimes = {}; }
   try { progress = JSON.parse(localStorage.getItem(pk('progress')) || '{}'); } catch { progress = {}; }
   try { packTimes = JSON.parse(localStorage.getItem(pk('packtimes')) || '{}'); } catch { packTimes = {}; }
+  const fixed = dropCopies(progress);
+  if (fixed.length) persist(fixed);
+}
+/**
+ * MomoGram 0.13 – 0.37.4 copied old daily solves into the Mega and Colour puzzle of the same picture (when the
+ * home screen showed that mode), as if they had been solved there. Such a copy has the plain puzzle's time and no
+ * times per rules (every real solve since 0.13 has them): it is removed. Works on "pack/puzzle" keys or on one
+ * pack's puzzle ids; returns the packs that had copies.
+ */
+function dropCopies(m: Record<string, PuzzleProgress>): string[] {
+  const packs = new Set<string>();
+  for (const k of Object.keys(m)) {
+    const at = k.search(/@(mega|color)$/);
+    if (at < 0) continue;
+    const v = m[k], plain = m[k.slice(0, at)];
+    if (!v.times && plain && v.best !== undefined && plain.best === v.best) { delete m[k]; packs.add(k.slice(0, k.indexOf('/'))); }
+  }
+  return [...packs];
 }
 loadActive();
 // keep this tab's copy current when another tab (or the installed web app) saves
@@ -434,6 +452,7 @@ export function mergeSave(s: SaveFile): boolean {
   loadActive();
   let any = false;
   for (const [id, rp] of Object.entries(s.packs)) {
+    dropCopies(rp.progress); // copies another device (or the server) still has don't come back
     const local = packTimes[id];
     const mine: Record<string, PuzzleProgress> = {};
     for (const [k, v] of Object.entries(progress)) if (k.startsWith(id + '/')) mine[k.slice(id.length + 1)] = v;
