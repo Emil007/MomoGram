@@ -1,13 +1,13 @@
-// Solved-picture rendering: the animated colour picture from the user's Picross DS ROM when available,
+// Solved-picture rendering: the pack's animated picture when it has one (Pack.anims),
 // otherwise the pack's colour data, otherwise the solution itself.
 import type { PackPuzzle } from '../packs/format';
-import type { DsAnimRef } from '../rom/picrossds';
+import type { AnimRef } from '../packs/format';
 import { bgr555, renderCell, Frame } from '../rom/dsgfx';
 
 export type PckGetter = (i: number) => Uint8Array | null;
 
 // coloured solved pictures read from the player's games, per pack and keyed by the puzzle's pattern (two games
-// can have the same small pattern with different pictures: a 5×5 of Club Nintendo Picross and one of Sanrio)
+// can have the same small pattern with different pictures)
 const colourPics = new Map<string, HTMLCanvasElement>();
 export function addPictures(packId: string, m: Map<string, { w: number; h: number; rgba: Uint8Array }>) {
   for (const [pat, p] of m) {
@@ -34,7 +34,7 @@ export class PictureAnimator {
   /** the part of the frames that is drawn on (small pictures sit in a corner of a bigger frame) */
   private box: { x: number; y: number; w: number; h: number } | null = null;
 
-  constructor(private puzzle: PackPuzzle & { anim?: DsAnimRef }, pck: PckGetter | null, private packId = '') {
+  constructor(private puzzle: PackPuzzle & { anim?: AnimRef }, pck: PckGetter | null, private packId = '') {
     const a = this.puzzle.anim;
     if (a && pck) {
       const pal = pck(a.palette), tiles = pck(a.tiles);
@@ -49,7 +49,7 @@ export class PictureAnimator {
 
   get animated() { return this.frames.length > 0; }
 
-  /** advance by dt milliseconds (DS runs at ~60 fps) */
+  /** advance by dt milliseconds (the animations run at ~60 fps) */
   tick(dt: number) {
     if (!this.frames.length) return;
     this.acc += dt / (1000 / 60);
@@ -117,7 +117,7 @@ export function staticPicture(p: PackPuzzle): HTMLCanvasElement {
 }
 
 /** Small thumbnail for puzzle lists (cleared puzzles). */
-export function thumbnail(p: PackPuzzle & { anim?: DsAnimRef }, pck: PckGetter | null, size: number, packId = ''): HTMLCanvasElement {
+export function thumbnail(p: PackPuzzle & { anim?: AnimRef }, pck: PckGetter | null, size: number, packId = ''): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = size; c.height = size;
   const ctx = c.getContext('2d')!;

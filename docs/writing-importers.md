@@ -20,7 +20,7 @@ src/packs/importers/
   nsw-picross-s.ts          Switch games: a folder, read with registerSetImporter (see below)
   ctr-picross.ts
 src/rom/                    shared readers for the systems: headers, containers, compression, music
-  gb.ts  sfc.ts  nds.ts  ctr.ts  picrossds.ts  jtex.ts  dsgfx.ts
+  gb.ts  sfc.ts  nds.ts  ctr.ts  jtex.ts  dsgfx.ts
 ```
 
 Each file in `importers/` is one way of reading puzzles. When several games store their puzzles the same way, they share a file. For example, Mario's Picross and Picross 2 share `gb-picross.ts`, and all the 3DS games share `ctr-picross.ts`. A game stored differently gets a file of its own.
@@ -61,6 +61,9 @@ registerImporter({
   read(data, fileName): Pack[] {     // may be async; may return several packs (one file, several games)
     …
   },
+  upgrade(pack) {                    // optional: brings a pack stored by an older version up to date without the
+    return false;                    // game file (a renamed field, a fixed title); true when it changed the pack
+  },
 });
 ```
 
@@ -93,7 +96,6 @@ Use the types in `src/packs/format.ts`; the [format description](momopack-format
 | `ctr.ts` | `readCtr` (CIA / CCI / CXI → files of the RomFS, titles, icon), `ctrCode` (code.bin), `lz11`, `ctrEncrypted` |
 | `unity.ts` | Unity bundles (LZ4 / LZMA) and serialized files: `serializedFiles`, `readSerialized`, `namedBlobs`, `audioClip`, `readTyped` |
 | `../audio/fsb5.ts` | FMOD FSB5 banks; `fsbVorbisToOgg` (needs the setup header in `vorbis-setups.ts`) |
-| `picrossds.ts` | the Picross DS data, sound and animations |
 | `jtex.ts` | 3DS textures, `packPictures` for coloured solved pictures |
 | `dsgfx.ts` | DS tiles and palettes |
 

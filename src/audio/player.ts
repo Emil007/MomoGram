@@ -1,4 +1,4 @@
-// SSEQ sequence player on Web Audio. Plays the music from the user's own Picross DS sound archive.
+// SSEQ sequence player on Web Audio. Plays sequenced music from a DS sound archive (SDAT) a pack brings.
 import { Sdat, Bank, NoteDef, Wave } from './sdat';
 
 const TICK_SEC = (64 * 2728) / 33513982; // DS sequencer update interval (~5.2 ms)

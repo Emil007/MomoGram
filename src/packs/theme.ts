@@ -71,7 +71,7 @@ const GB = { clueBands: 'stripes' as const, cellStyle: 'solid' as const, fillSty
 function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
   const plain = { cellStyle: 'solid' as const, fillStyle: 'solid' as const };
   if (p.style === 'switch') {
-    // Jupiter's Switch games: white board, flat clue areas, solid dark cells, orange crosses, green guide lines
+    // the Switch games' design: white board, flat clue areas, solid dark cells, orange crosses, green guide lines
     // every 5 cells; the colours come from the game's own colour table (IdxRes_PuzzleColorDef)
     // (colours checked against screenshots: light grey cells and clue lines in two shades, a blue bar for the
     // cursor's line in the clues, a cyan cursor box; filled cells dark, or blue in PICROSS S and S2)
@@ -88,7 +88,7 @@ function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     };
   }
   if (p.style === '3ds') {
-    // Jupiter's 3DS games: light grey cells, solid filled cells in the game's colour, small dark crosses, flat
+    // the 3DS games' design: light grey cells, solid filled cells in the game's colour, small dark crosses, flat
     // clue lines in two shades, the cursor's line in the game's colour, thin orange guide lines every 5
     const fill = p.fill ?? hsl(hexToHsl(p.accent)[0], 0.85, 0.6), cur = p.cursor ?? fill;
     return {
@@ -103,7 +103,7 @@ function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     };
   }
   if (p.style === 'stone') {
-    // Mario no Super Picross, Tamori no Picross: a carved stone tablet; sandstone cells with an edge, dark stones,
+    // a carved stone tablet: sandstone cells with an edge, dark stones,
     // dark stone stripes behind the clues, thin green guide lines, the cursor's line green, a red cursor box
     return {
       accent: '#6a5a30', accentDark: '#4a3e20', bg: '#cfc195', panel: '#efe7c6', top: '#c0b078', topLine: '#504830',
@@ -118,7 +118,7 @@ function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     };
   }
   if (p.style === 'notebook') {
-    // Picross NP: a notebook page; white cells, light blue grid, blue guide lines, maroon filled cells, clue
+    // a notebook page: white cells, light blue grid, blue guide lines, maroon filled cells, clue
     // stripes in the volume's colour (accent) and white
     const stripe = p.accent;
     return {
@@ -132,7 +132,7 @@ function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     };
   }
   if (p.style === 'ds') {
-    // Picross DS: MomoGram's own look is modelled on it; the game's filled cells are glossy blocks
+    // glossy blocks in the game's colour, striped clue bands
     const fill = p.fill ?? '#1f6fd0';
     return {
       accent: p.accent, accentDark: shade(p.accent, -0.12), bg: shade(fill, 0.42), panel: '#fafcff', top: shade(fill, 0.3), topLine: shade(fill, -0.15),
@@ -145,7 +145,7 @@ function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
     };
   }
   if (p.style === 'logic') {
-    // the DS logic games of Hudson and Success: white cells, black filled cells, a light grid, the cursor's lines
+    // a plain logic-puzzle design: white cells, black filled cells, a light grid, the cursor's lines
     // as coloured beams
     const cur = p.cursor ?? '#f0b020';
     return {

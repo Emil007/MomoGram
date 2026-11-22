@@ -2,15 +2,15 @@
 import { solutionCount } from './game/unique';
 import { oggLength } from './audio/fsb5';
 import { bcstmLength } from './audio/bcstm';
-import { fullTitle } from './packs/importers/ctr-picross';
 import { MegaPairs, generateMega, megaSolutionCount, MEGA_GEN } from './game/mega';
 import { colorOf, colorSolutionCount, inkOn } from './game/color';
 import { Board, formatTime, FILL, CROSS, EMPTY } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
 import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
-import { pckFile, dsFromPack, dsTheme, DsPackMeta } from './rom/picrossds';
 import { readEntries, packRev, newRev } from './packs/io';
+import { upgradeStoredPack } from './packs/importers/index';
+import { seriesOf } from './packs/importers/series';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints } from './store';
 import { puzzleRating, performance as perfScore, points, RatedRules } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
@@ -33,7 +33,7 @@ const TIME_LIMIT = 60 * 60_000;
 
 interface Ctx {
   packs: Pack[];
-  /** solved-picture animation data per pack (Picross DS), loaded when the pack is opened */
+  /** solved-picture animation data per pack (`Pack.anims`), loaded when the pack is opened */
   pcks: Map<string, PckGetter | null>;
 }
 
@@ -93,17 +93,8 @@ export async function boot() {
   setLang((want in LANG_NAMES ? want : 'en') as Lang);
   storage.persist();
   ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
-  // older versions: a stored Picross DS ROM becomes a pack once, then the ROM is removed
-  try {
-    const rom = await storage.loadRom('picross-ds');
-    if (rom) { await addGameFiles([{ name: 'rom.nds', data: rom }]); await storage.deleteRom('picross-ds'); }
-  } catch (e) { console.warn(e); }
-  // packs from before the music playlists: Picross DS gets its nine in-game styles
-  for (const p of ctx.packs as Array<Pack & { ds?: unknown }>) {
-    if (p.ds && !p.theme?.tracks) { p.theme = dsTheme(); p.levels = p.levels.map(l => ({ ...l, groupTitle: l.groupTitle ?? (l.group ? DS_GROUPS[l.group] : undefined) })); await storage.savePack(p); }
-  }
-  // My Nintendo Picross (the Zelda one) read before its title was made complete
-  for (const p of ctx.packs) if (p.id.startsWith('ctr-') && fullTitle(p.title as Record<string, string>)) await storage.savePack(p);
+  // packs stored by older versions: each importer brings its own up to date
+  for (const p of ctx.packs) if (upgradeStoredPack(p)) await storage.savePack(p);
   // desktop app started with --rom <file> (shortcuts): import that game
   if (new URLSearchParams(location.search).has('rom')) {
     try {
@@ -128,10 +119,6 @@ export async function boot() {
   if (Sync.account()) Sync.serverPacks().then(() => { if (document.querySelector('.home')) home(); }).catch(() => {});
 }
 
-const DS_GROUPS: Record<string, Pack['title']> = {
-  easy: { en: 'Easy', de: 'Leicht', ja: 'かんたん' }, normal: { en: 'Normal', de: 'Normal', ja: 'ノーマル' }, free: { en: 'Free', de: 'Frei', ja: 'フリー' },
-};
-
 /** import games or packs without the pack screen (opened from outside the app, old storage); returns what came in */
 async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>): Promise<Pack[]> {
   const found: Pack[] = [];
@@ -149,7 +136,7 @@ async function openedFiles(files: Array<{ name: string; data: Uint8Array }>) {
   if (made.length) { home(); void message(t('imported', { list: made.map(p => pickAny(p.title, packLang())).join(', ') })); }
 }
 
-/** extras a pack needs before its lists are shown (Picross DS: the solved-picture animations) */
+/** extras a pack needs before its lists are shown (coloured pictures, solved-picture animations) */
 async function loadExtras(pack: Pack): Promise<void> {
   if (ctx.pcks.has(pack.id)) return;
   // daily puzzles show the pictures of their own games
@@ -159,13 +146,13 @@ async function loadExtras(pack: Pack): Promise<void> {
     const d = await storage.loadAsset(pack.id, 'pictures.bin').catch(() => undefined);
     if (d) addPictures(pack.id.replace(/@mega$/, ''), unpackPictures(d));
   }
-  const p = pack as Pack & { ds?: DsPackMeta };
-  if (!p.ds) { ctx.pcks.set(pack.id, null); return; }
-  const pck = await storage.loadAsset(pack.id, 'anim.pck').catch(() => undefined);
-  const ds = dsFromPack(p, null, pck ?? null);
-  const fits = !!ds?.pck && ds.pckOffsets.length > 0 && ds.pckOffsets[ds.pckOffsets.length - 1] <= ds.pck.length && ds.pck.length - ds.pckOffsets[ds.pckOffsets.length - 1] < 0x10000;
-  if (ds?.pck && !fits) console.warn('animation data does not match this pack: re-add the game to restore them');
-  ctx.pcks.set(pack.id, fits ? (i => pckFile(ds!, i)) : null);
+  const an = pack.anims;
+  if (!an) { ctx.pcks.set(pack.id, null); return; }
+  const data = await storage.loadAsset(pack.id, an.asset).catch(() => undefined);
+  const o = an.offsets, end = o[o.length - 1];
+  const fits = !!data && o.length > 0 && end <= data.length && data.length - end < 0x10000;
+  if (data && !fits) console.warn('animation data does not match this pack: re-add the game to restore them');
+  ctx.pcks.set(pack.id, fits ? (i => (i + 1 < o.length ? data!.subarray(o[i], o[i + 1]) : null)) : null);
 }
 const pckOf = (pack: Pack) => ctx.pcks.get(pack.id) ?? null;
 
@@ -360,21 +347,6 @@ function libPrefs(): LibPrefs {
 function setLibPrefs(p: LibPrefs) { localStorage.setItem('momogram.library', JSON.stringify(p)); }
 let libEdit = false;
 
-/** series of a game, from its title (all Picross e games together, the Mario games, …) */
-function seriesOf(p: Pack): string {
-  const n = pickAny(p.title, 'en');
-  // Jupiter's other Switch games (special editions, LogiartGrimoire, Nazarick, Kemono Friends, …): a folder of their own
-  if (p.source.platform === 'Nintendo Switch' && !/^picross (s\d*\+?|e\d*)$/i.test(n.trim())) return 'Picross S Specials';
-  const rules: Array<[RegExp, string]> = [
-    [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
-    [/mario|^picross 2$/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my ?nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
-    // the picture logic games of other makers (Hudson, Success, …)
-    [/sanrio|hello kitty/i, 'Sanrio'], [/puzzle iro iro/i, 'Puzzle Iro Iro'],
-    [/illust logic|illu-logi|ds puzzler|challenge me|oekaki|illust puzzle/i, 'Illust Logic'],
-  ];
-  for (const [re, name] of rules) if (re.test(n)) return name;
-  return n;
-}
 const groupKey = (p: Pack, mode: LibPrefs['group']) => p.id === 'momogram-starter' ? '' : mode === 'system' ? p.source.platform : mode === 'series' ? seriesOf(p) : '';
 
 /** visible games in the player's order (hidden ones only while arranging) */
@@ -560,7 +532,7 @@ function packLevels(pack: Pack, back: () => void = home) {
   const list = h('div', { class: 'levels' });
   for (const g of groups) {
     const lvs = pack.levels.filter(l => (l.group ?? '') === g);
-    // a mode with a single level (Picross DS "Easy") opens its puzzles directly
+    // a mode with a single level opens its puzzles directly
     const open = () => lvs.length === 1 ? puzzleList(pack, lvs[0], self) : groupLevels(pack, g, self, back);
     list.append(h('button', { class: 'btn level mode-' + g, onClick: open }, h('b', {}, groupTitle(pack, g), megaOrbLevels(lvs)), h('small', {}, progressText(pack, lvs))));
   }
@@ -723,7 +695,7 @@ function toolSwitchArt(): Element {
 }
 
 // ---------------------------------------------------------------- tutorial
-// A short guided puzzle (and one for Mega), like the first lessons of Picross DS: each step points at the lines
+// A short guided puzzle (and one for Mega), like a game's first lessons: each step points at the lines
 // it talks about and goes on by itself once you've done what it asks. Easy rules, so mistakes are caught.
 type TutStep = { text: string; rows?: number[]; cols?: number[]; done?: (b: Board) => boolean };
 const TUT_PUZZLE = ['#####', '#.#.#', '#####', '.###.', '..#..'];

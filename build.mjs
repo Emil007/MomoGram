@@ -9,7 +9,7 @@ mkdirSync(out, { recursive: true });
 cpSync('web', out, { recursive: true });
 for (const f of ['worker-bundle.js', 'libarchive.wasm']) cpSync(`node_modules/libarchive.js/dist/${f}`, `${out}/${f}`);
 // every import method is one file in src/packs/importers: register them all (new files need no other change)
-const importerFiles = readdirSync('src/packs/importers').filter(f => f.endsWith('.ts') && !['index.ts', 'all.ts'].includes(f)).sort();
+const importerFiles = readdirSync('src/packs/importers').filter(f => f.endsWith('.ts') && !['index.ts', 'all.ts', 'series.ts'].includes(f)).sort();
 const allTs = '// Written by build.mjs: loads every import method in this folder. Do not edit.\n' + importerFiles.map(f => `import './${f.replace(/\.ts$/, '')}';`).join('\n') + '\n';
 if (readFileSync('src/packs/importers/all.ts', 'utf8') !== allTs) writeFileSync('src/packs/importers/all.ts', allTs);
 // every interface language is one file in src/i18n (en.json, de.json, …): a new file is all a new language needs

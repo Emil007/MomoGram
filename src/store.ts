@@ -68,9 +68,6 @@ async function linkAssets(): Promise<number> {
 }
 
 export const storage = {
-  saveRom: (key: string, data: Uint8Array) => tx('roms', 'readwrite', s => s.put(data, key)),
-  loadRom: (key: string) => tx<Uint8Array | undefined>('roms', 'readonly', s => s.get(key)),
-  deleteRom: (key: string) => tx('roms', 'readwrite', s => s.delete(key)),
   savePack: (p: Pack) => tx('packs', 'readwrite', s => s.put(p, p.id)),
   deletePack: (id: string) => tx('packs', 'readwrite', s => s.delete(id)),
   allPacks: () => tx<Pack[]>('packs', 'readonly', s => s.getAll()),

@@ -49,6 +49,8 @@ The bare `.momopack.json` files of early versions are no longer read.
   },
   "icon": { "w": 48, "h": 48, "rgba": "<base64 of w*h*4 bytes>" },   // optional
   "theme": { … },                     // optional, see below
+  "anims": { "asset": "anim.pck", "offsets": [0, 512, …] },  // optional: solved-picture animations, one
+                                      // asset of many small files split at these offsets (puzzles' "anim")
   "levels": [ … ]
 }
 ```
@@ -82,7 +84,10 @@ Texts (`title`, names) are objects with one entry per language: `en`, `de`, `fr`
   "color": { "palette": ["#ff0000", …], "rows": ["0011..", …] },  // optional coloured solved picture
   "mega": { "rows": [2, 5], "cols": [0, 7] },   // optional: the game's Mega version, first line of each paired
                                                  // pair of lines; the mega clues follow from these and the picture
-  "megaOnly": true                              // optional: a puzzle of the game's Mega mode only
+  "megaOnly": true,                             // optional: a puzzle of the game's Mega mode only
+  "anim": { "palette": 3, "tiles": 4, "script": [ … ], "loopTo": 0 }  // optional: animated solved picture: files
+                                      // of the pack's "anims" (16-colour palette, 4bpp DS-format tiles) and
+                                      // the sprite cells per frame
 }
 ```
 
@@ -114,9 +119,9 @@ Puzzle ids must never change between versions of a pack. Otherwise players lose 
 |---|---|
 | `sound.gbsnd` | Game Boy music: the game's sound driver and data, played by MomoGram's Game Boy sound emulation |
 | `sound.spcsnap` | Super Famicom music: SPC700 / S-DSP state, played by MomoGram's emulation |
-| `sound.sdat` | Nintendo DS sound archive (Picross DS) |
+| `sound.sdat` | DS sound archive (SDAT): sequenced music |
 | `*.bcstm` | 3DS stream music, one file per track |
-| `anim.pck` | Picross DS solved-picture animations |
+| `anim.pck` | solved-picture animations (see `anims`) |
 | `pictures.bin` | coloured solved pictures, see below |
 
 ### pictures.bin

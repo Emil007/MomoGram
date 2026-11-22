@@ -1,4 +1,4 @@
-// Puzzle state and Picross DS rules (Normal: mistakes are caught and cost time; Free: no checks, "Try it out").
+// Puzzle state and the play rules (Normal: mistakes are caught and cost time; Free: no checks, "Try it out").
 import { MegaPairs, BandItem, bandItems, analyzeBand, pairOf } from './mega';
 import { ColorPuzzle, ColorClue, colorClues, colorLine } from './color';
 
@@ -87,7 +87,7 @@ export class Board {
   rowBand(y: number): BandItem[] | null { return this.rowPair[y] < 0 ? null : this.bands.get('r' + this.rowPair[y]) ?? null; }
   colBand(x: number): BandItem[] | null { return this.colPair[x] < 0 ? null : this.bands.get('c' + this.colPair[x]) ?? null; }
 
-  /** Penalty for the n-th mistake (1-based), like Picross DS: 2, 4, then 8 minutes. */
+  /** Penalty for the n-th mistake (1-based): 2, 4, then 8 minutes. */
   static penaltyFor(n: number): number {
     return (n === 1 ? 2 : n === 2 ? 4 : 8) * 60_000;
   }
@@ -406,7 +406,7 @@ export function analyzeLine(clues: number[], cells: ArrayLike<number>): LineInfo
       starts++; only = s;
       for (let i = s; i < s + c; i++) canFill[i] = 1;
     }
-    // certain: the only place this block can still be, and it is completely filled (like Picross DS, no ✕ needed
+    // certain: the only place this block can still be, and it is completely filled (no ✕ needed
     // around it: the cells next to it can only stay empty)
     done[k] = starts === 1 && pf[only + c] - pf[only] === c;
   }

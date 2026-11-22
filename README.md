@@ -225,7 +225,7 @@ APK via Capacitor, released when `version` in `package.json` changes).
 <summary><b>How it works</b></summary>
 
 - `src/rom/nds.ts`: DS ROM file system, ARM9 / overlays, BLZ decompression.
-- `src/rom/picrossds.ts`: puzzle-set tables, records, display order, localized names and solved-picture animation scripts.
+- `src/packs/importers/`: one file per game family, each reading its game's puzzle tables, names, pictures and music.
 - `src/rom/dsgfx.ts`: DS OBJ cells (4bpp, 2D mapping) for the solved pictures.
 - `src/rom/ctr.ts`: decrypted 3DS containers (NCSD / NCCH / CIA), RomFS, icon, LZ11.
 - `src/rom/unity.ts`, `lzma.ts`: Unity asset bundles and serialized files (Switch games); `src/audio/fsb5.ts`: FMOD sound banks, Vorbis rebuilt as Ogg.

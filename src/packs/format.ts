@@ -5,7 +5,21 @@ export type Lang = 'en' | 'de' | 'fr' | 'it' | 'es' | 'ja' | 'ko';
 export type Text = Partial<Record<Lang, string>>;
 export type Rules = 'normal' | 'free';
 
+/**
+ * A solved-picture animation in the 4bpp sprite format of the DS (see rom/dsgfx.ts): the files of the pack's
+ * animation asset (`Pack.anims`) with its 16-colour palette and tiles, and the script of sprite cells per frame.
+ */
+export interface AnimRef {
+  palette: number;
+  tiles: number;
+  /** list of [sprite cells (attr0, attr1, attr2)[], frames] */
+  script: Array<{ cells: Array<[number, number, number]>; frames: number }>;
+  loopTo: number;
+}
+
 export interface PackPuzzle {
+  /** an animated solved picture (in the files of `Pack.anims`) */
+  anim?: AnimRef;
   /** where a puzzle comes from when it is shown outside its game (daily, random) */
   from?: string;
   /** the same puzzle in its game ("<pack id>/<puzzle id>"): solving it here counts there too (daily puzzles) */
@@ -50,7 +64,7 @@ export interface PackTheme {
   /** colours imitating the original: an accent colour (UI and grid tint), optional explicit fill / background */
   palette?: {
     accent: string; fill?: string; bg?: string; cell?: string; grid?: string; clue?: string; cross?: string; cursor?: string; hint?: string;
-    /** the board's design: dmg / gbc (Game Boy), switch (Jupiter's Switch games), default (MomoGram's look in the game's colours) */
+    /** the board's design: dmg / gbc (Game Boy), switch / 3ds (the Switch / 3DS games' designs), stone, notebook, ds, logic (see theme.ts), default (MomoGram's look in the game's colours) */
     style?: 'dmg' | 'gbc' | 'switch' | '3ds' | 'stone' | 'notebook' | 'ds' | 'logic' | 'default';
     /** exact board colours and shape settings of the game, over the style's own (see Theme in game/view.ts) */
     board?: Record<string, string | number | boolean | string[]>;
@@ -114,6 +128,8 @@ export interface Pack {
   levels: PackLevel[];
   createdBy?: string;
   theme?: PackTheme;
+  /** solved-picture animations: one asset holding many small files, split at these offsets (`PackPuzzle.anim`) */
+  anims?: { asset: string; offsets: number[] };
   /** the game's own icon, read from the user's file (RGBA, base64) */
   icon?: PackIcon;
   /** revision: when this version of the pack was made (ms since 1970); missing = 1, older pack files */

@@ -1,4 +1,4 @@
-// Mega nonograms ("Mega Picross" in Jupiter's games, デカピクロス in Japan).
+// Mega nonograms: some numbers count a shape spanning two rows or two columns.
 //
 // Some pairs of neighbouring lines are joined into a band. In a band, every group of filled cells that is
 // connected (side by side) and reaches into both lines is counted by one mega number, its total size; groups that

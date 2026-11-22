@@ -13,9 +13,6 @@ let sfxGain: GainNode | null = null;
 // sound effects have a context of their own, so pausing the music (suspending its context) keeps them working
 let sfxAc: AudioContext | null = null;
 let paused = false;
-let player: SeqPlayer | null = null;
-let getSdat: () => Uint8Array | null = () => null;
-let sdatFor: Uint8Array | null = null;
 let current = '';
 const listeners: Array<(id: string) => void> = [];
 const changed = () => { for (const f of [...listeners]) f(current); };
@@ -42,10 +39,6 @@ function ensure(): boolean {
   }
   if (!sfxAc) {
     try { sfxAc = new AudioContext(); sfxGain = sfxAc.createGain(); sfxGain.gain.value = 0.25; sfxGain.connect(sfxAc.destination); } catch { sfxAc = null; }
-  }
-  const d = getSdat();
-  if (d && d !== sdatFor) {
-    try { player = new SeqPlayer(ac, master!, new Sdat(d)); sdatFor = d; } catch (e) { console.warn('sound archive', e); player = null; }
   }
   return true;
 }
@@ -102,21 +95,9 @@ async function loadBuffer(packId: string, name: string): Promise<AudioBuffer | n
 }
 
 export const Audio = {
-  init(fn: () => Uint8Array | null) { getSdat = fn; },
-  /** a sequence from the Picross DS sound archive */
-  play(name: string, loop = true) {
-    if (!settings.music) { this.stop(); return; }
-    if (paused && name !== current) Audio.resume();
-    if (name === current && player?.playing) return;
-    if (!ac || ac.state !== 'running') { pending = () => Audio.play(name, loop); return; }
-    ensure();
-    stopPackMusic();
-    current = name; changed();
-    player?.play(name, loop);
-  },
   /**
    * music from a pack ("Bgm_Home.bcstm", or "sound.sdat#SEQ_NAME" for DS sound archives).
-   * Returns false when the pack has no such music, so the caller can fall back to the Picross DS music.
+   * Returns false when the pack has no such music (the caller then plays nothing or other music).
    */
   async playPack(packId: string, ref: string | undefined, loop = true): Promise<boolean> {
     if (!ref || !settings.packMusic) return false;
@@ -140,7 +121,7 @@ export const Audio = {
           chipData.set(key, d);
         }
         if (current !== id) return true;
-        player?.stop(0.1); stopPackMusic();
+        stopPackMusic();
         chip ??= new ChipPlayer(ac!, master!);
         return chip.play(cm[1] as 'gb' | 'spc', key, d, +cm[2]);
       }
@@ -153,14 +134,14 @@ export const Audio = {
           packSeq.set(packId + '/' + file, sp);
         }
         if (current !== id) return true;
-        player?.stop(0.1); stopPackMusic();
+        stopPackMusic();
         packSeqPlaying = sp;
         return sp.play(seq, loop);
       }
       const buf = await loadBuffer(packId, file);
       if (!buf) return false;
       if (current !== id) return true; // something else was requested meanwhile
-      player?.stop(0.1); stopPackMusic();
+      stopPackMusic();
       const src = ac!.createBufferSource(), gain = ac!.createGain();
       src.buffer = buf;
       const li = (buf as any).loopInfo;
@@ -175,7 +156,7 @@ export const Audio = {
       return false;
     }
   },
-  stop() { current = ''; if (paused) Audio.resume(); changed(); player?.stop(0.1); stopPackMusic(0.1); },
+  stop() { current = ''; if (paused) Audio.resume(); changed(); stopPackMusic(0.1); },
   /** hold the music where it is (the whole music context stops, so every kind of music continues exactly) */
   pause() { if (!ac || paused) return; paused = true; ac.suspend().catch(() => {}); changed(); },
   resume() { if (!paused) return; paused = false; ac?.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } }).catch(() => {}); changed(); },

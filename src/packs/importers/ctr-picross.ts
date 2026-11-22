@@ -398,6 +398,8 @@ function music3ds(files: CtrFile[]): { theme: PackTheme; assets: PackAsset[] } {
 registerImporter({
   name: 'Nintendo 3DS',
   version: 3, // raise when the importer reads more or reads differently
+  // packs read before a title was made complete keep their id, only the title changes
+  upgrade: p => p.id.startsWith('ctr-') && fullTitle(p.title as Record<string, string>),
   detect: d => ctrEncrypted(d) === false,
   read: d => read3ds(d),
 });

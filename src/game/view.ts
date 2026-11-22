@@ -107,7 +107,7 @@ export class BoardView {
   private spin: { row: number; col: number; flash: boolean } | null = null;
   get spinning() { return !!this.spin; }
 
-  /** Hint roulette, like Picross DS: a row and a column spin, slow down and stop on the target. */
+  /** Hint roulette: a row and a column spin, slow down and stop on the target. */
   roulette(targetRow: number, targetCol: number, onTick?: () => void): Promise<void> {
     const b = this.board;
     return new Promise(res => {
@@ -160,7 +160,7 @@ export class BoardView {
   private inkCache = new Map<string, string>();
   /**
    * a clue colour that stays readable on its background: numbers at least 4.5:1, greyed-out (done) numbers at
-   * least 2.2:1, which some games' colours don't give on every stripe (the stone stripes of Tamori no Picross)
+   * least 2.2:1, which some games' colours don't give on every stripe (stone-coloured stripes)
    */
   private ink(color: string, bg: string, done = false): string {
     const k = color + bg + done;
@@ -216,7 +216,7 @@ export class BoardView {
 
   get zoomed() { return this.cell > this.fitCell + 0.5; }
 
-  /** the clue corner (top-left), where the DS-style tool pad sits */
+  /** the clue corner (top-left), where the tool pad sits */
   cornerRect() { return { x: this.padX, y: this.padY, w: this.clueW, h: this.clueH }; }
   /** visible part of the grid, in cells (for the zoom frame on the top screen) */
   visibleCells() {
@@ -225,7 +225,7 @@ export class BoardView {
     return { x: Math.max(0, this.scrollX / cs), y: Math.max(0, this.scrollY / cs), w: Math.min(b.w, vw / cs), h: Math.min(b.h, vh / cs) };
   }
   onLayout: (() => void) | null = null;
-  /** length of the current drag, shown in a bubble like on the DS */
+  /** length of the current drag, shown in a bubble */
   private dragLen = 0;
   private dragAt: { x: number; y: number } | null = null;
 
@@ -358,7 +358,7 @@ export class BoardView {
     if (!s || s.pointer !== e.pointerId) return;
     const c = this.cellAt(Math.max(this.padX + this.clueW + 1, p.x), Math.max(this.padY + this.clueH + 1, p.y));
     if (!c) return;
-    // lock to the row or column of the first movement, like Picross DS
+    // lock to the row or column of the first movement
     if (s.axis === 0 && (c.x !== s.x0 || c.y !== s.y0)) s.axis = Math.abs(c.x - s.x0) >= Math.abs(c.y - s.y0) ? 1 : 2;
     let tx = c.x, ty = c.y;
     if (s.axis === 1) ty = s.y0; else if (s.axis === 2) tx = s.x0;
@@ -504,11 +504,11 @@ export class BoardView {
     const vx1 = Math.min(b.w, Math.ceil((this.scrollX + viewW - this.clueW) / cs));
     const vy1 = Math.min(b.h, Math.ceil((this.scrollY + viewH - this.clueH) / cs));
     const gw = Math.min(b.w * cs, viewW - this.clueW), gh = Math.min(b.h * cs, viewH - this.clueH);
-    // dither dot size in device pixels: fine texture like the DS cells
+    // dither dot size in device pixels: a fine texture
     const dp = Math.max(1, Math.round(cs * dpr / 14));
     const pat = (a: string, c: string) => { const p = this.dither(a, c, dp); if (typeof p !== 'string') p.setTransform(new DOMMatrix().scale(1 / dpr)); return p; };
     const now = performance.now();
-    // the row and column being drawn in (or where the cursor is) are marked, clues included, like on the DS
+    // the row and column being drawn in (or where the cursor is) are marked, clues included
     const cue = this.showCursor || this.spin || this.stroke;
     const cueX = cue ? (this.spin ? this.spin.col : this.cursorX) : -1;
     const cueY = cue ? (this.spin ? this.spin.row : this.cursorY) : -1;
@@ -587,7 +587,7 @@ export class BoardView {
           ctx.fillStyle = col; ctx.fillRect(px, py, cs, cs);
           if (!trial && T.fillBevel) bevel(px, py, T.fillBevel);
         } else if (T.fillStyle === 'gloss') {
-          // a shiny block: lighter at the top, darker at the bottom (Picross DS)
+          // a shiny block: lighter at the top, darker at the bottom (the "ds" board design)
           const g = ctx.createLinearGradient(0, py, 0, py + cs);
           const [lt, dk] = trial ? [T.trialFill, T.trialFill] : T.fillBevel ?? [T.fill, T.fillDither];
           g.addColorStop(0, lt); g.addColorStop(0.45, col); g.addColorStop(1, dk);

@@ -12,10 +12,18 @@ export interface Importer {
   /** cheap check on the bytes */
   detect(data: Uint8Array, fileName: string): boolean;
   read(data: Uint8Array, fileName: string): Pack[] | Promise<Pack[]>;
+  /** brings a pack stored by an older MomoGram up to date (without the game file); true when it changed it */
+  upgrade?(pack: Pack): boolean;
 }
 
 const importers: Importer[] = [];
 export function registerImporter(i: Importer) { importers.push(i); }
+/** every importer's upgrade for a stored pack (see Importer.upgrade); true when the pack changed */
+export function upgradeStoredPack(p: Pack): boolean {
+  let changed = false;
+  for (const i of importers) if (i.upgrade?.(p)) changed = true;
+  return changed;
+}
 
 /** the files of a game that is a folder rather than one file (Switch RomFS), from a picked folder or an archive */
 export interface GameFiles {

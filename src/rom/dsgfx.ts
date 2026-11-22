@@ -21,7 +21,7 @@ export interface Frame { width: number; height: number; pixels: Uint32Array; ox:
 /**
  * Render one cell (list of OAM entries) into an RGBA buffer. Coordinates are relative to the cell origin;
  * the result covers the union of all sprites. Colour index 0 is transparent.
- * Picross DS uses 2D OBJ mapping: the tile sheet is 32 tiles (256 px) wide and a sprite's tile rows
+ * 2D OBJ mapping: the tile sheet is 32 tiles (256 px) wide and a sprite's tile rows
  * are 32 tiles apart.
  */
 export function renderCell(cells: Array<[number, number, number]>, tiles: Uint8Array, palette: Uint32Array, sheetTilesWide = 32): Frame {
