@@ -22,7 +22,7 @@ It's a single PHP file. You need PHP 7.4 or newer and a MySQL/MariaDB database, 
    10 players (high scores and the app's layouts are made for that many).
 3. **Upload the folder.** Use **Files** in Plesk (or FTP) to upload the `server` folder into your web space, e.g. as `httpdocs/momogram`. The `data` folder inside must be writable by PHP, which it is by default on Plesk. If you can, set `data_dir` in `config.php` to a folder outside `httpdocs`.
 4. **Turn on HTTPS.** Use **SSL/TLS Certificates → Let's Encrypt**. The web version of MomoGram can only connect over HTTPS.
-5. **Connect the app.** In MomoGram, go to **Options → Server**, enter the address (e.g. `https://example.com/momogram`) and tap **Connect**. Then create an account with the invite code. On your other devices, log in with the same name and password.
+5. **Connect the app.** In MomoGram, go to **Options → Server**, enter the address without `https://` (it is always HTTPS; e.g. `example.com/momogram`) and tap **Connect**. Then create an account with the invite code. On your other devices, log in with the same name and password.
 
 The first account created is the admin. The admin can delete any pack on the server (everyone else only their own) and, under Options → Server → Accounts, set a new password for someone who forgot theirs. That logs the account out on all devices.
 

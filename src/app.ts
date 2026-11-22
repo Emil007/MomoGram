@@ -1,23 +1,23 @@
-// MomoGram UI: home, level/puzzle selection, play screen, solved screen, packs and options.
+// MomoGram UI: start, home, a game's levels and puzzles, play screen, solved screen, packs and options. Library,
+// tutorial, practice and high scores are in ui/.
 import { solutionCount } from './game/unique';
 import { oggLength } from './audio/fsb5';
 import { bcstmLength } from './audio/bcstm';
 import { MegaPairs, generateMega, megaSolutionCount, MEGA_GEN } from './game/mega';
 import { colorOf, colorSolutionCount, inkOn } from './game/color';
-import { Board, formatTime, FILL, CROSS, EMPTY } from './game/board';
+import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
-import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole, safeColor } from './packs/format';
+import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
 import { readEntries, packRev, newRev } from './packs/io';
 import { upgradeStoredPack } from './packs/importers/index';
-import { seriesOf } from './packs/importers/series';
 import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints } from './store';
 import { puzzleRating, performance as perfScore, points, RatedRules } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
 export { choose };
 import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
 import { Gamepads } from './input';
-import { openPackManager, storePacks, filesToEntries, fetchServerPacks } from './ui/packs';
+import { openPackManager, storePacks, filesToEntries } from './ui/packs';
 import * as Sync from './sync';
 import { Audio as Snd } from './audio';
 import { packSave, unpackSave, download } from './util/files';
@@ -28,6 +28,10 @@ import { icon } from './ui/icons';
 import { editorHome } from './ui/editor';
 import { textureInspector } from './ui/texinspect';
 import { puzzleLevel } from './game/difficulty';
+import { offerTutorial, tutorialScreen } from './ui/tutorial';
+import { fastestRow, scoresScreen } from './ui/scores';
+import { practiceScreen } from './ui/practice';
+import { toggleLibEdit, libraryPacks, megaOrbLevels, progressText, renderLibrary } from './ui/library';
 
 const TIME_LIMIT = 60 * 60_000;
 
@@ -37,10 +41,10 @@ interface Ctx {
   pcks: Map<string, PckGetter | null>;
 }
 
-const ctx: Ctx = { packs: [], pcks: new Map() };
+export const ctx: Ctx = { packs: [], pcks: new Map() };
 const root = () => document.getElementById('app')!;
 
-function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, any> = {}, ...kids: Array<Node | string | null | undefined | false>): HTMLElementTagNameMap[K] {
+export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, any> = {}, ...kids: Array<Node | string | null | undefined | false>): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k.startsWith('on')) (e as any)[k.toLowerCase()] = v;
@@ -50,9 +54,8 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, 
   for (const c of kids) if (c !== null && c !== undefined && c !== false) e.append(c);
   return e;
 }
-export { h };
 
-function screen(...kids: Array<Node | null>): HTMLElement {
+export function screen(...kids: Array<Node | null>): HTMLElement {
   const r = root();
   r.innerHTML = '';
   const s = h('div', { class: 'screen' }, ...kids);
@@ -61,13 +64,13 @@ function screen(...kids: Array<Node | null>): HTMLElement {
   return s;
 }
 
-function header(title: string, back?: () => void): HTMLElement {
+export function header(title: string, back?: () => void): HTMLElement {
   return h('header', { class: 'bar' },
     back ? h('button', { class: 'btn ghost back', onClick: back, 'aria-label': t('back') }, '‹ ' + t('back')) : h('span'),
     h('h1', {}, title), h('span'));
 }
 
-function packLang(): Lang { return lang(); }
+export function packLang(): Lang { return lang(); }
 
 // ---------------------------------------------------------------- unlocking
 
@@ -191,7 +194,7 @@ function logo(): HTMLElement {
 let newVersion: string | null = null, lastCheck = 0;
 const RELEASES = 'https://github.com/Emil007/MomoGram/releases/latest';
 const isWeb = () => /^https?:$/.test(location.protocol) && !(window as any).Capacitor?.isNativePlatform?.();
-const newer = (a: string, b: string) => { const x = a.split(/[.-]/).map(Number), y = b.split(/[.-]/).map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+export const newer = (a: string, b: string) => { const x = a.split(/[.-]/).map(Number), y = b.split(/[.-]/).map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
 async function checkUpdate(force = false): Promise<void> {
   const mine = (window as any).MOMOGRAM_VERSION as string;
   if (mine === 'dev' || (!force && Date.now() - lastCheck < 600000)) return;
@@ -282,18 +285,13 @@ function megaSwitch(): HTMLElement {
 
 // ---------------------------------------------------------------- home: the game library
 
-function countPack(pack: Pack): [number, number] {
+export function countPack(pack: Pack): [number, number] {
   let a = 0, b = 0;
   for (const l of pack.levels) for (const p of l.puzzles) { b++; if (getProgress(pack.id, p.id).cleared) a++; }
   return [a, b];
 }
 
 /** the pack played last (its menu music plays on the home screen) */
-function lastPack(): Pack | null {
-  const id = localStorage.getItem('momogram.lastPack');
-  return allPacks().find(p => p.id === id) ?? null;
-}
-
 export function home() {
   themeRoot(null);
   // whatever plays keeps playing; only a silent start picks a random track from all games
@@ -325,7 +323,7 @@ export function home() {
 
   const lib = h('div', { class: 'library' });
   renderLibrary(lib, null);
-  const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { libEdit = !libEdit; renderLibrary(lib, null); arrange.classList.toggle('on', libEdit); } }, t('arrange'));
+  const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { const on = toggleLibEdit(); renderLibrary(lib, null); arrange.classList.toggle('on', on); } }, t('arrange'));
 
   const upd = h('div', { class: 'update-slot' });
   showUpdate(upd);
@@ -338,26 +336,8 @@ export function home() {
     nowPlaying()));
 }
 
-// ---------------------------------------------------------------- library: folders, order, hidden games
-
-interface LibPrefs { order: string[]; hidden: string[]; group: 'series' | 'system' | 'none'; view?: 'cards' | 'tiles' | 'list' }
-function libPrefs(): LibPrefs {
-  try { return { order: [], hidden: [], group: 'series', ...JSON.parse(localStorage.getItem('momogram.library') || '{}') }; } catch { return { order: [], hidden: [], group: 'series' }; }
-}
-function setLibPrefs(p: LibPrefs) { localStorage.setItem('momogram.library', JSON.stringify(p)); }
-let libEdit = false;
-
-const groupKey = (p: Pack, mode: LibPrefs['group']) => p.id === 'momogram-starter' ? '' : mode === 'system' ? p.source.platform : mode === 'series' ? seriesOf(p) : '';
-
-/** visible games in the player's order (hidden ones only while arranging) */
-function libraryPacks(includeHidden = false): Pack[] {
-  const pr = libPrefs();
-  const idx = (id: string) => { const i = pr.order.indexOf(id); return i < 0 ? 1e6 : i; };
-  return allPacks().filter(p => includeHidden || !pr.hidden.includes(p.id)).sort((a, b) => idx(a.id) - idx(b.id));
-}
-
 let lastColors: ThemeColors | null = null;
-function themeRoot(c: ThemeColors | null) { lastColors = c; applyThemeCss(root(), c); }
+export function themeRoot(c: ThemeColors | null) { lastColors = c; applyThemeCss(root(), c); }
 
 // ---------------------------------------------------------------- dark mode (menus only; boards keep their look)
 const darkMq = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -373,153 +353,10 @@ export function applyLook() {
 darkMq?.addEventListener?.('change', () => applyLook());
 
 /** Mega mode: a small glowing dot on games (and folders) whose Mega puzzles come from the game itself */
-const hasGameMega = (p: Pack) => p.levels.some(l => l.puzzles.some(z => z.mega));
-function megaOrb(packs: Pack[]): HTMLElement | null {
-  if (curMode() !== 'mega' || settings.megaMark !== 'mark' || !packs.some(hasGameMega)) return null;
-  return h('span', { class: 'mega-orb', title: t('megaFromGameHelp'), 'aria-label': t('megaFromGame') });
-}
-/** the same dot on a game's modes and levels, so the way to its own Mega puzzles is marked all along */
-function megaOrbLevels(lvs: PackLevel[]): HTMLElement | null {
-  return megaOrb([{ levels: lvs } as Pack]);
-}
-
-/** a newer version of this game is on the server (someone imported it again) */
-const hasUpdate = (p: Pack) => (Sync.knownServerRevs().get(p.id) ?? 0) > packRev(p);
-/** opening a game with a newer version on the server: asks first whether to download it */
-async function offerUpdate(p: Pack, open: () => void) {
-  if (!hasUpdate(p) || !Sync.account() || !(await confirmBox(t('updateAsk', { name: pickAny(p.title, packLang()) }), t('update')))) { open(); return; }
-  const note = h('p', { class: 'update-note' }, '⬆ ' + t('update') + ' …');
-  const box = h('div', { class: 'modal' }, h('div', { class: 'card' }, note));
-  document.body.append(box);
-  try {
-    const sp = (await Sync.serverPacks()).find(x => x.id === p.id);
-    if (sp) await fetchServerPacks({ packs: () => ctx.packs, setPacks: ps => { ctx.packs = ps; ctx.pcks.delete(p.id); } }, [sp], text => { note.textContent = '⬆ ' + text; });
-  } catch (e) { message(serverError(e)); }
-  finally { box.remove(); }
-  open();
-}
-function gameCard(p: Pack, onOpen: () => void): HTMLElement {
-  const [a, b] = countPack(p);
-  const col = p.theme?.palette && settings.packColors ? safeColor(themeColors(p.theme.palette).accent, '') || null : null;
-  // the icon sits in a row with the system and year (like the icons of a folder), so the title has the full width
-  return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
-    h('b', {}, pickAny(p.title, packLang()), megaOrb([p]), hasUpdate(p) ? h('span', { class: 'update-orb', title: t('updateAvailable'), 'aria-label': t('updateAvailable') }) : null),
-    h('div', { class: 'game-meta' }, hasIcon(p) ? iconCanvas(p.icon!) : null,
-      h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : ''))),
-    h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
-    h('small', { class: 'count' }, t('solvedCount', { a, b })),
-    null);
-}
-
-/**
- * The library grid: single games as cards, several games of a series (or system) as a folder. While arranging,
- * every entry gets arrows to move it and an eye to hide it.
- */
-function renderLibrary(el: HTMLElement, folder: string | null) {
-  const pr = libPrefs();
-  const packs = libraryPacks(libEdit);
-  const entries: Array<{ key: string; packs: Pack[] }> = [];
-  for (const p of packs) {
-    const k = folder !== null ? p.id : groupKey(p, pr.group) || p.id;
-    if (folder !== null && (groupKey(p, pr.group) || p.id) !== folder) continue;
-    const e = entries.find(x => x.key === k);
-    if (e) e.packs.push(p); else entries.push({ key: k, packs: [p] });
-  }
-  el.replaceChildren();
-  el.classList.remove('v-cards', 'v-tiles', 'v-list');
-  el.classList.add('v-' + (pr.view ?? 'cards'));
-  const move = (e: { packs: Pack[] }, d: number) => {
-    // order is kept per game; moving an entry moves all games in it past the neighbour entry
-    const flat = entries.flatMap(x => x.packs.map(p => p.id));
-    const i = entries.indexOf(e as any), j = i + d;
-    if (j < 0 || j >= entries.length) return;
-    [entries[i], entries[j]] = [entries[j], entries[i]];
-    const order = entries.flatMap(x => x.packs.map(p => p.id));
-    const rest = pr.order.filter(id => !flat.includes(id));
-    setLibPrefs({ ...pr, order: [...order, ...rest] });
-    renderLibrary(el, folder);
-  };
-  for (const e of entries) {
-    const hidden = e.packs.every(p => pr.hidden.includes(p.id));
-    const card = e.packs.length === 1
-      ? gameCard(e.packs[0], () => offerUpdate(e.packs[0], () => openPack(allPacks().find(x => x.id === e.packs[0].id) ?? e.packs[0], folder !== null ? () => folderScreen(folder) : home)))
-      : folderCard(e.key, e.packs);
-    const wrap = h('div', { class: 'lib-entry' + (hidden ? ' hidden' : '') }, card);
-    if (libEdit) {
-      card.setAttribute('tabindex', '-1');
-      wrap.append(h('div', { class: 'lib-tools' },
-        h('button', { class: 'rbtn ghost', 'aria-label': t('moveLeft'), onClick: () => move(e, -1) }, icon('prev')),
-        h('button', { class: 'btn eye', onClick: () => {
-          const ids = e.packs.map(p => p.id);
-          setLibPrefs({ ...pr, hidden: hidden ? pr.hidden.filter(id => !ids.includes(id)) : [...pr.hidden, ...ids] });
-          renderLibrary(el, folder);
-        } }, hidden ? t('show') : t('hide')),
-        h('button', { class: 'rbtn ghost', 'aria-label': t('moveRight'), onClick: () => move(e, 1) }, icon('next'))));
-    }
-    el.append(wrap);
-  }
-  if (libEdit && folder === null) el.prepend(h('div', { class: 'lib-group' }, h('span', {}, t('groupBy')),
-    ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))),
-    h('div', { class: 'lib-group' }, h('span', {}, t('viewAs')),
-      ...(['cards', 'tiles', 'list'] as const).map(m => h('button', { class: 'tab' + ((pr.view ?? 'cards') === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, view: m }); renderLibrary(el, folder); } }, t('view_' + m)))));
-}
-
-/** an icon with a picture on it (some files have a blank one: all white, or all one colour) */
-const iconCache = new Map<string, boolean>();
-function hasIcon(p: Pack): boolean {
-  const ic = p.icon;
-  if (!ic) return false;
-  let v = iconCache.get(ic.rgba);
-  if (v === undefined) {
-    const bin = atob(ic.rgba);
-    const seen = new Set<number>();
-    for (let i = 0; i + 3 < bin.length && seen.size < 3; i += 4) {
-      if (bin.charCodeAt(i + 3) < 32) continue;
-      seen.add((bin.charCodeAt(i) >> 3) << 10 | (bin.charCodeAt(i + 1) >> 3) << 5 | bin.charCodeAt(i + 2) >> 3);
-    }
-    v = seen.size >= 3;
-    iconCache.set(ic.rgba, v);
-  }
-  return v;
-}
-
-/** a game's own icon (read from the user's file), drawn pixel-sharp */
-function iconCanvas(ic: NonNullable<Pack['icon']>): HTMLCanvasElement {
-  const c = h('canvas', { class: 'game-icon', width: ic.w, height: ic.h, 'aria-hidden': 'true' });
-  const bin = atob(ic.rgba), px = new Uint8ClampedArray(bin.length);
-  for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
-  c.getContext('2d')!.putImageData(new ImageData(px, ic.w, ic.h), 0, 0);
-  return c;
-}
-
-function folderCard(key: string, packs: Pack[]): HTMLElement {
-  let a = 0, b = 0;
-  for (const p of packs) { const [x, y] = countPack(p); a += x; b += y; }
-  return h('button', { class: 'btn game folder', onClick: () => folderScreen(key) },
-    h('b', {}, key, megaOrb(packs)), h('small', {}, t('gamesCount', { n: packs.length })),
-    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => hasIcon(p) ? iconCanvas(p.icon!) : h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
-    h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
-    h('small', { class: 'count' }, t('solvedCount', { a, b })));
-}
-
-function folderScreen(key: string) {
-  themeRoot(null);
-  const lib = h('div', { class: 'library' });
-  renderLibrary(lib, key);
-  screen(header(key, home), h('div', { class: 'home' }, lib));
-}
-
-function progressText(pack: Pack, levels: PackLevel[]) {
-  let a = 0, b = 0;
-  for (const l of levels) for (const p of l.puzzles) { b++; if (getProgress(pack.id, p.id).cleared) a++; }
-  return t('solvedCount', { a, b });
-}
-
 // ---------------------------------------------------------------- a game: modes → levels → puzzles
 
-async function openPack(pack: Pack, back: () => void) {
+export async function openPack(pack: Pack, back: () => void) {
   await loadExtras(pack);
-  localStorage.setItem('momogram.lastPack', pack.id);
   packLevels(pack, back);
 }
 
@@ -683,7 +520,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
  * The fill/cross switch: the active tool big in the middle, the other one small in a circle at the upper right,
  * and an arrow from the small one to the big one. A tap swaps the two (CSS moves them).
  */
-function toolSwitchArt(): Element {
+export function toolSwitchArt(): Element {
   const tpl = document.createElement('template');
   tpl.innerHTML = `<svg class="switch-art" viewBox="0 0 62 62" aria-hidden="true">
     <path class="arrow" d="M53.6 24.0L53.5 24.9L53.4 25.7L53.3 26.6L53.2 27.4L53.0 28.1L52.8 28.9L52.6 29.6L52.4 30.2L52.1 30.9L51.8 31.5L51.5 32.0L51.2 32.6L50.9 33.1L50.5 33.6L50.1 34.0L49.7 34.5L49.3 34.9L48.9 35.2L48.4 35.6L48.0 35.9L47.5 36.2L47.0 36.5L46.5 36.7L45.9 36.9L47.5 40.2L48.1 39.8L48.8 39.3L49.3 38.9L49.9 38.4L50.4 37.8L50.9 37.3L51.4 36.7L51.8 36.2L52.2 35.6L52.5 34.9L52.9 34.3L53.2 33.6L53.4 32.9L53.6 32.2L53.8 31.5L54.0 30.7L54.2 29.9L54.3 29.2L54.4 28.3L54.4 27.5L54.5 26.7L54.5 25.8L54.4 24.9L54.4 24.0ZM42 40L45.4 34.2L48.0 42.8Z"/>
@@ -692,113 +529,6 @@ function toolSwitchArt(): Element {
     <g class="tool-x"><path d="M-10 -10L10 10M10 -10L-10 10"/></g>
   </svg>`;
   return tpl.content.firstElementChild!;
-}
-
-// ---------------------------------------------------------------- tutorial
-// A short guided puzzle (and one for Mega), like a game's first lessons: each step points at the lines
-// it talks about and goes on by itself once you've done what it asks. Easy rules, so mistakes are caught.
-type TutStep = { text: string; rows?: number[]; cols?: number[]; done?: (b: Board) => boolean };
-const TUT_PUZZLE = ['#####', '#.#.#', '#####', '.###.', '..#..'];
-const TUT_MEGA = ['#..##', '#..##', '#.#..', '###..', '.###.'];
-const TUT_COLOR = ['.R.R.', 'RRRRR', '.RRR.', '..G..', '.GGG.'];
-const TUT_PAL = ['#e0413a', '#3aa64c'];
-type Lesson = 'basic' | 'mega' | 'color';
-function tutorialScreen(back: () => void, lesson: Lesson = 'basic') {
-  themeRoot(null);
-  const mega = lesson === 'mega', colorL = lesson === 'color';
-  const rowsOf = mega ? TUT_MEGA : colorL ? TUT_COLOR.map(r => r.replace(/[A-Z]/g, '#')) : TUT_PUZZLE;
-  const cp = colorL ? { w: 5, h: 5, palette: TUT_PAL, cells: Uint8Array.from(TUT_COLOR.join(''), c => (c === 'R' ? 1 : c === 'G' ? 2 : 0)) } : null;
-  const board = new Board(rowsOf, 'easy', mega ? { rows: [1], cols: [] } : null, cp);
-  const colorRow = (b: Board, y: number, want: string) => [...want].every((c, x) => c === '.' || (b.at(x, y) === FILL && b.colorAt(x, y) === (c === 'R' ? 0 : 1)));
-  const row = (b: Board, y: number) => [...Array(b.w)].map((_, x) => b.at(x, y));
-  const col = (b: Board, x: number) => [...Array(b.h)].map((_, y) => b.at(x, y));
-  const filled = (cells: number[], want: number[]) => want.every(i => cells[i] === FILL);
-  const steps: TutStep[] = colorL ? [
-    { text: t('tutC1') },
-    { text: t('tutC2'), rows: [1], done: b => colorRow(b, 1, 'RRRRR') },
-    { text: t('tutC3'), cols: [2], done: b => [1, 2, 3, 4].every(y => b.at(2, y) === FILL && b.colorAt(2, y) === (y < 3 ? 0 : 1)) },
-    { text: t('tutC4'), done: b => b.checkSolved() },
-    { text: t('tutCEnd') },
-  ] : mega ? [
-    { text: t('tutM1') },
-    { text: t('tutM2'), rows: [1, 2] },
-    { text: t('tutM3'), rows: [1, 2], done: b => b.at(0, 1) === FILL && b.at(0, 2) === FILL },
-    { text: t('tutM4'), done: b => b.checkSolved() },
-    { text: t('tutMEnd') },
-  ] : [
-    { text: t('tut1') },
-    { text: t('tut2'), rows: [0], done: b => filled(row(b, 0), [0, 1, 2, 3, 4]) },
-    { text: t('tut3'), rows: [2], cols: [2], done: b => filled(row(b, 2), [0, 1, 2, 3, 4]) && filled(col(b, 2), [0, 1, 2, 3, 4]) },
-    { text: t('tut4'), rows: [1], done: b => filled(row(b, 1), [0, 2, 4]) },
-    { text: t('tut5'), rows: [4], done: b => [0, 1, 3, 4].every(i => row(b, 4)[i] === CROSS) },
-    { text: t('tut6'), done: b => b.checkSolved() },
-    { text: t('tutEnd') },
-  ];
-  let at = 0;
-  const canvas = h('canvas', {}) as HTMLCanvasElement;
-  const wrap = h('div', { class: 'boardwrap tut-board' }, canvas);
-  const textEl = h('p', { class: 'tut-text' });
-  const dots = h('div', { class: 'tut-dots' });
-  const nextBtn = h('button', { class: 'btn primary', onClick: () => go(at + 1) }, t('tutNext'));
-  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view.tool === 'fill' ? 'cross' : 'fill') }, toolSwitchArt());
-  const undoBtn = h('button', { class: 'rbtn', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) view.invalidate(); } }, icon('undo'));
-  const leave = () => { ro.disconnect(); view.destroy(); back(); };
-  const view: BoardView = new BoardView(canvas, board, {
-    onChange: r => { Snd.sfx(r === 'mistake' ? 'mistake' : 'tap'); check(); },
-  });
-  // colour lesson: the palette
-  const palette = cp ? h('div', { class: 'palette' }) : null;
-  const drawPalette = () => { if (cp) toolBtn.style.setProperty('--tf', cp.palette[view.color]); palette?.replaceChildren(...cp!.palette.map((c, k) => h('button', {
-    class: 'swatch' + (view.color === k && view.tool === 'fill' ? ' on' : ''), style: `--sw:${c}; --ink:${inkOn(c)}`,
-    onClick: () => { view.color = k; setTool('fill'); },
-  }, h('span', {}, String(board.colorsLeft()[k] || '✓'))))); };
-  function setTool(tool: 'fill' | 'cross') {
-    view.tool = tool;
-    toolBtn.classList.toggle('crossing', tool === 'cross');
-    drawPalette();
-  }
-  function check() {
-    drawPalette();
-    const st = steps[at];
-    if (st.done?.(board)) setTimeout(() => { if (steps[at] === st) { Snd.sfx('clear'); go(at + 1); } }, 350);
-  }
-  function go(i: number) {
-    if (i >= steps.length) { leave(); return; }
-    at = i;
-    const st = steps[i];
-    textEl.textContent = st.text;
-    view.focus = st.rows || st.cols ? { rows: st.rows ?? [], cols: st.cols ?? [] } : null;
-    view.invalidate();
-    dots.replaceChildren(...steps.map((_, k) => h('i', { class: k === i ? 'on' : k < i ? 'past' : '' })));
-    const last = i === steps.length - 1;
-    nextBtn.style.visibility = st.done && !last ? 'hidden' : ''; // keeps its space: the board doesn't move
-    nextBtn.textContent = last ? t('done') : t('tutNext');
-    extra.replaceChildren();
-    if (last && lesson === 'basic') extra.append(h('button', { class: 'btn', onClick: () => { ro.disconnect(); view.destroy(); tutorialScreen(back, 'mega'); } }, t('tutMegaToo')));
-    check();
-  }
-  const extra = h('div', { class: 'tut-extra' });
-  screen(header(mega ? t('tutorialMega') : colorL ? t('tutorialColor') : t('tutorial'), leave),
-    h('div', { class: 'tut' }, h('div', { class: 'tut-card card' }, dots, textEl, h('div', { class: 'row wrap tut-btns' }, nextBtn, extra)),
-      wrap, palette, h('nav', { class: 'tools tut-tools' }, toolBtn, h('span', { class: 'gap' }), undoBtn)));
-  const ro = new ResizeObserver(() => {
-    const w = wrap.clientWidth, hh = wrap.clientHeight; // inside the frame
-    if (w !== view.width || hh !== view.height) view.resize(w, hh);
-  });
-  ro.observe(wrap);
-  go(0);
-}
-
-/** the first visit (and the first switch to Mega or Colour): offer that tutorial once; afterwards it's in the options */
-async function offerTutorial(lesson: Lesson = 'basic') {
-  // asked once per profile (synced with the account, so other devices don't ask again)
-  const key = 'momogram.tutorialAsked' + (lesson === 'basic' ? '' : '.' + lesson);
-  const asked = settings.tutAsked ?? [];
-  if (asked.includes(lesson) || localStorage.getItem(key)) return;
-  settings.tutAsked = [...asked, lesson]; saveSettings();
-  let yes = false;
-  await choose(t(lesson === 'mega' ? 'tutAskMega' : lesson === 'color' ? 'tutAskColor' : 'tutAsk'), [[t('tutYes'), () => { yes = true; }], [t('tutNo'), () => {}]]);
-  if (yes) tutorialScreen(home, lesson);
 }
 
 /** home: is this profile in sync with the server? tap to sync now */
@@ -827,131 +557,6 @@ function syncChip(): HTMLElement | null {
   return b;
 }
 
-/** the best times of everyone on the server for one puzzle (this profile's own time from here, it may be newer) */
-/**
- * The three fastest players on a puzzle. Shown at once from the scores kept on the device, then redrawn when fresh
- * ones arrive from the server (fetched at most once a minute), so others' new times show without opening the scores.
- */
-function fastestRow(packId: string, puzzleId: string): HTMLElement | null {
-  if (!Sync.account()) return null;
-  const box = h('div', { class: 'fastest-box' });
-  const draw = () => box.replaceChildren(...[fastestList(packId, puzzleId)].filter((x): x is HTMLElement => !!x));
-  draw();
-  if (Date.now() - scoresFetched > 60_000) {
-    scoresFetched = Date.now();
-    Sync.refreshScores().then(() => { if (box.isConnected) draw(); }).catch(() => { scoresFetched = 0; });
-  }
-  return box;
-}
-let scoresFetched = 0;
-function fastestList(packId: string, puzzleId: string): HTMLElement | null {
-  const sc = Sync.scores(), me = Sync.account();
-  if (!sc || !me) return null;
-  // older progress (and an older server) gives no rules with a time: the medal tells which rules it was played with
-  const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name)
-    .map(([n, ms, r, m]) => [n, ms, r || (m ? RULES_OF[m] ?? '' : ''), m] as typeof sc.best[string][number]);
-  const myProgress = getProgress(packId, puzzleId), mine = strictestTime(myProgress);
-  if (mine) list.push([me.name, mine[0], mine[1], myProgress.medal ?? '']);
-  if (!list.length) return null;
-  // times under stricter rules come first: a fast Easy time doesn't beat a Hard one
-  list.sort((a, b) => (RULE_RANK[a[2] ?? ''] ?? 3) - (RULE_RANK[b[2] ?? ''] ?? 3) || a[1] - b[1]);
-  return h('p', { class: 'fastest' }, '🏆 ' + t('fastest') + ': ',
-    // the medal says how it was played (bronze Easy, silver Normal, gold and platinum Hard)
-    ...list.slice(0, 3).map(([n, ms, r, m], k) => h('span', { class: n === me.name ? 'me' : '', title: r ? rulesName(r as PlayRules) : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
-      m ? medalEl(m as Medal) : r ? h('i', { class: 'rule-tag r-' + r }, rulesName(r as PlayRules).slice(0, 1)) : null)));
-}
-const RULE_RANK: Record<string, number> = { free: 0, hard: 0, normal: 1, easy: 2 };
-/** a puzzle's best time under the strictest rules it was solved with (older progress: its best time, rules unknown) */
-function strictestTime(p: { best?: number; times?: Partial<Record<string, number>> }): [number, string] | null {
-  let pick: [number, string] | null = null;
-  for (const [r, ms] of Object.entries(p.times ?? {})) if (ms !== undefined && (!pick || (RULE_RANK[r] ?? 3) < (RULE_RANK[pick[1]] ?? 3) || ((RULE_RANK[r] ?? 3) === (RULE_RANK[pick[1]] ?? 3) && ms < pick[0]))) pick = [ms, r];
-  // older progress has no times per rules: its medal tells which rules it was played with
-  const medal = (p as { medal?: string }).medal;
-  return pick ?? (p.best !== undefined ? [p.best, medal ? RULES_OF[medal] ?? '' : ''] : null);
-}
-
-/**
- * Everyone on the server (up to 10 players), for the mode that is on (normal and Mega are two games): ranked by
- * points, PixElo or puzzles solved; medals; and per game.
- */
-let scoreSort: 'elo' | 'points' = 'elo';
-let scoreMode: Mode | null = null;
-/**
- * High scores: a ranking (PixElo or points) for Normal or Mega, then one card per player with everything at a
- * glance (PixElo and peak, points, solved, medals, this week, records); a card opens that player's games.
- */
-async function scoresScreen() {
-  const body = h('div', { class: 'scores' });
-  screen(header(t('scores'), home), body);
-  let sc = Sync.scores(), note = '';
-  const draw = () => {
-    const mode: Mode = scoreMode ?? curMode();
-    body.replaceChildren();
-    const me = Sync.account()?.name;
-    type Row = Sync.ScoreStats & { name: string };
-    const of = (u: NonNullable<typeof sc>['users'][0]): Row => ({ name: u.name, ...(u.modes?.[mode] ?? (mode === 'normal' ? u : { solved: 0, medals: {}, packs: {}, time: 0 })) });
-    let users: Row[] = sc ? sc.users.map(of) : [];
-    // this profile's own numbers come from this device: they may be newer than the server's
-    const mine: Row = { ...(users.find(u => u.name === me) ?? { medals: {}, packs: {}, time: 0 }), ...localStats(mode), name: me ?? activeProfile().name };
-    users = [...users.filter(u => u.name !== mine.name), mine];
-    const elo = (u: Row) => (u.rated ? u.elo ?? 1000 : -1);
-    const key = (u: Row) => scoreSort === 'points' ? [u.points ?? 0, u.solved] : [elo(u), u.rated ?? 0, u.points ?? 0];
-    users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
-
-    // switches: Normal / Mega, PixElo / points
-    const seg = <T extends string>(cur: T, opts: Array<[T, string]>, set: (v: T) => void) => h('div', { class: 'seg mini' }, ...opts.map(([v, l]) =>
-      h('button', { class: 'segbtn' + (cur === v ? ' on' : ''), onClick: () => { set(v); draw(); } }, l)));
-    body.append(h('div', { class: 'score-switches' },
-      seg<Mode>(mode, [['normal', t('normalMode')], ['mega', 'Mega'], ['color', t('colorOn')]], v => { scoreMode = v; }),
-      seg<'elo' | 'points'>(scoreSort, [['elo', 'PixElo'], ['points', t('pointsTab')]], v => { scoreSort = v; })));
-    if (!users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); if (note) body.append(h('p', { class: 'fine' }, note)); return; }
-
-    // the ranking: one line per player, the number that's ranked big
-    const main = (u: Row) => scoreSort === 'points' ? String(u.points ?? 0) : u.rated ? String(u.elo) + (u.rated < 15 ? '?' : '') : '–';
-    body.append(h('ol', { class: 'ranking' }, ...users.map((u, k) => h('li', { class: (u.name === me ? 'me ' : '') + (k < 3 ? 'top' + (k + 1) : '') },
-      h('span', { class: 'rank' }, k < 3 ? ['🥇', '🥈', '🥉'][k] : String(k + 1)),
-      h('b', { class: 'who-name' }, u.name),
-      h('b', { class: 'num' }, main(u), h('small', {}, scoreSort === 'points' ? ' ' + t('pointsShort') : ''))))));
-    body.append(h('p', { class: 'fine center' }, scoreSort === 'elo' ? t('eloExplain') : t('pointsExplain')));
-
-    // a card per player
-    const medalCount = (m: Medal, n: number | undefined) => h('span', { class: 'mcount' + (n ? '' : ' none') }, medalEl(m, false), String(n ?? 0));
-    const fact = (label: string, value: string) => h('div', { class: 'fact' }, h('b', {}, value), h('small', {}, label));
-    body.append(h('h2', { class: 'section-title' }, t('players')), h('div', { class: 'player-cards' }, ...users.map(u =>
-      h('button', { class: 'player-card' + (u.name === me ? ' me' : ''), onClick: () => playerGames(u, mode) },
-        h('div', { class: 'pc-head' }, h('b', {}, '👤 ' + u.name), u.week ? h('small', { class: 'pc-week' }, t('thisWeek', { n: u.week })) : null),
-        h('div', { class: 'pc-facts' },
-          fact('PixElo' + (u.rated && u.rated < 15 ? ' (' + t('provisional') + ')' : ''), u.rated ? String(u.elo) : '–'),
-          fact(t('peak'), u.rated ? String(u.peak ?? u.elo) : '–'),
-          fact(t('pointsTab'), String(u.points ?? 0)),
-          fact(t('solvedTab'), String(u.solved))),
-        h('div', { class: 'pc-medals' }, medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze),
-          u.records ? h('small', { class: 'pc-rec' }, t('recordsN', { n: u.records })) : null)))));
-    if (note) body.append(h('p', { class: 'fine' }, note));
-
-    /** one player's games: solved per game, compared with you */
-    function playerGames(u: Row, m: Mode) {
-      const packs = allPacks().filter(p => u.packs?.[p.id]).sort((a, b) => (u.packs[b.id] ?? 0) - (u.packs[a.id] ?? 0));
-      const mineRow = users.find(x => x.name === mine.name)!;
-      panel((box, close) => {
-        box.append(h('h3', {}, u.name + (m === 'mega' ? ' · Mega' : '')));
-        if (!packs.length) box.append(h('p', { class: 'fine' }, t('noScores')));
-        box.append(h('div', { class: 'pg-list' }, ...packs.map(p => {
-          const total = countPack(p)[1], n = u.packs[p.id] ?? 0, mineN = mineRow.packs?.[p.id] ?? 0;
-          return h('div', { class: 'pg-row' }, h('b', {}, pickAny(p.title, packLang())),
-            h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` })),
-            h('small', {}, `${n}/${total}` + (u.name !== mine.name ? ` · ${t('you')} ${mineN}` : '')));
-        })));
-        box.append(h('button', { class: 'btn primary', onClick: close }, t('ok')));
-      });
-    }
-  };
-  draw();
-  if (!Sync.account()) return;
-  try { await Sync.sync(); sc = await Sync.refreshScores(); scoresFetched = Date.now(); note = ''; } catch { note = t('scoresOffline'); }
-  if (body.isConnected) draw();
-}
-
 /** where a paused puzzle lives: its pack, or (daily puzzles) a pack made of the puzzle stored with the save */
 function quickTarget(q: QuickSave): { pack: Pack; lv: PackLevel; i: number; lone: boolean } | null {
   const pack = allPacks().find(p => p.id === q.packId);
@@ -977,13 +582,13 @@ async function resumeQuick() {
 function levelLetter(i: number): string { return i < 26 ? String.fromCharCode(65 + i) : String(i + 1); }
 
 /** the rules a level is played with: its own, or the difficulty the player picked */
-type PlayRules = 'easy' | 'normal' | 'free';
+export type PlayRules = 'easy' | 'normal' | 'free';
 function rulesFor(lv: PackLevel): PlayRules {
   const d = settings.difficulty;
   return d === 'easy' ? 'easy' : d === 'normal' ? 'normal' : d === 'hard' ? 'free' : lv.rules;
 }
 function rulesText(r: PlayRules) { return r === 'easy' ? t('rulesEasy') : r === 'normal' ? t('rulesNormal') : t('rulesHard'); }
-function rulesName(r: PlayRules) { return r === 'easy' ? t('easy') : r === 'normal' ? t('normal') : t('hard'); }
+export function rulesName(r: PlayRules) { return r === 'easy' ? t('easy') : r === 'normal' ? t('normal') : t('hard'); }
 
 function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
   const cur = rulesFor(lv);
@@ -995,7 +600,7 @@ function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
 }
 
 /** every game in the library: MomoGram's starter puzzles first, then the imported games */
-function allPacks(): Pack[] {
+export function allPacks(): Pack[] {
   const ps = [STARTER, ...ctx.packs], m = curMode();
   if (m === 'mega') return ps.map(megaView).filter(p => p.levels.length);
   if (m === 'color') return ps.map(colorView).filter(p => p.levels.length);
@@ -1006,15 +611,15 @@ function allPacks(): Pack[] {
 // The whole game switches: every game shows its puzzles as Mega puzzles. A puzzle's Mega version is the game's
 // own (PICROSS e6–e9, the Switch games, S+ for every e game) or chosen by MomoGram (game/mega.ts: the same on
 // every device). Mega puzzles are puzzles of their own for progress and scores: their ids end in "@mega".
-const MEGA = '@mega';
-const curMode = (): Mode => (settings.mode && settings.mode !== 'normal' ? settings.mode : settings.mega ? 'mega' : 'normal');
+export const MEGA = '@mega';
+export const curMode = (): Mode => (settings.mode && settings.mode !== 'normal' ? settings.mode : settings.mega ? 'mega' : 'normal');
 function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); }
-const COLOR = '@color';
+export const COLOR = '@color';
 /** which rules a medal is earned with (its time is what points look at) */
-const RULES_OF: Record<string, string> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'free' };
+export const RULES_OF: Record<string, string> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'free' };
 const views = new WeakMap<Pack, Pack>(), megaViews = new WeakMap<Pack, Pack>(), originals = new WeakMap<Pack, Pack>();
 const keep = (levels: PackLevel[]) => levels.filter(l => l.puzzles.length);
-function plainView(p: Pack): Pack {
+export function plainView(p: Pack): Pack {
   if (!p.levels.some(l => l.puzzles.some(z => z.megaOnly || z.colorOnly))) return p;
   let v = views.get(p);
   if (!v) { v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.megaOnly && !z.colorOnly) }))) }; views.set(p, v); originals.set(v, p); }
@@ -1022,7 +627,7 @@ function plainView(p: Pack): Pack {
 }
 /** Mega mode: every puzzle (or, with "only the games' own", the ones the game has as Mega puzzles) */
 const megaViewsOnly = new WeakMap<Pack, Pack>();
-function megaView(p: Pack): Pack {
+export function megaView(p: Pack): Pack {
   const only = settings.megaMark === 'only', cache = only ? megaViewsOnly : megaViews;
   let v = cache.get(p);
   if (!v) {
@@ -1033,7 +638,7 @@ function megaView(p: Pack): Pack {
 }
 /** Colour mode: the puzzles with a colour version (the game's own colour puzzles, or a colour picture with few colours) */
 const colorViews = new WeakMap<Pack, Pack>();
-function colorView(p: Pack): Pack {
+export function colorView(p: Pack): Pack {
   let v = colorViews.get(p);
   if (!v) {
     v = { ...p, levels: keep(p.levels.map(l => ({ ...l, puzzles: l.puzzles.filter(z => !z.megaOnly && colorPlayable(z)).map(z => ({ ...z, mega: undefined, id: z.id + COLOR, origin: z.origin && z.origin + COLOR })) }))) };
@@ -1063,7 +668,7 @@ function colorPlayable(z: PackPuzzle): boolean {
   return colorOkCache[k] === 1;
 }
 /** the colour version a puzzle is played with in Colour mode */
-function colorOfPz(pz: PackPuzzle) { return pz.id.endsWith(COLOR) ? colorOf(pz) : null; }
+export function colorOfPz(pz: PackPuzzle) { return pz.id.endsWith(COLOR) ? colorOf(pz) : null; }
 /** the stored pack behind a view (for changes that are saved) */
 const original = (p: Pack) => originals.get(p) ?? p;
 
@@ -1091,7 +696,7 @@ function megaLevelBadge(lv: PackLevel): HTMLElement | null {
 /** the pairs a puzzle is played with in Mega mode: the game's own, else MomoGram's (kept on this device) */
 const MEGA_KEY = 'momogram.megaPairs';
 let megaCache: Record<string, MegaPairs | null> = (() => { try { return JSON.parse(localStorage.getItem(MEGA_KEY) || '{}'); } catch { return {}; } })();
-function megaPairsOf(pz: PackPuzzle): MegaPairs | null {
+export function megaPairsOf(pz: PackPuzzle): MegaPairs | null {
   if (!pz.id.endsWith(MEGA)) return null;
   if (pz.mega) return pz.mega;
   // keyed by the picture (and the version of the choice), so it is shared by every game with this picture
@@ -1288,7 +893,7 @@ function patternId(rows: string[]): string {
   return a.toString(36) + b.toString(36);
 }
 
-const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, packLang())} · ${pickAny(e.lv.title, packLang())}`;
+export const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.title, packLang())} · ${pickAny(e.lv.title, packLang())}`;
 
 /**
  * Daily puzzles solved before they counted in their own game too (MomoGram < 0.13): find the game's puzzle by
@@ -1342,300 +947,6 @@ function randomPuzzle() {
     puzzleStart(e.pack, e.lv, e.i, home);
   };
   choose(t('randomFrom'), [[t('diff1'), () => go(1)], [t('diff2'), () => go(2)], [t('diff3'), () => go(3)], [t('back'), () => {}]]);
-}
-
-// ---------------------------------------------------------------- practice
-// Small games with random puzzles from your own games, in the mode that is on (Normal, Mega or Color). Nothing here
-// counts as solving the puzzle: no progress, medals, points or PixElo; only each game's best result is kept (per
-// profile and mode, on this device).
-type PracticeGame = 'errors' | 'finish' | 'sprint' | 'spot' | 'line' | 'memory';
-const PRACTICE_GAMES: Array<{ id: PracticeGame; icon: string; higher?: boolean }> = [
-  { id: 'errors', icon: '🔍' }, { id: 'finish', icon: '🧩' }, { id: 'sprint', icon: '⏱', higher: true },
-  { id: 'spot', icon: '🎯' }, { id: 'line', icon: '📏' }, { id: 'memory', icon: '🧠' },
-];
-const practiceKey = () => 'momogram.practice.' + activeProfile().id;
-const practiceSlot = (g: PracticeGame) => (curMode() === 'normal' ? g : g + '@' + curMode());
-function practiceBest(): Record<string, number> { try { return JSON.parse(localStorage.getItem(practiceKey()) || '{}'); } catch { return {}; } }
-/** keeps the result when it beats the best one (of this mode); true when it does */
-function practiceRecord(g: PracticeGame, score: number): boolean {
-  const b = practiceBest(), higher = PRACTICE_GAMES.find(x => x.id === g)!.higher, k = practiceSlot(g);
-  const old = b[k];
-  if (old !== undefined && (higher ? score <= old : score >= old)) return false;
-  b[k] = score;
-  try { localStorage.setItem(practiceKey(), JSON.stringify(b)); } catch { /* full */ }
-  return true;
-}
-const practiceScoreText = (g: PracticeGame, v: number) => (g === 'sprint' ? t('pSolvedN', { n: v }) : formatTime(v));
-
-function practiceScreen(back: () => void = home) {
-  themeRoot(null);
-  const best = practiceBest();
-  const m = curMode();
-  screen(header(t('practice') + (m === 'normal' ? '' : ' · ' + t(m === 'mega' ? 'megaOn' : 'colorOn')), back),
-    h('div', { class: 'practice-list' },
-      h('p', { class: 'fine' }, t('practiceHelp')),
-      ...PRACTICE_GAMES.map(g => {
-        const b = best[practiceSlot(g.id)];
-        // finding puzzles that fit can take a moment (Mega, big libraries): the button shows it is working
-        return h('button', { class: 'btn practice-game', onClick: (ev: Event) => { (ev.currentTarget as HTMLElement).classList.add('busy'); setTimeout(() => practiceRun(g.id, () => practiceScreen(back)), 30); } },
-          h('span', { class: 'pg-icon', 'aria-hidden': 'true' }, g.icon),
-          h('span', { class: 'pg-text' }, h('b', {}, t('p_' + g.id)), h('small', {}, t('p_' + g.id + 'Help'))),
-          b !== undefined ? h('em', { class: 'pg-best' }, '★ ' + practiceScoreText(g.id, b)) : null);
-      })));
-}
-
-/** a board for a puzzle in the mode it comes from (its id says: "@mega", "@color" or neither) */
-const practiceBoard = (pz: PackPuzzle, rules: 'easy' | 'free') => new Board(pz.rows, rules, megaPairsOf(pz), colorOfPz(pz));
-type Step = [number, number, number]; // cell, FILL or CROSS, colour
-/**
- * Solve with line logic (each line on its own, Mega pairs and colours included): the passes, each one the cells
- * the lines decide at that moment; null when line logic gets stuck.
- */
-function practiceSolve(pz: PackPuzzle): Step[][] | null {
-  const b = practiceBoard(pz, 'free'), w = b.w, n = w * b.h;
-  const dr = new Uint8Array(b.h).fill(1), dc = new Uint8Array(w).fill(1);
-  const passes: Step[][] = [];
-  for (let guard = 0; guard < 300; guard++) {
-    const pass: Step[] = [];
-    for (let i = 0; i < n; i++) {
-      if (b.cells[i] !== EMPTY || !(dr[(i / w) | 0] || dc[i % w])) continue;
-      const o = b.optionsAt(i);
-      if (!o.length) return null;
-      if (o.length === 1) pass.push([i, o[0][0], o[0][1]]);
-    }
-    dr.fill(0); dc.fill(0);
-    if (!pass.length) break;
-    for (const [i, v, c] of pass) {
-      b.cells[i] = v; b.colors[i] = c;
-      const x = i % w, y = (i / w) | 0;
-      // a Mega pair reaches the next line too
-      for (let d = -1; d <= 1; d++) { if (y + d >= 0 && y + d < b.h) dr[y + d] = 1; if (x + d >= 0 && x + d < w) dc[x + d] = 1; }
-    }
-    b.touch();
-    passes.push(pass);
-  }
-  return b.cells.includes(EMPTY) ? null : passes;
-}
-
-/** random puzzles of the shown games in the current mode, within a size range, solvable by line logic */
-function practicePuzzles(n: number, min: number, max: number): Array<{ pz: PackPuzzle; passes: Step[][]; from: string }> {
-  const pr = libPrefs(), m = curMode();
-  const pool: Array<{ pz: PackPuzzle; from: string }> = [];
-  for (const raw of [STARTER, ...ctx.packs].filter(p => !pr.hidden.includes(p.id))) {
-    const p = m === 'mega' ? megaView(raw) : m === 'color' ? colorView(raw) : plainView(raw);
-    for (const lv of p.levels) for (const z of lv.puzzles)
-      if (z.width >= min && z.height >= min && z.width <= max && z.height <= max && z.rows.some(r => r.includes('#'))) pool.push({ pz: z, from: fromText({ pack: p, lv }) });
-  }
-  const out: Array<{ pz: PackPuzzle; passes: Step[][]; from: string }> = [], seen = new Set<string>();
-  const t0 = performance.now();
-  for (let tries = 0; tries < 200 && out.length < n && pool.length && performance.now() - t0 < 4000; tries++) {
-    const k = Math.floor(Math.random() * pool.length), e = pool[k];
-    pool.splice(k, 1);
-    const key = e.pz.rows.join('/');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const passes = practiceSolve(e.pz);
-    if (passes) out.push({ ...e, passes });
-  }
-  return out;
-}
-
-/** a random 5×5 puzzle in the current mode that line logic alone solves (for the sprint) */
-const SPRINT_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#202020'];
-let sprintN = 0;
-function sprintPuzzle(): { pz: PackPuzzle; passes: Step[][]; from: string } {
-  const m = curMode();
-  for (;;) {
-    const d = 0.45 + Math.random() * 0.25;
-    const k = m === 'color' ? 2 + Math.floor(Math.random() * 2) : 1;
-    const grid = [...Array(5)].map(() => [...Array(5)].map(() => (Math.random() < d ? 1 + Math.floor(Math.random() * k) : 0)));
-    const rows = grid.map(r => r.map(v => (v ? '#' : '.')).join(''));
-    if (!rows.some(r => r.includes('#'))) continue;
-    const pal = [...SPRINT_COLORS].sort(() => Math.random() - 0.5).slice(0, k);
-    const pz: PackPuzzle = { id: 'sprint' + (sprintN++) + (m === 'mega' ? MEGA : m === 'color' ? COLOR : ''), width: 5, height: 5, rows,
-      ...(m === 'color' ? { color: { palette: pal, rows: grid.map(r => r.map(v => (v ? String(v - 1) : '.')).join('')) } } : {}) } as PackPuzzle;
-    if (m === 'color' && !colorOf(pz)) continue;
-    const passes = practiceSolve(pz);
-    if (passes) return { pz, passes, from: '' };
-  }
-}
-
-function practiceRun(game: PracticeGame, back: () => void) {
-  const ROUNDS = 5;
-  const sizes: Record<PracticeGame, [number, number]> = { errors: [5, 15], finish: [10, 20], sprint: [5, 5], spot: [10, 15], line: [10, 20], memory: [5, 10] };
-  const list = game === 'sprint' ? [] : practicePuzzles(ROUNDS, ...sizes[game]);
-  if (game !== 'sprint' && !list.length) { message(t('pNoPuzzles')); return; }
-  const rounds = game === 'sprint' ? Infinity : list.length;
-  const SPRINT_MS = 60_000;
-  let round = 0, penalty = 0, solvedN = 0, board!: Board, view: BoardView | null = null, prev = new Uint8Array(0), prevC = new Uint8Array(0), left = 0;
-  let wanted = new Map<number, [number, number]>(), lineOnly: { kind: 'r' | 'c'; k: number } | null = null, peeking = false;
-  const t0 = performance.now();
-  const elapsed = () => performance.now() - t0 + penalty;
-  const timeEl = h('b', { class: 'p-time' }, '00:00');
-  const roundEl = h('span', { class: 'p-round' });
-  const taskEl = h('p', { class: 'tut-text p-task' });
-  const fromEl = h('small', { class: 'p-from' });
-  const wrap = h('div', { class: 'boardwrap tut-board' });
-  const palette = h('div', { class: 'palette' });
-  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view?.tool === 'fill' ? 'cross' : 'fill') }, toolSwitchArt());
-  let tool: 'fill' | 'cross' = 'fill', color = 0;
-  function setTool(x: 'fill' | 'cross') { tool = x; if (view) view.tool = x; toolBtn.classList.toggle('crossing', x === 'cross'); drawPalette(); }
-  function drawPalette() {
-    const cp = board?.color;
-    if (!cp) { palette.replaceChildren(); toolBtn.style.removeProperty('--tf'); return; }
-    toolBtn.style.setProperty('--tf', cp.palette[color]);
-    palette.replaceChildren(...cp.palette.map((c, k) => h('button', { class: 'swatch' + (color === k && tool === 'fill' ? ' on' : ''), style: `--sw:${c}; --ink:${inkOn(c)}`,
-      onClick: () => { color = k; if (view) view.color = k; setTool('fill'); } }, h('span', {}, ''))));
-  }
-  const tick = setInterval(() => {
-    // left some other way than the back button: stop the clock (a sprint mustn't end on another screen)
-    if (!wrap.isConnected && round > 0) { stop(); return; }
-    if (game === 'sprint') {
-      const rest = SPRINT_MS - elapsed();
-      timeEl.textContent = formatTime(Math.max(0, rest));
-      if (rest <= 0) finish();
-    } else timeEl.textContent = formatTime(elapsed());
-  }, 200);
-  const ro = new ResizeObserver(() => { if (view && (wrap.clientWidth !== view.width || wrap.clientHeight !== view.height)) view.resize(wrap.clientWidth, wrap.clientHeight); });
-  let over = false;
-  const stop = () => { over = true; clearInterval(tick); ro.disconnect(); view?.destroy(); view = null; };
-  const leave = () => { stop(); back(); };
-  const wrong = () => { penalty += game === 'sprint' ? 5000 : 10_000; Snd.sfx('mistake'); taskEl.classList.remove('shake'); void taskEl.offsetWidth; taskEl.classList.add('shake'); };
-  const apply = (b: Board, steps: Step[]) => { for (const [i, v, c] of steps) { b.cells[i] = v; b.colors[i] = c; } };
-
-  function nextRound() {
-    if (over) return;
-    if (round >= rounds) { finish(); return; }
-    round++;
-    const e = game === 'sprint' ? sprintPuzzle() : list[round - 1];
-    board = practiceBoard(e.pz, game === 'finish' || game === 'sprint' || game === 'memory' ? 'easy' : 'free');
-    const n = board.w * board.h, all = e.passes.flat();
-    const sol = new Map(all.map(([i, v, c]) => [i, [v, c] as [number, number]]));
-    wanted = new Map(); lineOnly = null; let focus: BoardView['focus'] = null;
-    if (game === 'errors') {
-      // the whole picture, with a few cells wrong (each in its own row and column, so none hides another)
-      board.hideDone = true;
-      apply(board, all);
-      const k = Math.min(1 + Math.floor(Math.random() * 3), Math.min(board.w, board.h));
-      const rowsUsed = new Set<number>(), colsUsed = new Set<number>(), pairs = board.color?.palette.length ?? 1;
-      for (let tries = 0; wanted.size < k && tries < 500; tries++) {
-        const i = Math.floor(Math.random() * n), x = i % board.w, y = Math.floor(i / board.w);
-        if (rowsUsed.has(y) || colsUsed.has(x)) continue;
-        rowsUsed.add(y); colsUsed.add(x);
-        const [v, c] = sol.get(i)!;
-        wanted.set(i, [v, c]);
-        // a filled cell becomes a ✕ or (colour) another colour; a ✕ becomes filled
-        if (v === FILL && pairs > 1 && Math.random() < 0.5) board.colors[i] = (c + 1 + Math.floor(Math.random() * (pairs - 1))) % pairs;
-        else if (v === FILL) { board.cells[i] = CROSS; board.colors[i] = 0; }
-        else { board.cells[i] = FILL; board.colors[i] = Math.floor(Math.random() * pairs); }
-      }
-      left = wanted.size;
-    } else if (game === 'finish') {
-      const goal = n * (0.75 + Math.random() * 0.1);
-      let done = 0;
-      for (const p of e.passes) { if (done + p.length > goal && done) { apply(board, p.slice(0, Math.max(0, Math.floor(goal - done)))); break; } apply(board, p); done += p.length; }
-    } else if (game === 'spot' || game === 'line') {
-      // a moment in the middle of the solve; The next step: the one with the fewest cells to find
-      const mid = e.passes.map((p, k) => k).filter(k => k >= e.passes.length * 0.25 && k <= e.passes.length * 0.8);
-      const ks = mid.length ? mid : [Math.floor(e.passes.length / 2)];
-      let at = ks[Math.floor(Math.random() * ks.length)];
-      if (game === 'spot') { const least = Math.min(...ks.map(k => e.passes[k].length)); const c = ks.filter(k => e.passes[k].length === least); at = c[Math.floor(Math.random() * c.length)]; }
-      for (let k = 0; k < at; k++) apply(board, e.passes[k]);
-      board.touch();
-      if (game === 'spot') for (const [i, v, c] of e.passes[at]) wanted.set(i, [v, c]);
-      else {
-        // One line: a row or column whose own clue decides at least two of its cells now
-        const cands: Array<{ kind: 'r' | 'c'; k: number; cells: Map<number, [number, number]> }> = [];
-        for (const kind of ['r', 'c'] as const) for (let k = 0; k < (kind === 'r' ? board.h : board.w); k++) {
-          const cells = new Map<number, [number, number]>();
-          for (let j = 0; j < (kind === 'r' ? board.w : board.h); j++) {
-            const i = kind === 'r' ? k * board.w + j : j * board.w + k;
-            if (board.cells[i] !== EMPTY) continue;
-            const o = board.optionsAt(i, kind);
-            if (o.length === 1) cells.set(i, o[0]);
-          }
-          if (cells.size >= 2) cands.push({ kind, k, cells });
-        }
-        const pick = cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;
-        if (pick) { lineOnly = { kind: pick.kind, k: pick.k }; wanted = pick.cells; focus = pick.kind === 'r' ? { rows: [pick.k], cols: [] } : { rows: [], cols: [pick.k] }; }
-        else for (const [i, v, c] of e.passes[at]) wanted.set(i, [v, c]);
-        left = wanted.size;
-      }
-    } else if (game === 'memory') {
-      apply(board, all.filter(([, v]) => v === FILL));
-      peeking = true;
-      let s = 3;
-      const count = () => { if (over) return; taskEl.textContent = t('p_memoryLook', { n: s }); if (s-- > 0) setTimeout(count, 1000); else { board.cells.fill(EMPTY); board.colors.fill(0); board.touch(); view?.invalidate(); peeking = false; taskEl.textContent = t('p_memoryTask'); prev = board.cells.slice(); prevC = board.colors.slice(); } };
-      setTimeout(count, 0);
-    }
-    board.touch();
-    prev = board.cells.slice(); prevC = board.colors.slice();
-    roundEl.textContent = game === 'sprint' ? t('pSolvedN', { n: solvedN }) : t('pRound', { a: round, b: rounds });
-    fromEl.textContent = e.from;
-    if (game !== 'memory') taskEl.textContent = game === 'errors' ? t('p_errorsTask', { n: left }) : game === 'line' ? t('p_lineTask', { n: left }) : t('p_' + game + 'Task');
-    view?.destroy();
-    const canvas = h('canvas', {}) as HTMLCanvasElement;
-    wrap.replaceChildren(canvas);
-    view = new BoardView(canvas, board, { onChange: r => changed(r) });
-    if (/[?&]debug/.test(location.search)) (window as any).__practice = { board, wanted, view };
-    view.tool = tool; color = 0; view.color = 0; view.focus = focus;
-    drawPalette();
-    view.resize(wrap.clientWidth, wrap.clientHeight);
-  }
-
-  function changed(r: string) {
-    if (!view || over) return;
-    if (peeking) { board.cells.set(prev); board.colors.set(prevC); board.touch(); view.invalidate(); return; }
-    if (game === 'finish' || game === 'sprint' || game === 'memory') {
-      if (r === 'mistake') wrong(); else Snd.sfx('tap');
-      if (board.checkSolved()) { solvedN++; Snd.sfx('clear'); setTimeout(nextRound, game === 'sprint' ? 250 : 700); }
-      prev = board.cells.slice(); prevC = board.colors.slice();
-      return;
-    }
-    // the other games: look at what the tap changed
-    let hit = false, miss = false;
-    for (let i = 0; i < board.cells.length; i++) {
-      if (board.cells[i] === prev[i] && board.colors[i] === prevC[i]) continue;
-      const want = wanted.get(i);
-      const inLine = !lineOnly || (lineOnly.kind === 'r' ? ((i / board.w) | 0) === lineOnly.k : i % board.w === lineOnly.k);
-      const ok = want !== undefined && (game === 'errors' || (board.cells[i] === want[0] && (want[0] !== FILL || !board.color || board.colors[i] === want[1])));
-      if (ok) { board.cells[i] = want![0]; board.colors[i] = want![1]; wanted.delete(i); hit = true; left--; }
-      else { board.cells[i] = prev[i]; board.colors[i] = prevC[i]; if (inLine) miss = true; }
-    }
-    board.touch(); view.invalidate();
-    prev = board.cells.slice(); prevC = board.colors.slice();
-    if (miss) wrong(); else if (hit) Snd.sfx('tap');
-    if (game === 'errors') taskEl.textContent = t('p_errorsTask', { n: left });
-    if (game === 'line') taskEl.textContent = t('p_lineTask', { n: left });
-    if (hit && (game === 'spot' || !wanted.size)) { Snd.sfx('clear'); solvedN++; setTimeout(nextRound, 600); }
-  }
-
-  function finish() {
-    if (over) return;
-    const score = game === 'sprint' ? solvedN : Math.round(elapsed());
-    stop();
-    const isNew = (game !== 'sprint' || score > 0) && practiceRecord(game, score);
-    const best = practiceBest()[practiceSlot(game)];
-    if (isNew) Snd.sfx('clear');
-    screen(header(t('p_' + game), back), h('div', { class: 'solved practice-done' },
-      h('div', { class: 'stamp' }, isNew ? t('pNewBest') : t('pDone')),
-      h('div', { class: 'result' },
-        h('div', {}, game === 'sprint' ? t('pSolved') : t('time'), h('b', {}, practiceScoreText(game, score))),
-        game !== 'sprint' && penalty ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(penalty))) : null,
-        best !== undefined ? h('div', {}, t('best'), h('b', {}, practiceScoreText(game, best))) : null),
-      h('div', { class: 'row' }, h('button', { class: 'btn', onClick: back }, t('back')),
-        h('button', { class: 'btn primary', onClick: () => practiceRun(game, back) }, t('pAgain')))));
-  }
-
-  themeRoot(null);
-  screen(header(t('p_' + game), leave),
-    h('div', { class: 'tut practice' },
-      h('div', { class: 'tut-card card' }, h('div', { class: 'p-head' }, roundEl, timeEl), taskEl, fromEl),
-      wrap, palette, h('nav', { class: 'tools tut-tools' }, toolBtn, h('span', { class: 'gap' }),
-        game === 'finish' || game === 'sprint' || game === 'memory' ? h('button', { class: 'rbtn', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) { view?.invalidate(); prev = board.cells.slice(); prevC = board.colors.slice(); } } }, icon('undo')) : null)));
-  ro.observe(wrap);
-  setTool('fill');
-  requestAnimationFrame(() => nextRound());
 }
 
 // ---------------------------------------------------------------- play
@@ -1983,7 +1294,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   }
 }
 
-function medalEl(m: Medal, big = false) {
+export function medalEl(m: Medal, big = false) {
   return h('span', { class: 'medal ' + m + (big ? ' big' : ''), title: t(m) }, big ? t(m) : '');
 }
 
@@ -2030,7 +1341,6 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
 // ---------------------------------------------------------------- dialogs
 
 /** yes / no */
-function confirmChoice(question: string, yes: string): Promise<boolean> { return confirmBox(question, yes); }
 
 // ---------------------------------------------------------------- packs
 
@@ -2113,16 +1423,18 @@ function serverSection(): HTMLElement {
   const box = h('div', { class: 'server-box' });
   const msg = h('p', { class: 'fine left server-msg' });
   const say = (s: string, bad = false) => { msg.textContent = s; msg.classList.toggle('bad', bad); };
-  const url = h('input', { type: 'url', class: 'text', placeholder: 'https://…', value: Sync.serverUrl(), 'aria-label': t('serverUrl'), autocapitalize: 'off', spellcheck: 'false' }) as HTMLInputElement;
+  // the address without its "https://", which stands fixed in front of it: always HTTPS
+  const url = h('input', { type: 'text', inputmode: 'url', class: 'text', placeholder: 'momo.example.com', value: Sync.serverHost(), 'aria-label': t('serverUrl'), autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false' }) as HTMLInputElement;
+  url.addEventListener('input', () => { if (/^[a-z]+:\/\//i.test(url.value)) url.value = Sync.serverHost(url.value); });
   const connect = async () => {
-    Sync.setServerUrl(url.value); url.value = Sync.serverUrl();
+    Sync.setServerUrl(url.value); url.value = Sync.serverHost();
     if (!url.value) { draw(); return; }
     draw();
     try { await Sync.serverInfo(); say(t('serverOk')); } catch (e) { say(serverError(e), true); }
   };
   const draw = () => {
     box.innerHTML = '';
-    box.append(h('label', { class: 'field' }, h('span', {}, t('serverUrl')), h('div', { class: 'row' }, url, h('button', { class: 'btn', onClick: connect }, t('serverConnect')))));
+    box.append(h('label', { class: 'field' }, h('span', {}, t('serverUrl')), h('div', { class: 'row' }, h('span', { class: 'url-box' }, h('span', { class: 'url-prefix' }, 'https://'), url), h('button', { class: 'btn', onClick: connect }, t('serverConnect')))));
     const a = Sync.account();
     if (a) {
       const st = Sync.syncState();
@@ -2442,4 +1754,4 @@ function zoomView(src: HTMLElement) {
   requestAnimationFrame(() => { const r = stage.getBoundingClientRect(), w = img.naturalWidth || 160, hh = img.naturalHeight || 160; k = Math.max(1, Math.min(r.width / w, r.height / hh) * 0.95); apply(); });
 }
 
-export { ctx, CROSS };
+export { CROSS };

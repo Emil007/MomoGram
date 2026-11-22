@@ -13,11 +13,13 @@ export interface SplitAsset { name: string; hash: string; size: number; music: b
 const SKEY = 'momogram.server';
 const akey = (id = activeProfile().id) => `momogram.account.${id}`;
 
-export function serverUrl(): string { return localStorage.getItem(SKEY) || ''; }
+/** the server's address, always over HTTPS (passwords and logins never travel unencrypted) */
+export function serverUrl(): string { const u = localStorage.getItem(SKEY) || ''; return u ? 'https://' + serverHost(u) : ''; }
+/** the address without "https://" (what the player types) */
+export function serverHost(u = localStorage.getItem(SKEY) || ''): string { return u.trim().replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, ''); }
 export function setServerUrl(u: string) {
-  u = u.trim().replace(/\/+$/, '');
-  if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
-  if (u) localStorage.setItem(SKEY, u); else localStorage.removeItem(SKEY);
+  const host = serverHost(u);
+  if (host) localStorage.setItem(SKEY, 'https://' + host); else localStorage.removeItem(SKEY);
 }
 /** the account name of a login the server dropped (shown until the player logs in again) */
 export function loggedOut(): string | null { return localStorage.getItem('momogram.loggedout.' + activeProfile().id); }

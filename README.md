@@ -233,7 +233,7 @@ APK via Capacitor, released when `version` in `package.json` changes).
 - `src/packs/`: pack format, `.momopack` files, pack colors; `src/packs/importers/`: one file per import method, each starting with a table of the games it reads ([how to add one](docs/writing-importers.md)).
 - `server/`: the optional sync / high score / pack server (PHP, MySQL or SQLite).
 - `src/game/`: rules, exact line analysis (clue greying and logic hints), the board renderer.
-- `src/app.ts`, `src/ui/`: screens.
+- `src/app.ts`: start, home, a game's levels and puzzles, play and options; `src/ui/`: library, tutorial, practice, high scores, packs, editor, dialogs.
 </details>
 
 ## Translations

@@ -584,7 +584,7 @@ body.dark .btn { border-color: #4a5563; box-shadow: inset 0 1px 0 var(--hi), 0 3
 body.dark .btn.ghost { border-color: transparent; box-shadow: none; }
 body.dark .card, body.dark .opt-card, body.dark .home-top, body.dark .dialog, body.dark .stat, body.dark .opt, body.dark .status,
 body.dark .ranking li, body.dark .score-table, body.dark .seg, body.dark .bar-outer, body.dark .pic-frame, body.dark .tex-row,
-body.dark .tex-result, body.dark .tab, body.dark input.text, body.dark .opt select, body.dark .mega-switch, body.dark .logo-grid,
+body.dark .tex-result, body.dark .tab, body.dark input.text, body.dark .url-box, body.dark .opt select, body.dark .mega-switch, body.dark .logo-grid,
 body.dark .hud-pic, body.dark .game .game-icon, body.dark .ed-canvas { border-color: #4a5563; }
 body.dark .bar, body.dark .hud, body.dark .tools { border-color: #07090c; }
 body.dark .rbtn, body.dark .pad { background: radial-gradient(circle at 35% 28%, #3a4552 0 30%, #2a323c 70%, #1d242c 100%); border-color: #4a5563; color: var(--ink); }
@@ -699,3 +699,8 @@ body.dark .player-card { border-color: #4a5563; }
 .practice-game.busy { opacity: .6; pointer-events: none; }
 .practice-game.busy .pg-icon { animation: p-spin 1s linear infinite; }
 @keyframes p-spin { to { transform: rotate(360deg); } }
+/* the server address: a fixed "https://" in front of what is typed, one field */
+.url-box { flex: 1; display: flex; align-items: center; min-width: 0; border: 2px solid var(--line); border-radius: 10px; background: var(--surface); }
+.url-box:focus-within { outline: 3px solid var(--accent2); outline-offset: 1px; }
+.url-prefix { padding-left: .6em; font-weight: 700; color: var(--muted); }
+.url-box input.text { flex: 1; min-width: 0; border: 0; background: transparent; padding-left: .1em; outline: none; }
