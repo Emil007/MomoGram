@@ -5,7 +5,8 @@ declare(strict_types=1);
 
 const API_VERSION = 2;
 const PART_MAX = 8 * 1024 * 1024; // the app uploads packs in 4 MB parts (below the usual post_max_size)
-const MAX_USERS = 10; // one household or a few friends: high scores and layouts are made for up to ten players
+const MAX_USERS = 10;
+const SAVE_MAX = 32 * 1024 * 1024; // one player's save (progress, boards, settings): far below this // one household or a few friends: high scores and layouts are made for up to ten players
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
@@ -88,6 +89,8 @@ function tooManyFails(): bool {
 function noteFail(): void { q('INSERT INTO momo_fails (ip, at) VALUES (?, ?)', [$_SERVER['REMOTE_ADDR'] ?? '', time()]); }
 function newToken(int $uid): string {
   global $now;
+  // logins not used for a year are dropped (a lost phone's login doesn't stay valid forever)
+  q('DELETE FROM momo_tokens WHERE used < ?', [gmdate('Y-m-d\TH:i:s\Z', time() - 365 * 86400)]);
   $t = bin2hex(random_bytes(32));
   q('INSERT INTO momo_tokens (hash, user_id, created, used) VALUES (?, ?, ?, ?)', [hash('sha256', $t), $uid, $now, $now]);
   return $t;
@@ -143,6 +146,7 @@ switch ($a) {
 
   case 'password': {
     $u = user(); $b = body();
+    if (tooManyFails()) fail('slow', 429);
     $row = q('SELECT pass FROM momo_users WHERE id = ?', [$u['id']])->fetch();
     if (!password_verify((string)($b['old'] ?? ''), $row['pass'])) { noteFail(); fail('wrong', 403); }
     if (strlen((string)($b['password'] ?? '')) < 6) fail('password');
@@ -174,7 +178,8 @@ switch ($a) {
     $row = q('SELECT rev, data, updated FROM momo_saves WHERE user_id = ?', [$u['id']])->fetch();
     if ($_SERVER['REQUEST_METHOD'] === 'GET') out($row ? ['rev' => (int)$row['rev'], 'updated' => $row['updated'], 'data' => json_decode($row['data'])] : ['rev' => 0, 'data' => null]);
     $data = (string)file_get_contents('php://input');
-    if (json_decode($data) === null) fail('json');
+    if (strlen($data) > SAVE_MAX) fail('size', 413);
+    if (!is_array(json_decode($data, true))) fail('json');
     $rev = (int)($_GET['rev'] ?? -1);
     if ($row) {
       $n = q('UPDATE momo_saves SET rev = rev + 1, data = ?, updated = ? WHERE user_id = ? AND rev = ?', [$data, $now, $u['id'], $rev])->rowCount();
@@ -197,10 +202,10 @@ switch ($a) {
       $s = json_decode($r['data'], true);
       // normal, Mega and Colour puzzles (ids ending in "@mega" / "@color") are counted apart: three games
       $m = ['normal' => $empty(), 'mega' => $empty(), 'color' => $empty()];
-      foreach (($s['packs'] ?? []) as $pid => $pk) {
-        if (strncmp((string)$pid, 'my-', 3) === 0) continue; // packs made in the editor don't count
-        foreach (($pk['progress'] ?? []) as $pz => $v) {
-          if (empty($v['cleared'])) continue;
+      foreach ((is_array($s['packs'] ?? null) ? $s['packs'] : []) as $pid => $pk) {
+        if (strncmp((string)$pid, 'my-', 3) === 0 || !is_array($pk['progress'] ?? null)) continue; // packs made in the editor don't count
+        foreach ($pk['progress'] as $pz => $v) {
+          if (!is_array($v) || empty($v['cleared'])) continue;
           $mode = modeOf((string)$pz);
           $x = &$m[$mode];
           $x['solved']++; $x['packs'][$pid] = ($x['packs'][$pid] ?? 0) + 1;
@@ -313,7 +318,8 @@ switch ($a) {
     $up = q('SELECT * FROM momo_uploads WHERE id = ? AND user_id = ?', [(string)($_GET['upload'] ?? ''), $u['id']])->fetch();
     $part = $up ? "$dataDir/packs/{$up['id']}.part" : '';
     if (!$up || !is_file($part)) fail('upload', 404);
-    if (fread(fopen($part, 'rb'), 2) !== 'PK') { unlink($part); fail('zip'); }
+    $fh = fopen($part, 'rb'); $magic = fread($fh, 2); fclose($fh);
+    if ($magic !== 'PK') { unlink($part); fail('zip'); }
     $meta = json_decode($up['meta'], true);
     $have = q('SELECT meta, user_id FROM momo_packs WHERE pack_id = ?', [$up['pack_id']])->fetch();
     if ($have && strncmp($up['pack_id'], 'my-', 3) === 0 && (int)$have['user_id'] !== (int)$u['id']) { unlink($part); q('DELETE FROM momo_uploads WHERE id = ?', [$up['id']]); fail('owner', 403); }

@@ -7,7 +7,7 @@ import { colorOf, colorSolutionCount, inkOn } from './game/color';
 import { Board, formatTime, FILL, CROSS, EMPTY } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
-import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
+import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole, safeColor } from './packs/format';
 import { readEntries, packRev, newRev } from './packs/io';
 import { upgradeStoredPack } from './packs/importers/index';
 import { seriesOf } from './packs/importers/series';
@@ -400,7 +400,7 @@ async function offerUpdate(p: Pack, open: () => void) {
 }
 function gameCard(p: Pack, onOpen: () => void): HTMLElement {
   const [a, b] = countPack(p);
-  const col = p.theme?.palette && settings.packColors ? themeColors(p.theme.palette).accent : null;
+  const col = p.theme?.palette && settings.packColors ? safeColor(themeColors(p.theme.palette).accent, '') || null : null;
   // the icon sits in a row with the system and year (like the icons of a folder), so the title has the full width
   return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
     h('b', {}, pickAny(p.title, packLang()), megaOrb([p]), hasUpdate(p) ? h('span', { class: 'update-orb', title: t('updateAvailable'), 'aria-label': t('updateAvailable') }) : null),
@@ -1488,6 +1488,8 @@ function practiceRun(game: PracticeGame, back: () => void) {
       onClick: () => { color = k; if (view) view.color = k; setTool('fill'); } }, h('span', {}, ''))));
   }
   const tick = setInterval(() => {
+    // left some other way than the back button: stop the clock (a sprint mustn't end on another screen)
+    if (!wrap.isConnected && round > 0) { stop(); return; }
     if (game === 'sprint') {
       const rest = SPRINT_MS - elapsed();
       timeEl.textContent = formatTime(Math.max(0, rest));

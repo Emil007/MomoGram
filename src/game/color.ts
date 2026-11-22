@@ -5,7 +5,7 @@
 // that are filled in the black-and-white puzzle (rows '#') keep their colour, the rest is the empty background.
 // Games with real colour puzzles mark them (colorGame); for other colour pictures MomoGram offers the colour
 // version when it has few enough colours, and checks with the solver below how many solutions it has.
-import type { PackPuzzle } from '../packs/format';
+import { PackPuzzle, safeColor } from '../packs/format';
 
 export interface ColorPuzzle {
   w: number; h: number;
@@ -32,7 +32,7 @@ export function colorOf(z: PackPuzzle, max = z.colorGame ? 32 : MAX_COLORS): Col
     const key = k < 0 ? -1 : k;
     if (!used.has(key)) {
       used.set(key, palette.length);
-      palette.push(k < 0 ? '#202020' : (z.color.palette[k] ?? '#202020'));
+      palette.push(k < 0 ? '#202020' : safeColor(z.color.palette[k]));
     }
     cells[y * w + x] = used.get(key)! + 1;
   }

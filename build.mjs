@@ -28,7 +28,8 @@ if (process.argv.includes('--watch')) (await esbuild.context(opts)).watch();
 else await esbuild.build(opts);
 // service worker (offline play / installable web app). The cache name carries a hash of the build, so every
 // deploy replaces the old cache; pages and app files are fetched network-first, so updates show up on the next
-// start and the cache is only the offline fallback.
+// start and the cache is only the offline fallback. Requests with a query or to a .php file (a MomoGram server on the
+// same host: they carry the login) are left to the network, never cached.
 // what the running app compares itself with to offer an update (home screen)
 writeFileSync(`${out}/version.json`, JSON.stringify({ version: pkg.version }));
 const files = ['./', 'index.html', 'app.js', 'app.css', 'worklet.js', 'icon.svg', 'manifest.webmanifest'];
@@ -37,5 +38,5 @@ for (const f of ['app.js', 'app.css', 'worklet.js', 'index.html']) { try { hash.
 writeFileSync(`${out}/sw.js`, `const C='momogram-${pkg.version}-${hash.digest('hex').slice(0, 10)}';const F=${JSON.stringify(files)};
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(F)))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',e=>{const r=e.request;if(r.method!=='GET'||new URL(r.url).origin!==location.origin)return;
+self.addEventListener('fetch',e=>{const r=e.request;const u=new URL(r.url);if(r.method!=='GET'||u.origin!==location.origin||u.search||u.pathname.endsWith('.php'))return;
 e.respondWith(fetch(r.url,{cache:'no-cache',credentials:'same-origin'}).then(res=>{if(res.ok){const c=res.clone();caches.open(C).then(x=>x.put(r,c))}return res}).catch(()=>caches.match(r).then(m=>m||caches.match('index.html'))))});`);

@@ -90,6 +90,14 @@ export interface PackTheme {
 }
 
 /** small picture of the game: width × height RGBA pixels, base64 */
+/**
+ * A colour from a pack, safe to put into a style attribute: packs come from files and from other players on a
+ * server, so anything that isn't a plain colour (hex, rgb()/hsl() with numbers, a colour name) becomes `fallback`.
+ */
+export function safeColor(c: unknown, fallback = '#202020'): string {
+  return typeof c === 'string' && /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([0-9.,%\s/]+\)|[a-z]{3,20})$/i.test(c.trim()) ? c.trim() : fallback;
+}
+
 export interface PackIcon { w: number; h: number; rgba: string }
 
 export function makeIcon(w: number, h: number, px: Uint8Array): PackIcon {
