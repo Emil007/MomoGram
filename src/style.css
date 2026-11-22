@@ -673,7 +673,7 @@ body.dark .player-card { border-color: #4a5563; }
 .mode.practice { grid-column: 1 / -1; min-height: 3.2rem; background: linear-gradient(#5fd6c4, #1fa58f 50%, #127a69); }
 .practice-list { display: flex; flex-direction: column; gap: .7rem; padding: .8rem; max-width: 640px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 .practice-game { display: flex; align-items: center; gap: .8rem; text-align: left; padding: .8rem 1rem; }
-.pg-icon { font-size: 1.8rem; line-height: 1; }
+.pg-icon { font-size: 1.8rem; line-height: 1; width: 2.4rem; flex: none; text-align: center; }
 .pg-text { flex: 1; display: flex; flex-direction: column; gap: .15rem; }
 .pg-text small { color: var(--muted); font-weight: 600; line-height: 1.3; }
 .pg-best { font-style: normal; font-weight: 900; color: var(--accent); white-space: nowrap; }
