@@ -203,6 +203,25 @@ export class Board {
     return (t || this.cells[i]) === FILL;
   }
 
+  /**
+   * Practice: the values an empty cell can still take with its lines as they are, [FILL or CROSS, colour]
+   * (Mega pairs and colours included). `only` asks one line alone (the row or the column).
+   */
+  optionsAt(i: number, only?: 'r' | 'c'): Array<[number, number]> {
+    const x = i % this.w, y = (i / this.w) | 0;
+    const c0 = this.cells[i], k0 = this.colors[i];
+    const opts: Array<[number, number]> = [[CROSS, 0]];
+    if (this.color) this.color.palette.forEach((_, c) => opts.push([FILL, c])); else opts.push([FILL, 0]);
+    const rk = 'r' + (this.rowPair[y] >= 0 ? this.rowPair[y] : y), ck = 'c' + (this.colPair[x] >= 0 ? this.colPair[x] : x);
+    const out: Array<[number, number]> = [];
+    for (const [v, c] of opts) {
+      this.cells[i] = v; this.colors[i] = c; this.cache.delete(rk); this.cache.delete(ck);
+      if ((only === 'c' || this.line('r', y).feasible) && (only === 'r' || this.line('c', x).feasible)) out.push([v, c]);
+    }
+    this.cells[i] = c0; this.colors[i] = k0; this.cache.delete(rk); this.cache.delete(ck);
+    return out;
+  }
+
   // line analysis is cached until the next change
   private version = 0;
   private cache = new Map<string, LineInfo>();

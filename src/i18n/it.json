@@ -360,7 +360,7 @@
  "done": "Fatto",
  "analyzing": "Lettura…",
  "practice": "Allenamento",
- "practiceHelp": "Piccoli giochi con puzzle a caso dai tuoi giochi. Non contano come risolti: niente medaglie, punti o PixElo, si tiene solo il tuo miglior risultato.",
+ "practiceHelp": "Piccoli giochi con puzzle a caso dai tuoi giochi, nella modalità attiva (Normal, Mega o Color). Non contano come risolti: niente medaglie, punti o PixElo, si tiene solo il tuo miglior risultato.",
  "p_errors": "Trova gli errori",
  "p_errorsHelp": "Un'immagine finita con qualche casella sbagliata. Toccale, in fretta: un tocco sbagliato costa 10 s.",
  "p_errorsTask": "{n} caselle sono sbagliate. Toccale!",
@@ -379,5 +379,13 @@
  "pNewBest": "Nuovo record!",
  "pDone": "Fatto",
  "pAgain": "Ancora",
- "pNoPuzzles": "I tuoi giochi non hanno ancora puzzle adatti a questo gioco."
+ "pNoPuzzles": "I tuoi giochi non hanno ancora puzzle adatti a questo gioco.",
+ "updateAsk": "Sul server c'è una versione più recente di {name}. Aggiornarla ora?",
+ "p_line": "Una linea",
+ "p_lineHelp": "Una riga o colonna è segnata: trova ogni casella che i suoi numeri decidono adesso.",
+ "p_lineTask": "Trova le {n} caselle che questa linea decide adesso.",
+ "p_memory": "Memoria",
+ "p_memoryHelp": "Vedi l'immagine per 3 secondi, poi la risolvi a memoria (e con i numeri).",
+ "p_memoryLook": "Ricordala! {n}",
+ "p_memoryTask": "Ora risolvila."
 }

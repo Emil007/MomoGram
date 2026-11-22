@@ -360,7 +360,7 @@
  "done": "Terminé",
  "analyzing": "Lecture…",
  "practice": "Entraînement",
- "practiceHelp": "Des petits jeux avec des puzzles au hasard de tes jeux. Ils ne comptent pas comme résolus : ni médailles, ni points, ni PixElo, seul ton meilleur résultat est gardé.",
+ "practiceHelp": "Des petits jeux avec des puzzles au hasard de tes jeux, dans le mode actif (Normal, Mega ou Color). Ils ne comptent pas comme résolus : ni médailles, ni points, ni PixElo, seul ton meilleur résultat est gardé.",
  "p_errors": "Trouve les erreurs",
  "p_errorsHelp": "Une image finie avec quelques cases fausses. Touche-les, vite : une mauvaise touche coûte 10 s.",
  "p_errorsTask": "{n} cases sont fausses. Touche-les !",
@@ -379,5 +379,13 @@
  "pNewBest": "Nouveau record !",
  "pDone": "Terminé",
  "pAgain": "Encore",
- "pNoPuzzles": "Tes jeux n'ont pas encore de puzzles pour ce jeu."
+ "pNoPuzzles": "Tes jeux n'ont pas encore de puzzles pour ce jeu.",
+ "updateAsk": "Une version plus récente de {name} est sur le serveur. La mettre à jour maintenant ?",
+ "p_line": "Une ligne",
+ "p_lineHelp": "Une ligne ou colonne est marquée : trouve chaque case que ses propres nombres décident maintenant.",
+ "p_lineTask": "Trouve les {n} cases que cette ligne décide maintenant.",
+ "p_memory": "Mémoire",
+ "p_memoryHelp": "Tu vois l'image 3 secondes, puis tu la résous de mémoire (et avec les nombres).",
+ "p_memoryLook": "Retiens-la ! {n}",
+ "p_memoryTask": "À toi de la résoudre."
 }

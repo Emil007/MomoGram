@@ -53,7 +53,6 @@ jobs:
           find momogram-web -name '*.map' -delete
           cp README.md LICENSE momogram-web/
           zip -qr out/MomoGram-${{ needs.version.outputs.version }}-web.zip momogram-web
-          cp recomplauncher.json out/
           # the server for your own web space (PHP + MySQL/SQLite)
           cp -r server momogram-server && zip -qr out/MomoGram-${{ needs.version.outputs.version }}-server.zip momogram-server
       - uses: actions/upload-artifact@v4
@@ -167,5 +166,5 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           body: |
-            **Downloads:** Windows (`Windows-x64` / `Windows-arm64` zip, or the setup `.exe`), macOS (`mac-arm64` / `mac-x64` dmg), Linux / Steam Deck (`Linux` AppImage or tar.gz, x64 and arm64), Android (`Android.apk`), web version (`web.zip`, or play at https://emil007.github.io/MomoGram/). Also installs from RecompLauncher.
+            **Downloads:** Windows (`Windows-x64` / `Windows-arm64` zip, or the setup `.exe`), macOS (`mac-arm64` / `mac-x64` dmg), Linux / Steam Deck (`Linux` AppImage or tar.gz, x64 and arm64), Android (`Android.apk`), web version (`web.zip`, or play at https://emil007.github.io/MomoGram/).
             No game data is included: try the starter puzzles, then add the nonogram games you own (DS, 3DS, Game Boy, Super Famicom …) inside the app. See the README.

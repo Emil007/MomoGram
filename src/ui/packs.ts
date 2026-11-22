@@ -172,53 +172,10 @@ export function openPackManager(pm: PM) {
     const fetchPacks = async (sps: Sync.ServerPack[], btn: HTMLButtonElement, music = true) => {
       const label = btn.textContent;
       btn.disabled = true;
-      const lock = keepAwake();
       try {
-        for (let i = 0; i < sps.length; i++) {
-          btn.textContent = `${i + 1}/${sps.length} …`;
-          const split = sps[i].split ? await steady(sig => Sync.packSplit(sps[i].id), () => { btn.textContent = `${i + 1}/${sps.length} · ${t('waiting')}`; }) : null;
-          let made: Pack[];
-          if (split) {
-            const p = split.pack as Pack;
-            p.assets = [];
-            const want = split.assets.filter(a => music || !a.music);
-            for (let k = 0; k < want.length; k++) {
-              const a = want[k];
-              btn.textContent = `${i + 1}/${sps.length} · ${k + 1}/${want.length}`;
-              // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again
-              let data = await storage.loadBlob(a.hash).catch(() => undefined);
-              if (!data) {
-                data = await steady(sig => Sync.downloadBlob(a.hash, sig), () => { btn.textContent = `${i + 1}/${sps.length} · ${k + 1}/${want.length} · ${t('waiting')}`; });
-                if (await sha1(data) !== a.hash) throw new Error(t('downloadBroken'));
-                await storage.saveDownload(data);
-              }
-              p.assets.push({ name: a.name, data });
-            }
-            made = [p];
-          } else made = (await readEntries(unzipAll(await steady(() => Sync.downloadPack(sps[i].id))), lang(), t)).made;
-          // a pack from the server keeps its revision (old uploads without one count as 1)
-          for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
-          if (made.length) {
-            const stored = await storePacks(pm.packs(), made);
-            // a download that brought nothing new (this device already had the same content) still takes the
-            // server's revision, else the pack is offered as an update again and again
-            const rev = sps[i].meta?.rev ?? 1;
-            for (let k = 0; k < stored.length; k++) {
-              const q = stored[k];
-              if (made.some(m => m.id === q.id) && packRev(q) < rev) { stored[k] = { ...q, rev }; await storage.savePack(stored[k]); }
-            }
-            pm.setPacks(stored);
-            // what a later look checks: the files (not music) this download stored
-            if (split) {
-              const plain = new Set(split.assets.filter(a => !a.music).map(a => a.name));
-              setExpected(split.pack.id, (await storage.assetNames(split.pack.id)).filter(n => plain.has(n)));
-            }
-          }
-        }
-        await storage.dropDownloads().catch(() => {});
+        await fetchServerPacks(pm, sps, text => { btn.textContent = text; }, music);
         render(); renderOnline();
       } catch (e) { bad(e); btn.disabled = false; btn.textContent = label; }
-      finally { lock(); }
     };
     const withMusic = h('input', { type: 'checkbox', checked: true }) as HTMLInputElement;
     const mb = (n: number) => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -323,6 +280,58 @@ export function openPackManager(pm: PM) {
  * .ogg, "Ga_B_00" = "e1_ga_b_00"): each song is kept once, the smaller file. Where the dropped copy was tagged
  * (title, puzzle, switched off, …), the kept one takes it over. Returns the files to drop.
  */
+/**
+ * Download (install or update) packs from the server, one after the other; `step` gets the progress as a short
+ * text. Split packs: files this device has already (any pack's) aren't downloaded; music can be left out.
+ */
+export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: Sync.ServerPack[], step: (text: string) => void, music = true) {
+  const lock = keepAwake();
+  try {
+    for (let i = 0; i < sps.length; i++) {
+      step(`${i + 1}/${sps.length} …`);
+      const split = sps[i].split ? await steady(sig => Sync.packSplit(sps[i].id), () => step(`${i + 1}/${sps.length} · ${t('waiting')}`)) : null;
+      let made: Pack[];
+      if (split) {
+        const p = split.pack as Pack;
+        p.assets = [];
+        const want = split.assets.filter(a => music || !a.music);
+        for (let k = 0; k < want.length; k++) {
+          const a = want[k];
+          step(`${i + 1}/${sps.length} · ${k + 1}/${want.length}`);
+          // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again
+          let data = await storage.loadBlob(a.hash).catch(() => undefined);
+          if (!data) {
+            data = await steady(sig => Sync.downloadBlob(a.hash, sig), () => step(`${i + 1}/${sps.length} · ${k + 1}/${want.length} · ${t('waiting')}`));
+            if (await sha1(data) !== a.hash) throw new Error(t('downloadBroken'));
+            await storage.saveDownload(data);
+          }
+          p.assets.push({ name: a.name, data });
+        }
+        made = [p];
+      } else made = (await readEntries(unzipAll(await steady(() => Sync.downloadPack(sps[i].id))), lang(), t)).made;
+      // a pack from the server keeps its revision (old uploads without one count as 1)
+      for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
+      if (made.length) {
+        const stored = await storePacks(pm.packs(), made);
+        // a download that brought nothing new (this device already had the same content) still takes the
+        // server's revision, else the pack is offered as an update again and again
+        const rev = sps[i].meta?.rev ?? 1;
+        for (let k = 0; k < stored.length; k++) {
+          const q = stored[k];
+          if (made.some(m => m.id === q.id) && packRev(q) < rev) { stored[k] = { ...q, rev }; await storage.savePack(stored[k]); }
+        }
+        pm.setPacks(stored);
+        // what a later look checks: the files (not music) this download stored
+        if (split) {
+          const plain = new Set(split.assets.filter(a => !a.music).map(a => a.name));
+          setExpected(split.pack.id, (await storage.assetNames(split.pack.id)).filter(n => plain.has(n)));
+        }
+      }
+    }
+    await storage.dropDownloads().catch(() => {});
+  } finally { lock(); }
+}
+
 export async function oneRelease(p: Pack): Promise<Set<string>> {
   const drop = new Set<string>();
   const th = p.theme;

@@ -59,7 +59,7 @@ Nonograms do that too.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
 - **A daily nonogram** (15 a day from all your games) and a **Random** button.
 - **The games' own music**, every song of every game, with a sound test to choose where each plays.
-- **Practice:** little games with random puzzles from your own games, which don't count as solved: *Find the mistakes* (a finished picture with a few wrong cells), *Finish it* (most of a puzzle already solved), *5×5 sprint* (as many small puzzles as you can in a minute) and *The next step* (a puzzle halfway through: find a cell that is certain now). Your best result in each is kept.
+- **Practice:** little games with random puzzles from your own games, in the mode that is on (Normal, Mega or Color), which don't count as solved: *Find the mistakes* (a finished picture with a few wrong cells), *Finish it* (most of a puzzle already solved), *5×5 sprint* (as many small puzzles as you can in a minute), *The next step* (a puzzle halfway through: find a cell that is certain now), *One line* (find every cell one marked line decides) and *Memory* (see the picture for 3 seconds, then solve it). Your best result in each is kept.
 - **Interactive tutorials** for nonograms, Mega and Color (each offered once, all in the options), an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
 - **Your progress is never lost:** paused puzzles, best times per difficulty, medals, profiles with their own saves.
 - **Your own server (optional):** progress and settings on all your devices, packs shared within your family or friends, and high scores for up to 10 players.
@@ -183,7 +183,6 @@ Every push that changes the version builds a release on GitHub, for all of these
 | **macOS** | `MomoGram-<version>-macOS-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) | Not notarized: the first time, right-click the app → **Open**, or run `xattr -cr /Applications/MomoGram.app`. |
 | **Linux** | `MomoGram-<version>-Linux-x86_64.AppImage` or `.tar.gz` (x64 / arm64) | `chmod +x` the AppImage. ARM64 runs on Raspberry Pi and ARM handhelds. |
 | **Steam Deck** | the Linux AppImage | Add it to Steam as a non-Steam game; it starts fullscreen in Gaming Mode. |
-| **RecompLauncher** | every release carries a `recomplauncher.json` | [RecompLauncher](https://github.com/elripalda/RecompLauncher) installs, updates and starts MomoGram. |
 
 The desktop app takes `--rom <file.nds>` (or a ROM dropped on the program) to load a ROM at start, and
 `--fullscreen`.

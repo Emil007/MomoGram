@@ -469,7 +469,6 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .puzzle .inprogress { position: absolute; bottom: -6px; right: -6px; width: 1.25rem; height: 1.25rem; display: grid; place-items: center; font-size: .75rem; background: var(--accent2); color: #fff; border: 2px solid var(--line); border-radius: 50%; }
 .mark-tool .svg-ico { color: #8a52c8; }
 .mark-tool.on { background: linear-gradient(#e9dcf7, #cdb3ec); }
-.game .update-badge { position: absolute; top: -10px; right: -6px; padding: .05rem .45rem; font-size: .7rem; font-weight: 900; color: #fff; background: var(--easy); border: 2px solid var(--line); border-radius: 999px; cursor: pointer; white-space: nowrap; }
 .game { position: relative; }
 .online .has-update .packbtn { border-color: var(--easy); }
 .rule-tag { font-style: normal; font-size: .62rem; font-weight: 900; color: #fff; border-radius: 4px; padding: 0 .25em; margin-left: .25em; vertical-align: 1px; background: var(--muted); }
@@ -670,7 +669,7 @@ body.dark .player-card { border-color: #4a5563; }
 .fastest .medal { width: 1em; height: 1em; margin-left: .3em; vertical-align: -2px; display: inline-block; }
 
 /* practice: the games, and a running game's head (round, time) */
-.mode.practice { grid-column: 1 / -1; min-height: 3.2rem; background: linear-gradient(#5fd6c4, #1fa58f 50%, #127a69); }
+.mode.practice { background: linear-gradient(#5fd6c4, #1fa58f 50%, #127a69); }
 .practice-list { display: flex; flex-direction: column; gap: .7rem; padding: .8rem; max-width: 640px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 .practice-game { display: flex; align-items: center; gap: .8rem; text-align: left; padding: .8rem 1rem; }
 .pg-icon { font-size: 1.8rem; line-height: 1; width: 2.4rem; flex: none; text-align: center; }
@@ -684,3 +683,19 @@ body.dark .player-card { border-color: #4a5563; }
 .p-task.shake { animation: p-shake .35s; color: var(--bad, #d33); }
 @keyframes p-shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
 .btn.practice-game { display: flex; flex-direction: row; justify-content: flex-start; }
+
+/* home: daily, random and practice side by side (continue above them) */
+.home .menu.quick { grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+.home .menu.quick .btn.primary { grid-column: 1 / -1; }
+.home .menu.quick .mode b { font-size: .95rem; line-height: 1.15; hyphens: auto; overflow-wrap: anywhere; }
+.home .menu.quick .mode { padding-left: .3em; padding-right: .3em; }
+
+/* a newer version on the server: a green orb by the name (like the Mega one) */
+.update-orb { display: inline-block; vertical-align: .12em; margin-left: .4em; width: .55rem; height: .55rem; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #c9ffd8, var(--easy) 60%, #1f8a44); box-shadow: 0 0 6px 2px rgba(50, 200, 100, .55); animation: upd-glow 2.4s ease-in-out infinite; }
+@keyframes upd-glow { 50% { box-shadow: 0 0 10px 4px rgba(50, 200, 100, .8); } }
+@media (prefers-reduced-motion: reduce) { .update-orb { animation: none; } }
+.update-note { margin: 0; font-weight: 800; text-align: center; }
+.practice-game.busy { opacity: .6; pointer-events: none; }
+.practice-game.busy .pg-icon { animation: p-spin 1s linear infinite; }
+@keyframes p-spin { to { transform: rotate(360deg); } }

@@ -360,7 +360,7 @@
  "done": "Done",
  "analyzing": "Reading…",
  "practice": "Practice",
- "practiceHelp": "Little games with random puzzles from your games. They don't count as solved: no medals, points or PixElo, only your best result is kept.",
+ "practiceHelp": "Little games with random puzzles from your games, in the mode that is on (Normal, Mega or Color). They don't count as solved: no medals, points or PixElo, only your best result is kept.",
  "p_errors": "Find the mistakes",
  "p_errorsHelp": "A finished picture with a few wrong cells. Tap them, fast: a wrong tap costs 10 s.",
  "p_errorsTask": "{n} cells are wrong. Tap them!",
@@ -379,5 +379,13 @@
  "pNewBest": "New best!",
  "pDone": "Done",
  "pAgain": "Again",
- "pNoPuzzles": "Your games have no puzzles that fit this game yet."
+ "pNoPuzzles": "Your games have no puzzles that fit this game yet.",
+ "updateAsk": "A newer version of {name} is on the server. Update it now?",
+ "p_line": "One line",
+ "p_lineHelp": "One row or column is marked: find every cell its own numbers decide now.",
+ "p_lineTask": "Find the {n} cells this line decides now.",
+ "p_memory": "Memory",
+ "p_memoryHelp": "You see the picture for 3 seconds, then solve it from memory (and the numbers).",
+ "p_memoryLook": "Remember it! {n}",
+ "p_memoryTask": "Now solve it."
 }

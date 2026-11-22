@@ -360,7 +360,7 @@
  "done": "Fertig",
  "analyzing": "Lese…",
  "practice": "Training",
- "practiceHelp": "Kleine Spiele mit zufälligen Rätseln aus deinen Spielen. Sie zählen nicht als gelöst: keine Medaillen, Punkte oder PixElo, nur dein bestes Ergebnis bleibt.",
+ "practiceHelp": "Kleine Spiele mit zufälligen Rätseln aus deinen Spielen, im Modus, der gerade an ist (Normal, Mega oder Color). Sie zählen nicht als gelöst: keine Medaillen, Punkte oder PixElo, nur dein bestes Ergebnis bleibt.",
  "p_errors": "Finde die Fehler",
  "p_errorsHelp": "Ein fertiges Bild mit ein paar falschen Feldern. Tipp sie an, schnell: ein falscher Tipp kostet 10 s.",
  "p_errorsTask": "{n} Felder sind falsch. Tipp sie an!",
@@ -379,5 +379,13 @@
  "pNewBest": "Neuer Rekord!",
  "pDone": "Geschafft",
  "pAgain": "Nochmal",
- "pNoPuzzles": "Deine Spiele haben noch keine Rätsel, die hierfür passen."
+ "pNoPuzzles": "Deine Spiele haben noch keine Rätsel, die hierfür passen.",
+ "updateAsk": "Auf dem Server gibt es eine neuere Version von {name}. Jetzt aktualisieren?",
+ "p_line": "Eine Zeile",
+ "p_lineHelp": "Eine Zeile oder Spalte ist markiert: finde jedes Feld, das ihre eigenen Zahlen jetzt festlegen.",
+ "p_lineTask": "Finde die {n} Felder, die diese Zeile jetzt festlegt.",
+ "p_memory": "Gedächtnis",
+ "p_memoryHelp": "Du siehst das Bild 3 Sekunden lang, dann löst du es aus dem Kopf (und mit den Zahlen).",
+ "p_memoryLook": "Merk es dir! {n}",
+ "p_memoryTask": "Jetzt lösen."
 }

@@ -256,7 +256,7 @@ function loadActive() {
   try { resetTimes = JSON.parse(localStorage.getItem(pk('resets')) || '{}'); } catch { resetTimes = {}; }
   try { progress = JSON.parse(localStorage.getItem(pk('progress')) || '{}'); } catch { progress = {}; }
   try { packTimes = JSON.parse(localStorage.getItem(pk('packtimes')) || '{}'); } catch { packTimes = {}; }
-  const fixed = dropCopies(progress);
+  const fixed = [...new Set([...dropCopies(progress), ...giveOldMedals(progress)])];
   if (fixed.length) persist(fixed);
 }
 /**
@@ -265,6 +265,15 @@ function loadActive() {
  * times per rules (every real solve since 0.13 has them): it is removed. Works on "pack/puzzle" keys or on one
  * pack's puzzle ids; returns the packs that had copies.
  */
+/**
+ * Puzzles solved before MomoGram had medals have none, so they counted as solved but showed in no medal count
+ * (and got no points). Back then the game caught mistakes and added time for them, like Normal rules: silver.
+ */
+function giveOldMedals(m: Record<string, PuzzleProgress>): string[] {
+  const packs = new Set<string>();
+  for (const [k, v] of Object.entries(m)) if (v.cleared && !v.medal) { v.medal = 'silver'; packs.add(k.slice(0, k.indexOf('/'))); }
+  return [...packs];
+}
 function dropCopies(m: Record<string, PuzzleProgress>): string[] {
   const packs = new Set<string>();
   for (const k of Object.keys(m)) {
@@ -453,6 +462,7 @@ export function mergeSave(s: SaveFile): boolean {
   let any = false;
   for (const [id, rp] of Object.entries(s.packs)) {
     dropCopies(rp.progress); // copies another device (or the server) still has don't come back
+    giveOldMedals(rp.progress);
     const local = packTimes[id];
     const mine: Record<string, PuzzleProgress> = {};
     for (const [k, v] of Object.entries(progress)) if (k.startsWith(id + '/')) mine[k.slice(id.length + 1)] = v;

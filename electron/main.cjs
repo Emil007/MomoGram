@@ -6,8 +6,7 @@ const { pathToFileURL } = require('url');
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 app.commandLine.appendSwitch('enable-features', 'WebGamepad');
 
-// a game or pack to open: "--rom <file>", or a file the program was started with (double click, drag & drop,
-// RecompLauncher). The page asks for it at /__rom.
+// a game or pack to open: "--rom <file>", or a file the program was started with (double click, drag & drop). The page asks for it at /__rom.
 const OPENS = /\.(nds|zip|7z|rar|gbc?|sfc|smc|bs|3ds|cia|cxi|momopack|json)$/i;
 function fileArg(argv) {
   const a = argv.slice(1);
