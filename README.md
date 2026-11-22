@@ -59,6 +59,7 @@ Nonograms do that too.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
 - **A daily nonogram** (15 a day from all your games) and a **Random** button.
 - **The games' own music**, every song of every game, with a sound test to choose where each plays.
+- **Practice:** little games with random puzzles from your own games, which don't count as solved: *Find the mistakes* (a finished picture with a few wrong cells), *Finish it* (most of a puzzle already solved), *5×5 sprint* (as many small puzzles as you can in a minute) and *The next step* (a puzzle halfway through: find a cell that is certain now). Your best result in each is kept.
 - **Interactive tutorials** for nonograms, Mega and Color (each offered once, all in the options), an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
 - **Your progress is never lost:** paused puzzles, best times per difficulty, medals, profiles with their own saves.
 - **Your own server (optional):** progress and settings on all your devices, packs shared within your family or friends, and high scores for up to 10 players.

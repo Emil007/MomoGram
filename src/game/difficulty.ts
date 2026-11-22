@@ -71,3 +71,49 @@ export function suggestFix(rows: string[], maxChanges = 6): Array<{ x: number; y
   return st.n === 0 ? changes : [];
 }
 const flip = (r: string[], x: number, y: number) => r.map((row, j) => j !== y ? row : row.slice(0, x) + (row[x] === '#' ? '.' : '#') + row.slice(x + 1));
+
+/**
+ * The order MomoGram's line solver decides the cells in (index, FILL or CROSS), one line at a time; null when line
+ * logic alone can't finish the puzzle. Used by the practice games to make boards that are partly solved.
+ */
+export function solveSteps(rows: string[]): Array<[number, 1 | 2]> | null {
+  const h = rows.length, w = rows[0]?.length ?? 0;
+  const sol = rows.map(r => [...r].map(c => c === '#'));
+  const rc = sol.map(r => lineClues(r)), cc = [...Array(w)].map((_, x) => lineClues(sol.map(r => r[x])));
+  const g = new Uint8Array(w * h), out: Array<[number, 1 | 2]> = [];
+  let changed = true, passes = 0;
+  while (changed && passes++ < 200) {
+    changed = false;
+    for (let y = 0; y < h; y++) changed = apply(rc[y], [...Array(w)].map((_, x) => y * w + x)) || changed;
+    for (let x = 0; x < w; x++) changed = apply(cc[x], [...Array(h)].map((_, y) => y * w + x)) || changed;
+  }
+  return g.includes(EMPTY) ? null : out;
+  function apply(clue: number[], idx: number[]): boolean {
+    const f = forcedInLine(clue, idx.map(i => g[i]));
+    f.forEach(([k, v]) => { g[idx[k]] = v; out.push([idx[k], v]); });
+    return f.length > 0;
+  }
+}
+
+/** the empty cells of one line its clue decides now: [position in the line, FILL or CROSS] */
+export function forcedInLine(clue: number[], cells: number[]): Array<[number, 1 | 2]> {
+  const zero = !clue.length || (clue.length === 1 && clue[0] === 0);
+  const li = zero ? null : analyzeLine(clue, cells);
+  const out: Array<[number, 1 | 2]> = [];
+  cells.forEach((c, k) => {
+    if (c !== EMPTY) return;
+    if (zero || (li!.canEmpty && !li!.canFill?.[k])) out.push([k, CROSS]);
+    else if (li!.canFill && li!.canEmpty && !li!.canEmpty[k]) out.push([k, FILL]);
+  });
+  return out;
+}
+
+/** every cell of a board (0 empty, 1 filled, 2 crossed) that one line's clue decides now: index → FILL or CROSS */
+export function forcedCells(rows: string[], g: ArrayLike<number>): Map<number, 1 | 2> {
+  const h = rows.length, w = rows[0].length;
+  const sol = rows.map(r => [...r].map(c => c === '#'));
+  const m = new Map<number, 1 | 2>();
+  for (let y = 0; y < h; y++) { const idx = [...Array(w)].map((_, x) => y * w + x); for (const [k, v] of forcedInLine(lineClues(sol[y]), idx.map(i => g[i] === 1 || g[i] === 2 ? g[i] : 0))) m.set(idx[k], v); }
+  for (let x = 0; x < w; x++) { const idx = [...Array(h)].map((_, y) => y * w + x); for (const [k, v] of forcedInLine(lineClues(sol.map(r => r[x])), idx.map(i => g[i] === 1 || g[i] === 2 ? g[i] : 0))) m.set(idx[k], v); }
+  return m;
+}

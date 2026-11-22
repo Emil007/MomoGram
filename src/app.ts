@@ -27,7 +27,7 @@ import { unpackPictures } from './rom/jtex';
 import { icon } from './ui/icons';
 import { editorHome } from './ui/editor';
 import { textureInspector } from './ui/texinspect';
-import { puzzleLevel } from './game/difficulty';
+import { puzzleLevel, solveSteps, forcedCells } from './game/difficulty';
 
 const TIME_LIMIT = 60 * 60_000;
 
@@ -333,7 +333,8 @@ export function home() {
   const quick = h('div', { class: 'menu' },
     qPack ? h('button', { class: 'btn primary big', onClick: () => resumeQuick() }, h('b', {}, '▶ ' + t('continue')), h('small', {}, pickAny(qPack.title, packLang()))) : null,
     h('button', { class: 'btn big mode daily', onClick: () => daily() }, h('b', {}, t('daily'))),
-    h('button', { class: 'btn big mode random', onClick: () => randomPuzzle() }, h('b', {}, t('random'))));
+    h('button', { class: 'btn big mode random', onClick: () => randomPuzzle() }, h('b', {}, t('random'))),
+    h('button', { class: 'btn big mode practice', onClick: () => practiceScreen() }, h('b', {}, t('practice'))));
 
   const lib = h('div', { class: 'library' });
   renderLibrary(lib, null);
@@ -1357,6 +1358,204 @@ function randomPuzzle() {
     puzzleStart(e.pack, e.lv, e.i, home);
   };
   choose(t('randomFrom'), [[t('diff1'), () => go(1)], [t('diff2'), () => go(2)], [t('diff3'), () => go(3)], [t('back'), () => {}]]);
+}
+
+// ---------------------------------------------------------------- practice
+// Small games with random puzzles from your own games. Nothing here counts as solving the puzzle: no progress,
+// medals, points or PixElo; only each game's best result is kept (per profile, on this device).
+type PracticeGame = 'errors' | 'finish' | 'sprint' | 'spot';
+const PRACTICE_GAMES: Array<{ id: PracticeGame; icon: string; higher?: boolean }> = [
+  { id: 'errors', icon: '🔍' }, { id: 'finish', icon: '🧩' }, { id: 'sprint', icon: '⏱', higher: true }, { id: 'spot', icon: '🎯' },
+];
+const practiceKey = () => 'momogram.practice.' + activeProfile().id;
+function practiceBest(): Partial<Record<PracticeGame, number>> { try { return JSON.parse(localStorage.getItem(practiceKey()) || '{}'); } catch { return {}; } }
+/** keeps the result when it beats the best one; true when it does */
+function practiceRecord(g: PracticeGame, score: number): boolean {
+  const b = practiceBest(), higher = PRACTICE_GAMES.find(x => x.id === g)!.higher;
+  const old = b[g];
+  if (old !== undefined && (higher ? score <= old : score >= old)) return false;
+  b[g] = score;
+  try { localStorage.setItem(practiceKey(), JSON.stringify(b)); } catch { /* full */ }
+  return true;
+}
+const practiceScoreText = (g: PracticeGame, v: number) => (g === 'sprint' ? t('pSolvedN', { n: v }) : formatTime(v));
+
+function practiceScreen(back: () => void = home) {
+  themeRoot(null);
+  const best = practiceBest();
+  screen(header(t('practice'), back),
+    h('div', { class: 'practice-list' },
+      h('p', { class: 'fine' }, t('practiceHelp')),
+      ...PRACTICE_GAMES.map(g => h('button', { class: 'btn practice-game', onClick: () => practiceRun(g.id, () => practiceScreen(back)) },
+        h('span', { class: 'pg-icon', 'aria-hidden': 'true' }, g.icon),
+        h('span', { class: 'pg-text' }, h('b', {}, t('p_' + g.id)), h('small', {}, t('p_' + g.id + 'Help'))),
+        best[g.id] !== undefined ? h('em', { class: 'pg-best' }, '★ ' + practiceScoreText(g.id, best[g.id]!)) : null))));
+}
+
+/** random plain puzzles of the shown games (no Mega or Colour views), within a size range, solvable by line logic */
+function practicePuzzles(n: number, min: number, max: number): Array<{ rows: string[]; from: string }> {
+  const pr = libPrefs();
+  const pool: Array<{ rows: string[]; from: string }> = [];
+  for (const p of [STARTER, ...ctx.packs].filter(p => !pr.hidden.includes(p.id)).map(plainView))
+    for (const lv of p.levels) for (const z of lv.puzzles)
+      if (z.width >= min && z.height >= min && z.width <= max && z.height <= max && z.rows.some(r => r.includes('#'))) pool.push({ rows: z.rows, from: fromText({ pack: p, lv }) });
+  const out: typeof pool = [], seen = new Set<string>();
+  for (let tries = 0; tries < 300 && out.length < n && pool.length; tries++) {
+    const k = Math.floor(Math.random() * pool.length), e = pool[k];
+    pool.splice(k, 1);
+    const key = e.rows.join('/');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (solveSteps(e.rows)) out.push(e);
+  }
+  return out;
+}
+
+/** a random 5×5 picture that line logic alone solves (for the sprint) */
+function sprintPuzzle(): string[] {
+  for (;;) {
+    const d = 0.45 + Math.random() * 0.25;
+    const rows = [...Array(5)].map(() => [...Array(5)].map(() => (Math.random() < d ? '#' : '.')).join(''));
+    if (rows.some(r => r.includes('#')) && solveSteps(rows)) return rows;
+  }
+}
+
+function practiceRun(game: PracticeGame, back: () => void) {
+  const ROUNDS = 5;
+  const list = game === 'sprint' ? [] : practicePuzzles(ROUNDS, game === 'errors' ? 5 : 10, game === 'finish' ? 20 : 15);
+  if (game !== 'sprint' && !list.length) { message(t('pNoPuzzles')); return; }
+  const rounds = game === 'sprint' ? Infinity : list.length;
+  const SPRINT_MS = 60_000;
+  let round = 0, penalty = 0, solvedN = 0, board!: Board, view: BoardView | null = null, prev = new Uint8Array(0), left = 0;
+  let wanted: Map<number, 1 | 2> = new Map();
+  const t0 = performance.now();
+  const elapsed = () => performance.now() - t0 + penalty;
+  const timeEl = h('b', { class: 'p-time' }, '00:00');
+  const roundEl = h('span', { class: 'p-round' });
+  const taskEl = h('p', { class: 'tut-text p-task' });
+  const fromEl = h('small', { class: 'p-from' });
+  const wrap = h('div', { class: 'boardwrap tut-board' });
+  const toolBtn = h('button', { class: 'rbtn tool-toggle', title: t('fill'), 'aria-label': t('fill'), onClick: () => setTool(view?.tool === 'fill' ? 'cross' : 'fill') }, toolSwitchArt());
+  let tool: 'fill' | 'cross' = 'fill';
+  function setTool(x: 'fill' | 'cross') { tool = x; if (view) view.tool = x; toolBtn.classList.toggle('crossing', x === 'cross'); }
+  const tick = setInterval(() => {
+    if (game === 'sprint') {
+      const rest = SPRINT_MS - elapsed();
+      timeEl.textContent = formatTime(Math.max(0, rest));
+      if (rest <= 0) finish();
+    } else timeEl.textContent = formatTime(elapsed());
+  }, 200);
+  const ro = new ResizeObserver(() => { if (view && (wrap.clientWidth !== view.width || wrap.clientHeight !== view.height)) view.resize(wrap.clientWidth, wrap.clientHeight); });
+  let over = false;
+  const stop = () => { over = true; clearInterval(tick); ro.disconnect(); view?.destroy(); view = null; };
+  const leave = () => { stop(); back(); };
+  const wrong = () => { penalty += game === 'sprint' ? 5000 : 10_000; Snd.sfx('mistake'); taskEl.classList.remove('shake'); void taskEl.offsetWidth; taskEl.classList.add('shake'); };
+
+  function nextRound() {
+    if (over) return;
+    if (round >= rounds) { finish(); return; }
+    round++;
+    const e = game === 'sprint' ? { rows: sprintPuzzle(), from: '' } : list[round - 1];
+    board = new Board(e.rows, game === 'finish' || game === 'sprint' ? 'easy' : 'free');
+    const n = board.w * board.h;
+    if (game === 'errors') {
+      // the whole picture, with a few cells wrong (each in its own row and column, so none hides another)
+      board.hideDone = true;
+      for (let i = 0; i < n; i++) board.cells[i] = board.solution[i] ? FILL : CROSS;
+      const k = Math.min(1 + Math.floor(Math.random() * 3), Math.min(board.w, board.h));
+      const rowsUsed = new Set<number>(), colsUsed = new Set<number>();
+      wanted = new Map();
+      for (let tries = 0; wanted.size < k && tries < 500; tries++) {
+        const i = Math.floor(Math.random() * n), x = i % board.w, y = Math.floor(i / board.w);
+        if (rowsUsed.has(y) || colsUsed.has(x)) continue;
+        rowsUsed.add(y); colsUsed.add(x);
+        wanted.set(i, board.solution[i] ? FILL : CROSS);
+        board.cells[i] = board.solution[i] ? CROSS : FILL;
+      }
+      left = wanted.size;
+    } else if (game === 'finish' || game === 'spot') {
+      const steps = solveSteps(e.rows)!;
+      let upto: number;
+      if (game === 'finish') upto = Math.floor(steps.length * (0.75 + Math.random() * 0.1));
+      else {
+        // the moment within the middle of the solve where the fewest cells can be decided next
+        const g = new Uint8Array(n);
+        let bestN = Infinity, cands: number[] = [];
+        for (let p = 0; p < steps.length; p++) {
+          g[steps[p][0]] = steps[p][1];
+          if (p < steps.length * 0.25 || p > steps.length * 0.85) continue;
+          const f = forcedCells(e.rows, g).size;
+          if (f < bestN) { bestN = f; cands = [p + 1]; } else if (f === bestN) cands.push(p + 1);
+        }
+        upto = cands.length ? cands[Math.floor(Math.random() * cands.length)] : Math.floor(steps.length / 2);
+      }
+      for (let p = 0; p < upto; p++) board.cells[steps[p][0]] = steps[p][1];
+      if (game === 'spot') wanted = forcedCells(e.rows, board.cells);
+    }
+    board.touch();
+    prev = board.cells.slice();
+    roundEl.textContent = game === 'sprint' ? t('pSolvedN', { n: solvedN }) : t('pRound', { a: round, b: rounds });
+    fromEl.textContent = e.from;
+    taskEl.textContent = game === 'errors' ? t('p_errorsTask', { n: left }) : game === 'spot' ? t('p_spotTask') : game === 'finish' ? t('p_finishTask') : t('p_sprintTask');
+    view?.destroy();
+    const canvas = h('canvas', {}) as HTMLCanvasElement;
+    wrap.replaceChildren(canvas);
+    view = new BoardView(canvas, board, { onChange: r => changed(r) });
+    if (/[?&]debug/.test(location.search)) (window as any).__practice = { board, wanted, view };
+    view.tool = tool;
+    view.resize(wrap.clientWidth, wrap.clientHeight);
+  }
+
+  function changed(r: string) {
+    if (!view || over) return;
+    if (game === 'finish' || game === 'sprint') {
+      if (r === 'mistake') wrong(); else Snd.sfx('tap');
+      if (board.checkSolved()) { solvedN++; Snd.sfx('clear'); setTimeout(nextRound, game === 'sprint' ? 250 : 700); }
+      return;
+    }
+    // errors / spot: look at what the tap changed
+    let hit = false, miss = false;
+    for (let i = 0; i < board.cells.length; i++) {
+      if (board.cells[i] === prev[i]) continue;
+      const want = wanted.get(i);
+      const ok = game === 'errors' ? want !== undefined : want !== undefined && board.cells[i] === want;
+      if (ok) { board.cells[i] = want!; wanted.delete(i); hit = true; if (game === 'errors') left--; }
+      else { board.cells[i] = prev[i]; miss = true; }
+    }
+    board.touch(); view.invalidate();
+    prev = board.cells.slice();
+    if (miss) wrong(); else if (hit) Snd.sfx('tap');
+    if (game === 'errors') taskEl.textContent = t('p_errorsTask', { n: left });
+    if ((game === 'errors' && hit && left === 0) || (game === 'spot' && hit)) { Snd.sfx('clear'); solvedN++; setTimeout(nextRound, 600); }
+  }
+
+  function finish() {
+    if (over) return;
+    const score = game === 'sprint' ? solvedN : Math.round(elapsed());
+    stop();
+    const isNew = (game !== 'sprint' || score > 0) && practiceRecord(game, score);
+    const best = practiceBest()[game];
+    if (isNew) Snd.sfx('clear');
+    screen(header(t('p_' + game), back), h('div', { class: 'solved practice-done' },
+      h('div', { class: 'stamp' }, isNew ? t('pNewBest') : t('pDone')),
+      h('div', { class: 'result' },
+        h('div', {}, game === 'sprint' ? t('pSolved') : t('time'), h('b', {}, practiceScoreText(game, score))),
+        game !== 'sprint' && penalty ? h('div', {}, t('penalty'), h('b', {}, '+' + formatTime(penalty))) : null,
+        best !== undefined ? h('div', {}, t('best'), h('b', {}, practiceScoreText(game, best))) : null),
+      h('div', { class: 'row' }, h('button', { class: 'btn', onClick: back }, t('back')),
+        h('button', { class: 'btn primary', onClick: () => practiceRun(game, back) }, t('pAgain')))));
+  }
+
+  themeRoot(null);
+  screen(header(t('p_' + game), leave),
+    h('div', { class: 'tut practice' },
+      h('div', { class: 'tut-card card' }, h('div', { class: 'p-head' }, roundEl, timeEl), taskEl, fromEl),
+      wrap, h('nav', { class: 'tools tut-tools' }, toolBtn, h('span', { class: 'gap' }),
+        game === 'finish' || game === 'sprint' ? h('button', { class: 'rbtn', title: t('undo'), 'aria-label': t('undo'), onClick: () => { if (board.undo()) view?.invalidate(); } }, icon('undo')) : null,
+        null)));
+  ro.observe(wrap);
+  setTool('fill');
+  requestAnimationFrame(() => nextRound());
 }
 
 // ---------------------------------------------------------------- play

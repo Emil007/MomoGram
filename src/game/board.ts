@@ -238,8 +238,10 @@ export class Board {
     return li;
   }
   /** which clue numbers are certainly done (greyed out); for a pair of lines: per number of the pair */
-  rowDone(y: number): boolean[] { return this.line('r', y).done; }
-  colDone(x: number): boolean[] { return this.line('c', x).done; }
+  rowDone(y: number): boolean[] { const d = this.line('r', y).done; return this.hideDone ? d.map(() => false) : d; }
+  colDone(x: number): boolean[] { const d = this.line('c', x).done; return this.hideDone ? d.map(() => false) : d; }
+  /** no clue number turns grey (practice: finding the mistakes must not be given away) */
+  hideDone = false;
   /** logic hint: the line allows a new cell to be deduced from its clue alone */
   rowCanProgress(y: number): boolean { return this.line('r', y).progress; }
   colCanProgress(x: number): boolean { return this.line('c', x).progress; }
