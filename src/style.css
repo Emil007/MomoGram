@@ -710,3 +710,8 @@ body.dark .player-card { border-color: #4a5563; }
 .tut-menu .opt-card { display: flex; flex-direction: column; gap: .5rem; }
 .tut-item { text-align: left; justify-content: flex-start; }
 .opt-packs small, .opt-tuts small { text-align: left; }
+/* high scores: the practice games' best results */
+.prac-scores { display: flex; flex-direction: column; gap: .55rem; }
+.prac-row { display: flex; flex-direction: column; gap: .15rem; }
+.prac-list { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-weight: 700; color: var(--muted); }
+.prac-list .me { color: var(--accent); }

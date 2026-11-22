@@ -188,7 +188,7 @@ function flush() {
 
 // ---- high scores of everyone on the server (kept for offline use) ----
 export interface ScoreStats { solved: number; week?: number; records?: number; medals: Record<string, number>; packs: Record<string, number>; time: number; points?: number; elo?: number; peak?: number; rated?: number }
-export interface Scores { users: Array<ScoreStats & { name: string; modes?: Partial<Record<'normal' | 'mega' | 'color', ScoreStats>> }>; best: Record<string, Array<[string, number, string?, string?]>> }
+export interface Scores { users: Array<ScoreStats & { name: string; modes?: Partial<Record<'normal' | 'mega' | 'color', ScoreStats>>; practice?: Record<string, number> }>; best: Record<string, Array<[string, number, string?, string?]>> }
 let scoresCache: Scores | null = null, scoresOf = '';
 export function scores(): Scores | null {
   if (!account()) return null;

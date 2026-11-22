@@ -193,7 +193,19 @@ A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a
 
 ## Your own server
 
-If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there (each file stored once, music optional when downloading; a download that's interrupted, for example when the phone goes to sleep, continues where it stopped) and shows high scores (points, PixElo, puzzles solved, medals, fastest times). Up to 10 accounts. Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
+If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there (each file stored once, music optional when downloading; a download that's interrupted, for example when the phone goes to sleep, continues where it stopped) and shows high scores (points, PixElo, puzzles solved, medals, fastest times, practice records). Up to 10 accounts. Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
+
+**What the account keeps the same on every device, and what stays on each device:**
+
+| Synced with your account | Kept on each device |
+|---|---|
+| Progress of every puzzle: solved, medals, times per rules, points, PixElo | The server address and the login |
+| Boards you started (and the paused puzzle) | Your games and packs themselves (download them from the server's shelf) |
+| Practice records (per game and mode) | Music on/off, music volume, sound effects, the music style per rule set |
+| Language, hint roulette, logic hints, unlock all levels, difficulty, timer shown, how music is picked, the games' own music and colors, Mega mark, the mode (Normal / Mega / Color), which tutorials were offered | Light / dark mode, left-handed layout, tools on the right |
+| | How the library is arranged (order, folders, hidden games) |
+
+When both sides changed something, the better result wins per puzzle and per practice game. For settings, the newest change wins.
 
 ## Controls
 

@@ -237,7 +237,10 @@ switch ($a) {
         $x['elo'] = $elo; $x['peak'] = $peak; $x['rated'] = $n; $x['packs'] = (object)$x['packs'];
       }
       unset($x);
-      $users[] = ['name' => $r['name']] + $m['normal'] + ['modes' => $m];
+      // best results of the practice games ("sprint@mega" → number)
+      $pr = [];
+      foreach ((is_array($s['practice'] ?? null) ? $s['practice'] : []) as $k => $v) if (is_numeric($v) && preg_match('/^[a-z]{1,12}(@[a-z]{1,8})?$/', (string)$k)) $pr[(string)$k] = 0 + $v;
+      $users[] = ['name' => $r['name']] + $m['normal'] + ['modes' => $m, 'practice' => (object)$pr];
     }
     $rk = fn($e) => [$rank[$e[2]] ?? 3, $e[1]];
     foreach ($best as &$l) usort($l, fn($a, $b) => $rk($a) <=> $rk($b));

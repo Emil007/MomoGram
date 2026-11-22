@@ -6,7 +6,7 @@ import { BoardView } from '../game/view';
 import { t } from '../i18n';
 import { PackPuzzle } from '../packs/format';
 import { STARTER } from '../packs/starter';
-import { activeProfile } from '../store';
+import { practiceBests, recordPractice } from '../store';
 import { message } from './dialog';
 import { libPrefs } from './library';
 import { icon } from './icons';
@@ -16,24 +16,16 @@ import { COLOR, MEGA, ctx, colorOfPz, colorView, curMode, fromText, h, header, h
 // Small games with random puzzles from your own games, in the mode that is on (Normal, Mega or Color). Nothing here
 // counts as solving the puzzle: no progress, medals, points or PixElo; only each game's best result is kept (per
 // profile and mode, on this device).
-type PracticeGame = 'errors' | 'finish' | 'sprint' | 'spot' | 'line' | 'memory';
-const PRACTICE_GAMES: Array<{ id: PracticeGame; icon: string; higher?: boolean }> = [
+export type PracticeGame = 'errors' | 'finish' | 'sprint' | 'spot' | 'line' | 'memory';
+export const PRACTICE_GAMES: Array<{ id: PracticeGame; icon: string; higher?: boolean }> = [
   { id: 'errors', icon: '🔍' }, { id: 'finish', icon: '🧩' }, { id: 'sprint', icon: '⏱', higher: true },
   { id: 'spot', icon: '🎯' }, { id: 'line', icon: '📏' }, { id: 'memory', icon: '🧠' },
 ];
-const practiceKey = () => 'momogram.practice.' + activeProfile().id;
 const practiceSlot = (g: PracticeGame) => (curMode() === 'normal' ? g : g + '@' + curMode());
-function practiceBest(): Record<string, number> { try { return JSON.parse(localStorage.getItem(practiceKey()) || '{}'); } catch { return {}; } }
+function practiceBest(): Record<string, number> { return practiceBests(); }
 /** keeps the result when it beats the best one (of this mode); true when it does */
-function practiceRecord(g: PracticeGame, score: number): boolean {
-  const b = practiceBest(), higher = PRACTICE_GAMES.find(x => x.id === g)!.higher, k = practiceSlot(g);
-  const old = b[k];
-  if (old !== undefined && (higher ? score <= old : score >= old)) return false;
-  b[k] = score;
-  try { localStorage.setItem(practiceKey(), JSON.stringify(b)); } catch { /* full */ }
-  return true;
-}
-const practiceScoreText = (g: PracticeGame, v: number) => (g === 'sprint' ? t('pSolvedN', { n: v }) : formatTime(v));
+function practiceRecord(g: PracticeGame, score: number): boolean { return recordPractice(practiceSlot(g), score); }
+export const practiceScoreText = (g: PracticeGame, v: number) => (g === 'sprint' ? t('pSolvedN', { n: v }) : formatTime(v));
 
 export function practiceScreen(back: () => void = home) {
   themeRoot(null);

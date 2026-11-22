@@ -2,7 +2,8 @@
 import { formatTime } from '../game/board';
 import { t } from '../i18n';
 import { pickAny } from '../packs/format';
-import { Medal, Mode, activeProfile, getProgress, localStats } from '../store';
+import { Medal, Mode, activeProfile, getProgress, localStats, practiceBests } from '../store';
+import { PRACTICE_GAMES, PracticeGame, practiceScoreText } from './practice';
 import * as Sync from '../sync';
 import { panel } from './dialog';
 import { PlayRules, RULES_OF, allPacks, countPack, curMode, h, header, home, medalEl, packLang, rulesName, screen } from '../app';
@@ -107,6 +108,16 @@ export async function scoresScreen() {
           fact(t('solvedTab'), String(u.solved))),
         h('div', { class: 'pc-medals' }, medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze),
           u.records ? h('small', { class: 'pc-rec' }, t('recordsN', { n: u.records })) : null)))));
+    // practice: per game the best results of everyone (this mode), the best first
+    const pracOf = (name: string) => (name === mine.name ? practiceBests() : sc?.users.find(x => x.name === name)?.practice ?? {});
+    const slot = (g: PracticeGame) => (mode === 'normal' ? g : g + '@' + mode);
+    const rows = PRACTICE_GAMES.map(g => {
+      const list = users.map(u => [u.name, pracOf(u.name)[slot(g.id)]] as [string, number | undefined]).filter((x): x is [string, number] => x[1] !== undefined)
+        .sort((a, b) => (g.higher ? b[1] - a[1] : a[1] - b[1]));
+      return list.length ? h('div', { class: 'prac-row' }, h('b', {}, g.icon + ' ' + t('p_' + g.id)),
+        h('span', { class: 'prac-list' }, ...list.slice(0, 3).map(([n, v], k) => h('span', { class: n === me ? 'me' : '' }, `${k + 1}. ${n} ${practiceScoreText(g.id, v)}`)))) : null;
+    }).filter((x): x is HTMLDivElement => !!x);
+    if (rows.length) body.append(h('h2', { class: 'section-title' }, t('practice')), h('div', { class: 'prac-scores card' }, ...rows));
     if (note) body.append(h('p', { class: 'fine' }, note));
 
     /** one player's games: solved per game, compared with you */

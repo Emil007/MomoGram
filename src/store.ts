@@ -429,6 +429,36 @@ export interface SaveFile {
   quickSaved?: string; // when the quick save was last set or cleared (older versions)
   boards?: Boards; // every board in progress
   settingsSaved?: string; // when a shared setting last changed
+  practice?: PracticeBests; // best results of the practice games
+}
+
+// ---- practice: the best result per game and mode ("sprint@mega"), kept with the profile and synced ----
+// Sprint counts solved puzzles (more is better); every other game is a time (less is better).
+export type PracticeBests = Record<string, number>;
+const practiceHigher = (slot: string) => slot.startsWith('sprint');
+const pracKey = () => 'momogram.practice.' + activeProfile().id;
+export function practiceBests(): PracticeBests { try { return JSON.parse(localStorage.getItem(pracKey()) || '{}'); } catch { return {}; } }
+/** keeps a result when it beats the best one; true when it does */
+export function recordPractice(slot: string, score: number): boolean {
+  const b = practiceBests(), old = b[slot];
+  if (old !== undefined && (practiceHigher(slot) ? score <= old : score >= old)) return false;
+  b[slot] = score;
+  try { localStorage.setItem(pracKey(), JSON.stringify(b)); } catch { /* full */ }
+  changed();
+  return true;
+}
+/** both sides' bests joined (the better of each); true when this device learned something */
+function mergePractice(other: PracticeBests | undefined): boolean {
+  if (!other) return false;
+  const b = practiceBests();
+  let any = false;
+  for (const [k, v] of Object.entries(other)) {
+    if (typeof v !== 'number' || !isFinite(v)) continue;
+    const o = b[k];
+    if (o === undefined || (practiceHigher(k) ? v > o : v < o)) { b[k] = v; any = true; }
+  }
+  if (any) try { localStorage.setItem(pracKey(), JSON.stringify(b)); } catch { /* full */ }
+  return any;
 }
 
 function packsOf(p: ProgressMap): SaveFile['packs'] {
@@ -447,6 +477,7 @@ export function makeSave(): SaveFile {
   return {
     format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: nowIso(), packs: packsOf(progress), quick: getQuickSave(), boards: loadBoards(),
     settings: sharedSettings(), quickSaved: latestBoard(loadBoards())?.saved, settingsSaved: localStorage.getItem('momogram.settingstime') ?? undefined,
+    practice: practiceBests(),
   };
 }
 
@@ -481,6 +512,7 @@ export function mergeSave(s: SaveFile): boolean {
     any = true;
   }
   if (any) { localStorage.setItem(pk('resets'), JSON.stringify(resetTimes)); persist(); }
+  any = mergePractice(s.practice) || any;
   if (s.boards) any = mergeBoards(s.boards) || any;
   else if (s.quick && s.quickSaved) any = mergeBoards({ [bkey(s.quick.packId, s.quick.levelId, s.quick.puzzleId)]: { q: s.quick, saved: s.quickSaved } }) || any;
   const st = localStorage.getItem('momogram.settingstime');
