@@ -28,7 +28,7 @@ import { icon } from './ui/icons';
 import { editorHome } from './ui/editor';
 import { textureInspector } from './ui/texinspect';
 import { puzzleLevel } from './game/difficulty';
-import { offerTutorial, tutorialScreen } from './ui/tutorial';
+import { offerTutorial, tutorialScreen, techniqueScreen, techniqueTitle } from './ui/tutorial';
 import { fastestRow, scoresScreen } from './ui/scores';
 import { practiceScreen } from './ui/practice';
 import { toggleLibEdit, libraryPacks, megaOrbLevels, progressText, renderLibrary } from './ui/library';
@@ -1646,6 +1646,11 @@ function optionsScreen() {
       h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen) }, '🎓 ' + t('tutorial')),
       h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'mega') }, '🎓 ' + t('tutorialMega')),
       h('button', { class: 'btn', onClick: () => tutorialScreen(optionsScreen, 'color') }, '🎓 ' + t('tutorialColor'))),
+    // the advanced lessons: one technique per step
+    h('div', { class: 'row tut-opts' },
+      h('button', { class: 'btn', onClick: () => techniqueScreen(optionsScreen, 'advanced') }, '🧠 ' + techniqueTitle('advanced')),
+      h('button', { class: 'btn', onClick: () => techniqueScreen(optionsScreen, 'megaAdvanced') }, '🧠 ' + techniqueTitle('megaAdvanced')),
+      h('button', { class: 'btn', onClick: () => techniqueScreen(optionsScreen, 'colorAdvanced') }, '🧠 ' + techniqueTitle('colorAdvanced'))),
     card(t('secSound'),
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,

@@ -104,6 +104,8 @@ export class BoardView {
   setTheme(t: Partial<Theme> | null) { this.theme = { ...THEME, ...(t ?? {}) }; this.dirty = true; }
   /** logic hints: clue numbers turn blue when their line allows a new deduction (like the 3DS / Switch games) */
   logicHints = false;
+  /** only the row clues are shown (lessons about one line: the columns would give the answer away) */
+  rowsOnly = false;
   private spin: { row: number; col: number; flash: boolean } | null = null;
   get spinning() { return !!this.spin; }
 
@@ -173,7 +175,7 @@ export class BoardView {
     const b = this.board;
     // a pair of lines (Mega) needs one place per slot of its clue
     const len = (band: ReturnType<Board['rowBand']>, c: number[], wide: boolean) => (band ? Math.ceil(slotUnits(bandSlots(band), wide).total) : c.length);
-    return { r: Math.max(1, ...b.rowClues.map((c, y) => len(b.rowBand(y), c, true))), c: Math.max(1, ...b.colClues.map((c, x) => len(b.colBand(x), c, false))) };
+    return { r: Math.max(1, ...b.rowClues.map((c, y) => len(b.rowBand(y), c, true))), c: this.rowsOnly ? 0 : Math.max(1, ...b.colClues.map((c, x) => len(b.colBand(x), c, false))) };
   }
 
   /** Fit the whole puzzle; on small screens the cell size is clamped and the view becomes pannable. */
@@ -211,7 +213,7 @@ export class BoardView {
     const cc = Math.max(this.cell, 14);
     const gap = Math.max(2, cc / 10) + Math.max(4, Math.min(cc * 0.22, 9)) + 4;
     this.clueW = Math.ceil(r * Math.min(cc * 0.62, 26) + gap);
-    this.clueH = Math.ceil(c * Math.min(cc * 0.66, 28) + gap);
+    this.clueH = this.rowsOnly ? 4 : Math.ceil(c * Math.min(cc * 0.66, 28) + gap);
   }
 
   get zoomed() { return this.cell > this.fitCell + 0.5; }
@@ -700,7 +702,7 @@ export class BoardView {
       ctx.restore();
       text(String(n), cx, cy + 1, col);
     };
-    for (let x = vx0; x < vx1; x++) {
+    for (let x = vx0; x < (this.rowsOnly ? vx0 : vx1); x++) {
       const band = b.colBand(x);
       if (band) {
         if (b.colPair[x] !== x && x !== vx0) continue; // drawn with the pair's first column

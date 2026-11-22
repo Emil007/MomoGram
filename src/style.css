@@ -680,7 +680,7 @@ body.dark .player-card { border-color: #4a5563; }
 .p-time { font-variant-numeric: tabular-nums; font-size: 1.1rem; }
 .practice .tut-text { min-height: 0; }
 .p-from { color: var(--muted); font-weight: 600; }
-.p-task.shake { animation: p-shake .35s; color: var(--bad, #d33); }
+.p-task.shake, .tut-text.shake { animation: p-shake .35s; color: var(--bad, #d33); }
 @keyframes p-shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
 .btn.practice-game { display: flex; flex-direction: row; justify-content: flex-start; }
 

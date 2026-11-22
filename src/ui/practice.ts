@@ -168,7 +168,7 @@ function practiceRun(game: PracticeGame, back: () => void) {
   let over = false;
   const stop = () => { over = true; clearInterval(tick); ro.disconnect(); view?.destroy(); view = null; };
   const leave = () => { stop(); back(); };
-  const wrong = () => { penalty += game === 'sprint' ? 5000 : 10_000; Snd.sfx('mistake'); taskEl.classList.remove('shake'); void taskEl.offsetWidth; taskEl.classList.add('shake'); };
+  const wrong = () => { penalty += game === 'sprint' ? 5000 : 10_000; Snd.sfx('mistake'); taskEl.classList.remove('shake'); void taskEl.offsetWidth; taskEl.classList.add('shake'); setTimeout(() => taskEl.classList.remove('shake'), 600); };
   const apply = (b: Board, steps: Step[]) => { for (const [i, v, c] of steps) { b.cells[i] = v; b.colors[i] = c; } };
 
   function nextRound() {
