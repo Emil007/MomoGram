@@ -4,7 +4,8 @@ import { Pack, PackLevel, pickAny, safeColor } from '../packs/format';
 import { seriesOf } from '../packs/importers/series';
 import { packRev } from '../packs/io';
 import { themeColors } from '../packs/theme';
-import { getProgress, settings } from '../store';
+import { getProgress, libPrefs, setLibPrefs, settings, type LibPrefs } from '../store';
+export { libPrefs };
 import * as Sync from '../sync';
 import { confirmBox, message } from './dialog';
 import { icon } from './icons';
@@ -13,11 +14,6 @@ import { allPacks, countPack, ctx, curMode, h, header, home, openPack, packLang,
 
 // ---------------------------------------------------------------- library: folders, order, hidden games
 
-interface LibPrefs { order: string[]; hidden: string[]; group: 'series' | 'system' | 'none'; view?: 'cards' | 'tiles' | 'list' }
-export function libPrefs(): LibPrefs {
-  try { return { order: [], hidden: [], group: 'series', ...JSON.parse(localStorage.getItem('momogram.library') || '{}') }; } catch { return { order: [], hidden: [], group: 'series' }; }
-}
-function setLibPrefs(p: LibPrefs) { localStorage.setItem('momogram.library', JSON.stringify(p)); }
 export let libEdit = false;
 /** arranging on or off (the home screen's button) */
 export function toggleLibEdit(): boolean { libEdit = !libEdit; return libEdit; }
@@ -63,7 +59,7 @@ function gameCard(p: Pack, onOpen: () => void): HTMLElement {
   // the icon sits in a row with the system and year (like the icons of a folder), so the title has the full width
   return h('button', { class: 'btn game', style: col ? `--game:${col}` : undefined, onClick: onOpen },
     h('b', {}, pickAny(p.title, packLang()), megaOrb([p]), hasUpdate(p) ? h('span', { class: 'update-orb', title: t('updateAvailable'), 'aria-label': t('updateAvailable') }) : null),
-    h('div', { class: 'game-meta' }, hasIcon(p) ? iconCanvas(p.icon!) : null,
+    h('div', { class: 'game-meta' }, hasIcon(p) ? iconCanvas(p.icon!) : markIcon(p),
       h('small', {}, [p.source.platform, p.source.year].filter(Boolean).join(' · ') + (p.theme?.music ? ' · ♪' : ''))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })),
@@ -151,12 +147,37 @@ function iconCanvas(ic: NonNullable<Pack['icon']>): HTMLCanvasElement {
   return c;
 }
 
+/** side stripe: one band per game, in that game's colour (a single game keeps a solid stripe) */
+function folderStripe(packs: Pack[]): string {
+  const colors = packs.map(p => safeColor(p.theme?.palette ? themeColors(p.theme.palette).accent : '#1f9be0'));
+  if (colors.length <= 1) return colors[0];
+  const step = 100 / colors.length;
+  return `linear-gradient(180deg, ${colors.map((c, i) => `${c} ${i * step}% ${(i + 1) * step}%`).join(', ')})`;
+}
+
+/** a small mark for a game whose file has no icon: its own colour, a different pattern per game, no borrowed art */
+function markIcon(p: Pack): HTMLCanvasElement {
+  const c = h('canvas', { class: 'game-icon made', width: 16, height: 16, 'aria-hidden': 'true' });
+  const g = c.getContext('2d')!;
+  const col = safeColor(p.theme?.palette ? themeColors(p.theme.palette).accent : '#1f9be0');
+  let n = 2166136261;
+  for (const ch of p.id) n = Math.imul(n ^ ch.charCodeAt(0), 16777619);
+  g.fillStyle = '#f4f8fb';
+  g.fillRect(0, 0, 16, 16);
+  g.fillStyle = col;
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+    n = Math.imul(n ^ (x + y * 4 + 1), 16777619);
+    if ((n >>> 28) < 10) g.fillRect(x * 4, y * 4, 3, 3);
+  }
+  return c;
+}
+
 function folderCard(key: string, packs: Pack[]): HTMLElement {
   let a = 0, b = 0;
   for (const p of packs) { const [x, y] = countPack(p); a += x; b += y; }
-  return h('button', { class: 'btn game folder', onClick: () => folderScreen(key) },
+  return h('button', { class: 'btn game folder', style: `--stripe:${folderStripe(packs)}`, onClick: () => folderScreen(key) },
     h('b', {}, key, megaOrb(packs)), h('small', {}, t('gamesCount', { n: packs.length })),
-    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => hasIcon(p) ? iconCanvas(p.icon!) : h('i', { style: p.theme?.palette ? `--game:${themeColors(p.theme.palette).accent}` : undefined }))),
+    h('div', { class: 'folder-tabs' }, ...packs.slice(0, 4).map(p => hasIcon(p) ? iconCanvas(p.icon!) : markIcon(p))),
     h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${b ? (a / b) * 100 : 0}%` })),
     h('small', { class: 'count' }, t('solvedCount', { a, b })));
 }

@@ -107,6 +107,9 @@ export function read3ds(data: Uint8Array): Pack[] {
     rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1),
     name: ownTitle(r.title),
   });
+  // a grid listed again in the same mode is a placeholder (Club Nintendo Easy 12–15 are one melon, four identical files).
+  // The solved picture is stored once per grid, so that comparison never removed the extra puzzles.
+  const fresh = (seen: Set<string>, p: PackPuzzle) => { const k = p.rows.join('/'); return seen.has(k) ? false : (seen.add(k), true); };
   const levels: PackLevel[] = [];
   const modeStyle = raws.every(r => /\/Prs_[ENFX]_\d+\.bprs$/.test(r.file));
   if (modeStyle) {
@@ -118,7 +121,9 @@ export function read3ds(data: Uint8Array): Pack[] {
     }
     let k = 0;
     for (const mode of ['E', 'N', 'F', 'X']) {
-      const list = raws.filter(r => r.file.includes(`/Prs_${mode}_`)).map(r => {
+      const seen = new Set<string>();
+      const list: PackPuzzle[] = [];
+      for (const r of raws.filter(r => r.file.includes(`/Prs_${mode}_`))) {
         const p = toPuzzle(r, `${mode.toLowerCase()}-${r.file.match(/_(\d+)\.bprs$/)![1]}`);
         // the table ends with one title per puzzle (in mode order) and an empty entry
         for (const [lang, names] of titles) {
@@ -126,8 +131,8 @@ export function read3ds(data: Uint8Array): Pack[] {
           if (s) p.name = { ...p.name, [lang]: s };
         }
         k++;
-        return p;
-      });
+        if (fresh(seen, p)) list.push(p);
+      }
       levels.push(...chunk(MODE[mode].key, MODE[mode].title, MODE[mode].key, list));
     }
   } else {
@@ -139,7 +144,12 @@ export function read3ds(data: Uint8Array): Pack[] {
     }
     const sizes = [...bySize.keys()].sort((a, b) => { const [aw, ah] = a.split('x').map(Number), [bw, bh] = b.split('x').map(Number); return aw * ah - bw * bh; });
     for (const s of sizes) {
-      const list = bySize.get(s)!.map((r, i) => toPuzzle(r, `${s}-${String(i + 1).padStart(2, '0')}`));
+      const seen = new Set<string>();
+      const list: PackPuzzle[] = [];
+      bySize.get(s)!.forEach((r, i) => {
+        const p = toPuzzle(r, `${s}-${String(i + 1).padStart(2, '0')}`);
+        if (fresh(seen, p)) list.push(p);
+      });
       const label = s.replace('x', '×');
       levels.push(...chunk(`s${s}-`, { en: label }, s, list));
     }
@@ -157,6 +167,7 @@ export function read3ds(data: Uint8Array): Pack[] {
   // the coloured solved pictures: per puzzle file the illustration (_I), else the coloured picture (_PC / _C)
   const byPath = new Map(t.files.map(f => [f.path, f]));
   const pics: Array<{ key: string; w: number; h: number; rgba: Uint8Array }> = [];
+  const seenPic = new Set<string>();
   const upright = uprightPictures(raws, byPath);
   for (const r of raws) {
     const base = r.file.replace(/\.bprs2?$/i, '');
@@ -164,8 +175,10 @@ export function read3ds(data: Uint8Array): Pack[] {
       const f = byPath.get(base + suf + '.jtex');
       const img = f ? jtexImage(f.data, upright) : null;
       if (!img) continue;
-      // keyed by the puzzle's pattern, so the picture follows the puzzle into daily / random picks and merges
-      pics.push({ key: [...Array(r.h)].map((_, y) => [...r.cells.subarray(y * r.w, y * r.w + r.w)].map(c => (c ? '#' : '.')).join('')).join('/'), ...img });
+      // keyed by the puzzle's pattern, so the picture follows the puzzle into daily / random picks and merges.
+      // a second file with the same grid is the same picture; it is not stored again
+      const key = [...Array(r.h)].map((_, y) => [...r.cells.subarray(y * r.w, y * r.w + r.w)].map(c => (c ? '#' : '.')).join('')).join('/');
+      if (!seenPic.has(key)) { seenPic.add(key); pics.push({ key, ...img }); }
       break;
     }
   }
@@ -397,7 +410,7 @@ function music3ds(files: CtrFile[]): { theme: PackTheme; assets: PackAsset[] } {
 
 registerImporter({
   name: 'Nintendo 3DS',
-  version: 3, // raise when the importer reads more or reads differently
+  version: 4, // raise when the importer reads more or reads differently
   // packs read before a title was made complete keep their id, only the title changes
   upgrade: p => p.id.startsWith('ctr-') && fullTitle(p.title as Record<string, string>),
   detect: d => ctrEncrypted(d) === false,

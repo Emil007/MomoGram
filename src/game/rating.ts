@@ -1,10 +1,10 @@
-// Points and PixElo: two numbers to compare players, kept separately for normal and Mega puzzles.
+// Points and PixELO: two numbers to compare players, kept separately for normal and Mega puzzles.
 //
 // Points only go up. Each puzzle is worth its best result once: size and difficulty (measured by the solver),
 // times the medal (platinum > gold > silver > bronze), with a bonus for speed against the puzzle's par time. A
 // better medal or a faster time later pays only the difference.
 //
-// PixElo is a chess-style rating with each puzzle as the opponent. A puzzle's rating and par time come from the
+// PixELO is a chess-style rating with each puzzle as the opponent. A puzzle's rating and par time come from the
 // solver and its size (the same on every device). The first solve of a puzzle under each rule set (Easy, Normal,
 // Hard) is rated: the time against par gives a score between 0 and 1, which moves the rating by how much better or
 // worse it is than expected against that puzzle. Replays are unrated. Leaving a puzzle costs nothing (puzzles are
@@ -40,7 +40,7 @@ function workOf(rows: string[]) {
   return v;
 }
 
-/** a puzzle's PixElo rating and par time (seconds) */
+/** a puzzle's PixELO rating and par time (seconds) */
 export function puzzleRating(rows: string[], mega: boolean): { pr: number; par: number } {
   const { work, logic } = workOf(rows);
   const pr = RATING.base + RATING.perWork * Math.log(work / 25) + (logic ? 0 : RATING.notLogic) + (mega ? RATING.mega : 0);

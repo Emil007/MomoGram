@@ -32,7 +32,7 @@ else await esbuild.build(opts);
 // same host: they carry the login) are left to the network, never cached.
 // what the running app compares itself with to offer an update (home screen)
 writeFileSync(`${out}/version.json`, JSON.stringify({ version: pkg.version }));
-const files = ['./', 'index.html', 'app.js', 'app.css', 'worklet.js', 'icon.svg', 'manifest.webmanifest'];
+const files = ['./', 'index.html', 'app.js', 'app.css', 'worklet.js', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'manifest.webmanifest'];
 const hash = createHash('sha1');
 for (const f of ['app.js', 'app.css', 'worklet.js', 'index.html']) { try { hash.update(readFileSync(`${out}/${f}`)); } catch { /* not built */ } }
 writeFileSync(`${out}/sw.js`, `const C='momogram-${pkg.version}-${hash.digest('hex').slice(0, 10)}';const F=${JSON.stringify(files)};

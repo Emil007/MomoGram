@@ -6,7 +6,7 @@ import { Medal, Mode, activeProfile, getProgress, localStats, practiceBests } fr
 import { PRACTICE_GAMES, PracticeGame, practiceScoreText } from './practice';
 import * as Sync from '../sync';
 import { panel } from './dialog';
-import { PlayRules, RULES_OF, allPacks, countPack, curMode, h, header, home, medalEl, packLang, rulesName, screen } from '../app';
+import { PlayRules, RULES_OF, allPacks, countPack, curMode, h, header, home, medalEl, modeSwitchButton, packLang, rulesName, screen } from '../app';
 
 /**
  * The three fastest players on a puzzle. Shown at once from the scores kept on the device, then redrawn when fresh
@@ -30,15 +30,18 @@ function fastestList(packId: string, puzzleId: string): HTMLElement | null {
   if (!sc || !me) return null;
   // older progress (and an older server) gives no rules with a time: the medal tells which rules it was played with
   const list = (sc.best[packId + '/' + puzzleId] ?? []).filter(([n]) => n !== me.name)
-    .map(([n, ms, r, m]) => [n, ms, r || (m ? RULES_OF[m] ?? '' : ''), m] as typeof sc.best[string][number]);
+    .map(([n, ms, r, m, pts]) => [n, ms, r || (m ? RULES_OF[m] ?? '' : ''), m, pts] as typeof sc.best[string][number]);
   const myProgress = getProgress(packId, puzzleId), mine = strictestTime(myProgress);
-  if (mine) list.push([me.name, mine[0], mine[1], myProgress.medal ?? '']);
+  if (mine) list.push([me.name, mine[0], mine[1], myProgress.medal ?? '', myProgress.pts ?? 0]);
   if (!list.length) return null;
-  // times under stricter rules come first: a fast Easy time doesn't beat a Hard one
-  list.sort((a, b) => (RULE_RANK[a[2] ?? ''] ?? 3) - (RULE_RANK[b[2] ?? ''] ?? 3) || a[1] - b[1]);
-  return h('p', { class: 'fastest' }, '🏆 ' + t('fastest') + ': ',
-    // the medal says how it was played (bronze Easy, silver Normal, gold and platinum Hard)
-    ...list.slice(0, 3).map(([n, ms, r, m], k) => h('span', { class: n === me.name ? 'me' : '', title: r ? rulesName(r as PlayRules) : '' }, `${k + 1}. ${n} ${formatTime(ms)}`,
+  // points already include the medal (harder rules score more). The same points: the shorter time ranks higher.
+  // an older server sends no points: then the stricter rules still come first, and time breaks the tie.
+  const byPoints = list.every(e => typeof e[4] === 'number');
+  list.sort((a, b) => byPoints ? (b[4] ?? 0) - (a[4] ?? 0) || a[1] - b[1] : (RULE_RANK[a[2] ?? ''] ?? 3) - (RULE_RANK[b[2] ?? ''] ?? 3) || a[1] - b[1]);
+  return h('p', { class: 'fastest' }, '🏆 ' + t('puzzleBest') + ': ',
+    ...list.slice(0, 3).map(([n, ms, r, m, pts], k) => h('span', { class: n === me.name ? 'me' : '', title: (r ? rulesName(r as PlayRules) + ' · ' : '') + formatTime(ms) },
+      `${k + 1}. ${n} ${byPoints ? pts : formatTime(ms)}`,
+      byPoints ? h('small', {}, ' ' + formatTime(ms)) : null,
       m ? medalEl(m as Medal) : r ? h('i', { class: 'rule-tag r-' + r }, rulesName(r as PlayRules).slice(0, 1)) : null)));
 }
 const RULE_RANK: Record<string, number> = { free: 0, hard: 0, normal: 1, easy: 2 };
@@ -53,13 +56,13 @@ function strictestTime(p: { best?: number; times?: Partial<Record<string, number
 
 /**
  * Everyone on the server (up to 10 players), for the mode that is on (normal and Mega are two games): ranked by
- * points, PixElo or puzzles solved; medals; and per game.
+ * points, PixELO or puzzles solved; medals; and per game.
  */
 let scoreSort: 'elo' | 'points' = 'elo';
 let scoreMode: Mode | null = null;
 /**
- * High scores: a ranking (PixElo or points) for Normal or Mega, then one card per player with everything at a
- * glance (PixElo and peak, points, solved, medals, this week, records); a card opens that player's games.
+ * High scores: a ranking (PixELO or points) for Normal or Mega, then one card per player with everything at a
+ * glance (PixELO and peak, points, solved, medals, this week, records); a card opens that player's games.
  */
 export async function scoresScreen() {
   const body = h('div', { class: 'scores' });
@@ -79,35 +82,29 @@ export async function scoresScreen() {
     const key = (u: Row) => scoreSort === 'points' ? [u.points ?? 0, u.solved] : [elo(u), u.rated ?? 0, u.points ?? 0];
     users.sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i]; return 0; });
 
-    // switches: Normal / Mega, PixElo / points
     const seg = <T extends string>(cur: T, opts: Array<[T, string]>, set: (v: T) => void) => h('div', { class: 'seg mini' }, ...opts.map(([v, l]) =>
       h('button', { class: 'segbtn' + (cur === v ? ' on' : ''), onClick: () => { set(v); draw(); } }, l)));
     body.append(h('div', { class: 'score-switches' },
-      seg<Mode>(mode, [['normal', t('normalMode')], ['mega', 'Mega'], ['color', t('colorOn')]], v => { scoreMode = v; }),
-      seg<'elo' | 'points'>(scoreSort, [['elo', 'PixElo'], ['points', t('pointsTab')]], v => { scoreSort = v; })));
+      modeSwitchButton(mode, next => { scoreMode = next; draw(); }),
+      seg<'elo' | 'points'>(scoreSort, [['elo', 'PixELO'], ['points', t('pointsTab')]], v => { scoreSort = v; })));
     if (!users.some(u => u.solved)) { body.append(h('p', { class: 'fine' }, t('noScores'))); if (note) body.append(h('p', { class: 'fine' }, note)); return; }
 
-    // the ranking: one line per player, the number that's ranked big
     const main = (u: Row) => scoreSort === 'points' ? String(u.points ?? 0) : u.rated ? String(u.elo) + (u.rated < 15 ? '?' : '') : '–';
-    body.append(h('ol', { class: 'ranking' }, ...users.map((u, k) => h('li', { class: (u.name === me ? 'me ' : '') + (k < 3 ? 'top' + (k + 1) : '') },
-      h('span', { class: 'rank' }, k < 3 ? ['🥇', '🥈', '🥉'][k] : String(k + 1)),
-      h('b', { class: 'who-name' }, u.name),
-      h('b', { class: 'num' }, main(u), h('small', {}, scoreSort === 'points' ? ' ' + t('pointsShort') : ''))))));
-    body.append(h('p', { class: 'fine center' }, scoreSort === 'elo' ? t('eloExplain') : t('pointsExplain')));
-
-    // a card per player
+    const other = (u: Row) => scoreSort === 'points'
+      ? (u.rated ? 'PixELO ' + u.elo + (u.rated < 15 ? '?' : '') : '')
+      : String(u.points ?? 0) + ' ' + t('pointsShort');
     const medalCount = (m: Medal, n: number | undefined) => h('span', { class: 'mcount' + (n ? '' : ' none') }, medalEl(m, false), String(n ?? 0));
-    const fact = (label: string, value: string) => h('div', { class: 'fact' }, h('b', {}, value), h('small', {}, label));
-    body.append(h('h2', { class: 'section-title' }, t('players')), h('div', { class: 'player-cards' }, ...users.map(u =>
-      h('button', { class: 'player-card' + (u.name === me ? ' me' : ''), onClick: () => playerGames(u, mode) },
-        h('div', { class: 'pc-head' }, h('b', {}, '👤 ' + u.name), u.week ? h('small', { class: 'pc-week' }, t('thisWeek', { n: u.week })) : null),
-        h('div', { class: 'pc-facts' },
-          fact('PixElo' + (u.rated && u.rated < 15 ? ' (' + t('provisional') + ')' : ''), u.rated ? String(u.elo) : '–'),
-          fact(t('peak'), u.rated ? String(u.peak ?? u.elo) : '–'),
-          fact(t('pointsTab'), String(u.points ?? 0)),
-          fact(t('solvedTab'), String(u.solved))),
-        h('div', { class: 'pc-medals' }, medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze),
-          u.records ? h('small', { class: 'pc-rec' }, t('recordsN', { n: u.records })) : null)))));
+    body.append(h('ol', { class: 'ranking' }, ...users.map((u, k) => h('li', { class: (u.name === me ? 'me ' : '') + (k < 3 ? 'top' + (k + 1) : '') },
+      h('button', { class: 'rank-line', onClick: () => playerGames(u, mode) },
+        h('span', { class: 'rank' }, k < 3 ? ['🥇', '🥈', '🥉'][k] : String(k + 1)),
+        h('b', { class: 'who-name' }, u.name),
+        h('b', { class: 'num' }, main(u), h('small', {}, scoreSort === 'points' ? ' ' + t('pointsShort') : ''))),
+      h('div', { class: 'rank-sub' },
+        other(u) ? h('span', {}, other(u)) : null,
+        h('span', {}, t('solvedTab') + ' ' + u.solved),
+        u.week ? h('span', {}, t('thisWeek', { n: u.week })) : null,
+        medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze),
+        u.records ? h('span', {}, t('recordsN', { n: u.records })) : null)))));
     // practice: per game the best results of everyone (this mode), the best first
     const pracOf = (name: string) => (name === mine.name ? practiceBests() : sc?.users.find(x => x.name === name)?.practice ?? {});
     const slot = (g: PracticeGame) => (mode === 'normal' ? g : g + '@' + mode);
@@ -129,9 +126,13 @@ export async function scoresScreen() {
         if (!packs.length) box.append(h('p', { class: 'fine' }, t('noScores')));
         box.append(h('div', { class: 'pg-list' }, ...packs.map(p => {
           const total = countPack(p)[1], n = u.packs[p.id] ?? 0, mineN = mineRow.packs?.[p.id] ?? 0;
-          return h('div', { class: 'pg-row' }, h('b', {}, pickAny(p.title, packLang())),
-            h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` })),
-            h('small', {}, `${n}/${total}` + (u.name !== mine.name ? ` · ${t('you')} ${mineN}` : '')));
+          const you = u.name !== mine.name;
+          return h('div', { class: 'pg-row' + (you ? ' with-you' : '') }, h('b', {}, pickAny(p.title, packLang())),
+            h('div', { class: 'pg-bars' },
+              h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` })),
+              you ? h('div', { class: 'bar-outer slim you' }, h('div', { class: 'bar-inner', style: `width:${total ? (mineN / total) * 100 : 0}%` })) : null),
+            h('small', { class: 'pg-n' }, `${n}/${total}`),
+            you ? h('small', { class: 'pg-you' }, t('you') + ' ' + mineN) : null);
         })));
         box.append(h('button', { class: 'btn primary', onClick: close }, t('ok')));
       });

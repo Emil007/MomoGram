@@ -133,13 +133,13 @@ export interface PuzzleProgress {
   times?: Partial<Record<Rules, number>>;
   /** first solved (for "this week" in the high scores) */
   at?: string;
-  /** PixElo: the first solve under each rule set (game/rating.ts) */
+  /** PixELO: the first solve under each rule set (game/rating.ts) */
   rated?: Partial<Record<Rules, { at: string; pr: number; s: number }>>;
   /** points this puzzle is worth so far (its best result; only goes up) */
   pts?: number;
 }
 
-/** Mega puzzles are a game of their own: progress, points and PixElo are counted apart */
+/** Mega puzzles are a game of their own: progress, points and PixELO are counted apart */
 export type Mode = 'normal' | 'mega' | 'color';
 export const modeOf = (puzzleKey: string): Mode => (puzzleKey.endsWith('@mega') ? 'mega' : puzzleKey.endsWith('@color') ? 'color' : 'normal');
 
@@ -169,7 +169,7 @@ export interface Settings {
   look?: 'auto' | 'light' | 'dark'; // dark mode for the menus (the boards keep their look); per device
   /** Mega mode: the games' own Mega puzzles get a glowing dot (mark), aren't marked (none), or are the only ones shown */
   megaMark?: 'none' | 'mark' | 'only';
-  /** the whole game's mode: plain, Mega or Colour nonograms */
+  /** the whole game's mode: plain, Mega or Colour nonograms. Stays on this device (a phone in Color must not switch the desktop). */
   mode?: Mode;
   /** the tutorials already offered (basic, mega, color): never asked again, on any device */
   tutAsked?: string[];
@@ -192,7 +192,7 @@ function readJson<T>(k: string, def: T): T {
 
 export const settings: Settings = readJson('momogram.settings', DEFAULTS);
 /** settings that belong to this device and aren't synced with an account */
-const DEVICE_SETTINGS: Array<keyof Settings> = ['music', 'musicVolume', 'sfx', 'lefty', 'toolsRight', 'normalStyle', 'freeStyle', 'look'];
+const DEVICE_SETTINGS: Array<keyof Settings> = ['music', 'musicVolume', 'sfx', 'lefty', 'toolsRight', 'normalStyle', 'freeStyle', 'look', 'mode', 'mega'];
 export function saveSettings() {
   const old = localStorage.getItem('momogram.settings');
   localStorage.setItem('momogram.settings', JSON.stringify(settings));
@@ -205,6 +205,43 @@ export function saveSettings() {
     }
   } catch { /* ignore */ }
 }
+export interface LibPrefs { order: string[]; hidden: string[]; group: 'series' | 'system' | 'none'; view?: 'cards' | 'tiles' | 'list' }
+const emptyLib = (): LibPrefs => ({ order: [], hidden: [], group: 'series' });
+/** library order, hidden games and view, per profile (synced). An id stays in the order after the game is removed. */
+export function libPrefs(): LibPrefs {
+  try {
+    const raw = localStorage.getItem(pk('library')) ?? localStorage.getItem('momogram.library');
+    const p = { ...emptyLib(), ...(raw ? JSON.parse(raw) : {}) };
+    if (!localStorage.getItem(pk('library')) && raw) localStorage.setItem(pk('library'), JSON.stringify(p));
+    return p;
+  } catch { return emptyLib(); }
+}
+export function setLibPrefs(p: LibPrefs) {
+  localStorage.setItem(pk('library'), JSON.stringify(p));
+  localStorage.setItem(pk('librarytime'), nowIso());
+  changed();
+}
+
+export interface SongMark { broken?: boolean; note?: string; at?: string }
+function songMap(): Record<string, SongMark> {
+  try { return JSON.parse(localStorage.getItem(pk('songs')) || '{}'); } catch { return {}; }
+}
+/** notes and "broken" flags for songs, keyed like a track (synced with the profile) */
+export function songMarks(): Record<string, SongMark> { return songMap(); }
+export function songMark(key: string): SongMark | undefined {
+  const m = songMap()[key];
+  return m && (m.broken || m.note) ? m : undefined;
+}
+export function setSongMark(key: string, m: { broken?: boolean; note?: string } | null) {
+  const all = songMap();
+  const note = m?.note?.trim().slice(0, 200);
+  if (!m || (!m.broken && !note)) all[key] = { at: nowIso() };
+  else all[key] = { ...(m.broken ? { broken: true } : {}), ...(note ? { note } : {}), at: nowIso() };
+  localStorage.setItem(pk('songs'), JSON.stringify(all));
+  localStorage.setItem(pk('songstime'), nowIso());
+  changed();
+}
+
 function sharedSettings(): Partial<Settings> {
   const out: any = {};
   for (const [k, v] of Object.entries(settings)) if (!DEVICE_SETTINGS.includes(k as keyof Settings)) out[k] = v;
@@ -327,7 +364,7 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
   loadActive(); // another tab / the installed app may have saved meanwhile: never write back an old copy
   const k = packId + '/' + puzzleId;
   const p = progress[k] ?? {};
-  // PixElo: only the first solve under these rules is rated
+  // PixELO: only the first solve under these rules is rated
   if (rules && extra?.rated && !p.rated?.[rules]) (p.rated ??= {})[rules] = { at: nowIso(), ...extra.rated };
   if (!p.cleared) p.at = nowIso();
   p.cleared = true;
@@ -418,18 +455,36 @@ function mergeBoards(remote: Boards): boolean {
 // ---- save files: the active profile, every pack with its own timestamp ----
 // Progress is keyed "packId/puzzleId", so a save works with any set of installed packs: entries of packs that
 // aren't installed simply wait until that pack is imported, and nothing of them is touched in between.
+// A puzzle that a later import no longer lists (a placeholder copy, or a puzzle dropped by a bad read) keeps its
+// record. Solved totals and points skip it while the pack on this device does not contain that puzzle; the
+// record counts again if the puzzle comes back. Packs that are not installed here are still counted in full.
+
+/** pack id → puzzle ids that pack currently lists (base ids, without @mega / @color). Null means "not installed". */
+let knownPuzzles: (() => Map<string, Set<string>>) | null = null;
+export function setKnownPuzzles(fn: () => Map<string, Set<string>>) { knownPuzzles = fn; }
+
+/** true when this solve should add to solved totals and points */
+export function puzzleCounts(packId: string, puzzleId: string): boolean {
+  const ids = knownPuzzles?.().get(packId);
+  if (!ids) return true;
+  return ids.has(puzzleId.replace(/@(mega|color)$/, ''));
+}
 
 export interface SaveFile {
   format: 'momogram-save'; version: 2;
   profile: { id: string; name: string };
   saved: string;
-  packs: Record<string, { updated: string; progress: Record<string, PuzzleProgress>; reset?: string }>;
+  packs: Record<string, { updated: string; progress: Record<string, PuzzleProgress>; reset?: string; have?: string[] }>;
   quick: QuickSave | null;
   settings?: Partial<Settings>;
   quickSaved?: string; // when the quick save was last set or cleared (older versions)
   boards?: Boards; // every board in progress
   settingsSaved?: string; // when a shared setting last changed
   practice?: PracticeBests; // best results of the practice games
+  library?: LibPrefs;
+  librarySaved?: string;
+  songs?: Record<string, SongMark>;
+  songsSaved?: string;
 }
 
 // ---- practice: the best result per game and mode ("sprint@mega"), kept with the profile and synced ----
@@ -469,6 +524,10 @@ function packsOf(p: ProgressMap): SaveFile['packs'] {
   }
   for (const id of Object.keys(packTimes)) out[id] ??= { updated: packTimes[id], progress: {} }; // reset packs too
   for (const [id, r] of Object.entries(resetTimes)) if (out[id]) out[id].reset = r;
+  // puzzles the installed pack still lists. The server ignores solves that are not in this list; every progress
+  // entry is still written above, so a puzzle that disappeared is not deleted from the save.
+  const known = knownPuzzles?.();
+  if (known) for (const [id, pk] of Object.entries(out)) { const ids = known.get(id); if (ids) pk.have = [...ids]; }
   return out;
 }
 
@@ -478,7 +537,47 @@ export function makeSave(): SaveFile {
     format: 'momogram-save', version: 2, profile: { id: me.id, name: me.name }, saved: nowIso(), packs: packsOf(progress), quick: getQuickSave(), boards: loadBoards(),
     settings: sharedSettings(), quickSaved: latestBoard(loadBoards())?.saved, settingsSaved: localStorage.getItem('momogram.settingstime') ?? undefined,
     practice: practiceBests(),
+    library: libPrefs(), librarySaved: localStorage.getItem(pk('librarytime')) ?? undefined,
+    songs: songMap(), songsSaved: localStorage.getItem(pk('songstime')) ?? undefined,
   };
+}
+
+/** keep every id from both orders: a game deleted on one device still has its place when it is imported again */
+function joinOrder(newer: string[], older: string[]): string[] {
+  const out = [...newer];
+  for (const id of older) if (!out.includes(id)) out.push(id);
+  return out;
+}
+function mergeLibrary(s: SaveFile): boolean {
+  if (!s.library || !s.librarySaved) return false;
+  const lt = localStorage.getItem(pk('librarytime'));
+  const cur = libPrefs();
+  const remoteFirst = !lt || s.librarySaved > lt;
+  const order = joinOrder(remoteFirst ? (s.library.order ?? []) : cur.order, remoteFirst ? cur.order : (s.library.order ?? []));
+  const next: LibPrefs = remoteFirst
+    ? { order, hidden: s.library.hidden ?? [], group: s.library.group || 'series', view: s.library.view }
+    : { ...cur, order };
+  if (JSON.stringify(next) === JSON.stringify(cur) && lt) return false;
+  localStorage.setItem(pk('library'), JSON.stringify(next));
+  if (remoteFirst) localStorage.setItem(pk('librarytime'), s.librarySaved);
+  else if (!lt || order.length !== cur.order.length) localStorage.setItem(pk('librarytime'), nowIso());
+  return true;
+}
+function mergeSongs(s: SaveFile): boolean {
+  if (!s.songs) return false;
+  const mine = songMap();
+  let any = false;
+  for (const [k, v] of Object.entries(s.songs)) {
+    if (!v || typeof v !== 'object') continue;
+    const o = mine[k];
+    if (!o || (v.at && (!o.at || v.at > o.at))) { mine[k] = v; any = true; }
+  }
+  if (!any) return false;
+  localStorage.setItem(pk('songs'), JSON.stringify(mine));
+  const st = localStorage.getItem(pk('songstime'));
+  if (s.songsSaved && (!st || s.songsSaved > st)) localStorage.setItem(pk('songstime'), s.songsSaved);
+  else localStorage.setItem(pk('songstime'), nowIso());
+  return true;
 }
 
 /**
@@ -494,7 +593,8 @@ export function mergeSave(s: SaveFile): boolean {
     const local = packTimes[id];
     const mine: Record<string, PuzzleProgress> = {};
     for (const [k, v] of Object.entries(progress)) if (k.startsWith(id + '/')) mine[k.slice(id.length + 1)] = v;
-    // a reset on one side drops what the other side did before it; otherwise both sides are joined puzzle by puzzle
+    // a reset on one side drops what the other side did before it; otherwise both sides are joined puzzle by puzzle.
+    // a puzzle the pack no longer lists is kept too: a bad import must not delete its record
     let merged: Record<string, PuzzleProgress>;
     if (!local || (rp.reset && rp.reset > local)) merged = { ...rp.progress };
     else if (resetTimes[id] && resetTimes[id] > rp.updated) merged = mine;
@@ -515,6 +615,8 @@ export function mergeSave(s: SaveFile): boolean {
   any = mergePractice(s.practice) || any;
   if (s.boards) any = mergeBoards(s.boards) || any;
   else if (s.quick && s.quickSaved) any = mergeBoards({ [bkey(s.quick.packId, s.quick.levelId, s.quick.puzzleId)]: { q: s.quick, saved: s.quickSaved } }) || any;
+  any = mergeLibrary(s) || any;
+  any = mergeSongs(s) || any;
   const st = localStorage.getItem('momogram.settingstime');
   if (s.settings && s.settingsSaved && (!st || s.settingsSaved > st)) {
     for (const [k, v] of Object.entries(s.settings)) if (!DEVICE_SETTINGS.includes(k as keyof Settings) && k in DEFAULTS) (settings as any)[k] = v;
@@ -573,8 +675,9 @@ export function localStats(mode: Mode = 'normal'): ModeStats {
   const solves: Array<{ at: string; pr: number; s: number }> = [];
   for (const [k, v] of Object.entries(progress)) {
     if (!v.cleared || modeOf(k) !== mode) continue;
-    const id = k.slice(0, k.lastIndexOf('/'));
+    const slash = k.lastIndexOf('/'), id = k.slice(0, slash);
     if (id.startsWith('my-')) continue; // packs made in the editor don't count
+    if (!puzzleCounts(id, k.slice(slash + 1))) continue; // kept in the save; the pack no longer lists this puzzle
     out.solved++; out.packs[id] = (out.packs[id] ?? 0) + 1;
     if (v.at && v.at >= week) out.week++;
     if (v.medal) out.medals[v.medal]++;
@@ -602,7 +705,11 @@ export function setPoints(list: Array<[string, string, number]>) {
 /** solved puzzles per pack id (of the active profile, or of a save) */
 export function progressSummary(s?: SaveFile): Map<string, number> {
   const m = new Map<string, number>();
-  for (const [id, pk] of Object.entries(s ? s.packs : packsOf(progress))) m.set(id, Object.values(pk.progress).filter(v => v.cleared).length);
+  for (const [id, pk] of Object.entries(s ? s.packs : packsOf(progress))) {
+    let n = 0;
+    for (const [pz, v] of Object.entries(pk.progress)) if (v.cleared && puzzleCounts(id, pz)) n++;
+    m.set(id, n);
+  }
   return m;
 }
 

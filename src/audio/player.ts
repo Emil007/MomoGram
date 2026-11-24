@@ -15,11 +15,27 @@ interface Track {
 
 interface Voice { src: AudioScheduledSourceNode; gain: GainNode; pan: StereoPannerNode; end: number; release: number; rate?: number; base?: number }
 
-// DS envelope tables, mapped to approximate times
-function attackTime(a: number) { return a >= 127 ? 0 : a >= 109 ? 0.002 * (128 - a) : 0.04 + (109 - a) * 0.012; }
-function decayTime(d: number) { return d >= 127 ? 0.001 : 0.02 + Math.pow((127 - d) / 127, 2.2) * 6; }
-function releaseTime(r: number) { return r >= 127 ? 0.005 : 0.02 + Math.pow((127 - r) / 127, 2.2) * 6; }
-function sustainLevel(s: number) { return s >= 127 ? 1 : Math.pow(10, (-(127 - s) * 0.72) / 20); }
+// DS envelope, in the sequence player's own units (one step every TICK_SEC, about 5.2 ms).
+// Full volume is 0 and silence is -92544. Attack multiplies toward 0; decay and release subtract
+// their rate each step until the sustain level. Picross DS writes sustain 0 and a slow decay
+// (rate 25 is about 19 s), so a steep curve makes every note a loud click that then vanishes.
+const ENV_SILENT = 92544;
+function attackTime(a: number) {
+  if (a <= 0) return 4;
+  const cycles = Math.log(1 / ENV_SILENT) / Math.log(Math.min(254, a) / 255);
+  return Math.min(4, cycles * TICK_SEC);
+}
+function decayTime(d: number, sustain = 0) {
+  const dist = ENV_SILENT * (1 - Math.max(0, Math.min(127, sustain)) / 127);
+  if (dist <= 1) return 0.001;
+  if (d <= 0) return 20;
+  return Math.min(20, (dist / d) * TICK_SEC);
+}
+function releaseTime(r: number) {
+  if (r <= 0) return 8;
+  return Math.min(8, (ENV_SILENT / Math.max(1, r)) * TICK_SEC);
+}
+function sustainLevel(s: number) { return Math.max(0, Math.min(127, s)) / 127; }
 function volCurve(v: number) { return v <= 0 ? 0 : Math.pow(10, (-(127 - v) * 0.36) / 20); }
 
 /** loudness of sequenced DS music against the games' recorded music (measured) */
@@ -273,10 +289,12 @@ export class SeqPlayer {
     const atk = t.attack !== 255 ? t.attack : def.attack, dec = t.decay !== 255 ? t.decay : def.decay;
     const sus = t.sustain !== 255 ? t.sustain : def.sustain, rel = t.release !== 255 ? t.release : def.release;
     const peak = volCurve(vel) * volCurve(t.vol) * volCurve(t.expr) * volCurve(this.seqVol) * 1.6 * (def.kind === 'pcm' ? 1 : 0.35);
-    const at = attackTime(atk), dt = decayTime(dec), sl = sustainLevel(sus), rt = releaseTime(rel);
-    g.gain.setValueAtTime(0, start);
-    g.gain.linearRampToValueAtTime(peak, start + at + 0.001);
-    g.gain.setTargetAtTime(peak * sl, start + at, dt / 4);
+    const at = attackTime(atk), dt = decayTime(dec, sus), sl = sustainLevel(sus), rt = releaseTime(rel);
+    const loud = Math.max(peak, 0.0001);
+    const attackEnd = start + Math.max(at, 0.005);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(loud, attackEnd);
+    g.gain.linearRampToValueAtTime(Math.max(loud * sl, 0.0001), attackEnd + Math.max(dt, 0.001));
     src.connect(g).connect(p).connect(this.out);
     src.start(start);
     const v: Voice = { src, gain: g, pan: p, end: 0, release: rt, rate: rate, base: def.baseNote };

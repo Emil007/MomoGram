@@ -75,8 +75,8 @@ export class BoardView {
   showWrong = false;
   /** lines a tutorial points at (drawn like the cursor's row and column) */
   focus: { rows: number[]; cols: number[] } | null = null;
-  // stroke state
-  private stroke: null | { x0: number; y0: number; axis: 0 | 1 | 2; value: Cell; erase: Cell; eraseColor: number; pointer: number } = null;
+  // stroke state. cleared: ✕ this fill-stroke already erased, so a later pass of the same drag does not fill them
+  private stroke: null | { x0: number; y0: number; axis: 0 | 1 | 2; value: Cell; erase: Cell; eraseColor: number; pointer: number; cleared: Set<number> } = null;
   private pointers = new Map<number, { x: number; y: number }>();
   private pinch: null | { d: number; cell: number; cx: number; cy: number; sx: number; sy: number; gx?: number; gy?: number } = null;
   private raf = 0;
@@ -301,6 +301,7 @@ export class BoardView {
   }
 
   private down(e: PointerEvent) {
+    if (this.showWrong) { this.showWrong = false; this.dirty = true; } // one look at the mistakes, then the next touch plays normally
     if (this.spin) return; // no marks while the hint roulette spins
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.local(e);
@@ -327,7 +328,7 @@ export class BoardView {
     const value = this.valueAt(tool, c.x, c.y);
     if (value === null) return;
     this.board.pushUndo();
-    this.stroke = { x0: c.x, y0: c.y, axis: 0, value, erase: cur, eraseColor: this.board.colorAt(c.x, c.y), pointer: e.pointerId };
+    this.stroke = { x0: c.x, y0: c.y, axis: 0, value, erase: cur, eraseColor: this.board.colorAt(c.x, c.y), pointer: e.pointerId, cleared: new Set() };
     this.cursorX = c.x; this.cursorY = c.y;
     this.paint(c.x, c.y);
     e.preventDefault();
@@ -418,6 +419,19 @@ export class BoardView {
   private paint(x: number, y: number) {
     const s = this.stroke;
     const cur = this.board.at(x, y);
+    // filling: a ✕ under the stroke is cleared, not filled. The same drag must not fill it on the next pass.
+    if (s && s.value === FILL) {
+      const i = y * this.board.w + x;
+      if (s.cleared.has(i)) return;
+      if (cur === CROSS) {
+        s.cleared.add(i);
+        const r = this.board.set(x, y, EMPTY, this.color);
+        if (r === 'nochange') return;
+        this.dirty = true;
+        this.ev.onChange(r);
+        return;
+      }
+    }
     // a stroke only changes cells that are empty (when marking) or carry the same mark (when erasing)
     if (s) {
       // fills and crosses go over marks; marks only onto empty cells
@@ -450,6 +464,7 @@ export class BoardView {
 
   /** Press A/B: like a tap with that tool. Holding and moving continues with the same value. */
   pressAtCursor(tool: Tool): Cell {
+    if (this.showWrong) { this.showWrong = false; this.dirty = true; }
     if (this.spin) return EMPTY;
     this.showCursor = true;
     const value = this.valueAt(tool, this.cursorX, this.cursorY);
@@ -468,6 +483,12 @@ export class BoardView {
 
   private applyAtCursor(value: Cell, continuing: boolean) {
     const cur = this.board.at(this.cursorX, this.cursorY);
+    // holding fill over a ✕ only clears it; the next press fills the empty cell
+    if (continuing && value === FILL && cur === CROSS) {
+      const r = this.board.set(this.cursorX, this.cursorY, EMPTY, this.color);
+      if (r !== 'nochange') { this.dirty = true; this.ev.onChange(r); }
+      return;
+    }
     if (continuing && (value === MARK ? cur !== EMPTY : value !== EMPTY && !blank(cur))) return;
     if (continuing && value === EMPTY && cur === EMPTY) return;
     const r = this.board.set(this.cursorX, this.cursorY, value, this.color);
@@ -632,8 +653,14 @@ export class BoardView {
       for (let y = vy0; y < vy1; y++) for (let x = vx0; x < vx1; x++) {
         const i = y * b.w + x, v = b.cells[i];
         if ((v === FILL && !b.solution[i]) || (v === CROSS && b.solution[i])) {
-          ctx.fillStyle = T.mistake; ctx.globalAlpha = 0.35; ctx.fillRect(ox + x * cs, oy + y * cs, cs, cs);
-          ctx.globalAlpha = 1; ctx.strokeRect(ox + x * cs + ctx.lineWidth / 2, oy + y * cs + ctx.lineWidth / 2, cs - ctx.lineWidth, cs - ctx.lineWidth);
+          ctx.fillStyle = T.mistake; ctx.globalAlpha = 0.4; ctx.fillRect(ox + x * cs, oy + y * cs, cs, cs);
+          ctx.globalAlpha = 1;
+          // a light ring, then the error colour: still visible when the theme itself is red
+          const inset = Math.max(1.5, cs / 10);
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, cs / 8);
+          ctx.strokeRect(ox + x * cs + 1, oy + y * cs + 1, cs - 2, cs - 2);
+          ctx.strokeStyle = T.mistake; ctx.lineWidth = Math.max(2, cs / 12);
+          ctx.strokeRect(ox + x * cs + inset, oy + y * cs + inset, cs - 2 * inset, cs - 2 * inset);
         }
       }
       ctx.restore();
@@ -814,9 +841,11 @@ function slotUnits(slots: ReturnType<typeof bandSlots>, wide: boolean) {
 
 /** what a tap with a tool does to a cell: set it, erase it, or nothing (null) */
 function valueFor(tool: Tool, cur: Cell): Cell | null {
-  // marking: a tap on a mark or a ✕ clears it (the next tap marks); a stroke that starts on a ✕ only clears ✕s, one
-  // that starts on an empty cell leaves the ✕s on its way alone
+  // marking: a tap on a mark or a ✕ clears it (the next tap marks). It never turns a ✕ into a mark.
+  // a stroke that starts on a ✕ only clears ✕s; one that starts on an empty cell leaves the ✕s on its way alone
   if (tool === 'mark') return cur === MARK || cur === CROSS ? EMPTY : cur === EMPTY ? MARK : null;
+  // filling: the first tap on a ✕ clears it, the second fills the empty cell
+  if (tool === 'fill' && cur === CROSS) return EMPTY;
   const want: Cell = tool === 'fill' ? FILL : CROSS;
   // tapping a cell that already has this mark erases (and the stroke keeps erasing); marks are written over
   return cur === want ? EMPTY : blank(cur) ? want : cur === FILL && tool === 'cross' ? EMPTY : want;

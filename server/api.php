@@ -206,6 +206,12 @@ switch ($a) {
         if (strncmp((string)$pid, 'my-', 3) === 0 || !is_array($pk['progress'] ?? null)) continue; // packs made in the editor don't count
         foreach ($pk['progress'] as $pz => $v) {
           if (!is_array($v) || empty($v['cleared'])) continue;
+          // "have" is the puzzles the installed pack still lists. Records of the rest stay in the save and are
+          // not deleted here; they just do not add to solved, points or records.
+          if (isset($pk['have']) && is_array($pk['have'])) {
+            $base = preg_replace('/@(mega|color)$/', '', (string)$pz);
+            if (!in_array($base, $pk['have'], true)) continue;
+          }
           $mode = modeOf((string)$pz);
           $x = &$m[$mode];
           $x['solved']++; $x['packs'][$pid] = ($x['packs'][$pid] ?? 0) + 1;
@@ -220,12 +226,12 @@ switch ($a) {
           $byMedal = ['bronze' => 'easy', 'silver' => 'normal', 'gold' => 'free', 'platinum' => 'free'];
           if ($pick === null && isset($v['best']) && is_numeric($v['best'])) $pick = [(int)$v['best'], $byMedal[$v['medal'] ?? ''] ?? ''];
           $medal = (!empty($v['medal']) && isset($x['medals'][$v['medal']])) ? $v['medal'] : '';
-          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1], $medal]; $x['time'] += $pick[0]; }
+          if ($pick) { $best["$pid/$pz"][] = [$r['name'], $pick[0], $pick[1], $medal, (int)($v['pts'] ?? 0)]; $x['time'] += $pick[0]; }
           unset($x);
         }
       }
       foreach ($m as &$x) {
-        // PixElo: replayed from the rated solves in order (game/rating.ts does the same)
+        // PixELO: replayed from the rated solves in order (game/rating.ts does the same)
         usort($x['rated'], fn($a, $b) => strcmp((string)$a['at'], (string)$b['at']));
         $elo = 1000; $peak = 1000; $n = 0;
         foreach ($x['rated'] as $rr) {

@@ -24,7 +24,7 @@ Add your games once: MomoGram turns each into a pack with its levels, puzzle nam
 |---|---|---|
 | <img src="docs/screenshots/phone-home.png" alt="Home screen: the mode switch, the daily nonogram and random buttons, the game library" width="100%"> | <img src="docs/screenshots/phone-puzzles.png" alt="A level: solved puzzles with their pictures and medals" width="100%"> | <img src="docs/screenshots/phone-play.png" alt="Play screen on a phone: striped clue bands, greyed-out clue numbers, the tools at the bottom" width="100%"> |
 | **Mega mode** | **Color mode** | **Solved** |
-| <img src="docs/screenshots/phone-mega.png" alt="A Mega nonogram: framed Mega numbers that count two rows or columns together" width="100%"> | <img src="docs/screenshots/phone-color.png" alt="A color nonogram: colored clue numbers and the color palette with the tools" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name, the time, points and PixElo" width="100%"> |
+| <img src="docs/screenshots/phone-mega.png" alt="A Mega nonogram: framed Mega numbers that count two rows or columns together" width="100%"> | <img src="docs/screenshots/phone-color.png" alt="A color nonogram: colored clue numbers and the color palette with the tools" width="100%"> | <img src="docs/screenshots/phone-solved.png" alt="Solved screen with the medal, the picture, its name, the time, points and PixELO" width="100%"> |
 
 <p align="center"><img src="docs/screenshots/desktop-play.png" alt="The desktop app in dark mode, a Mega puzzle: framed Mega numbers span two rows or columns, the tool column beside the board" width="80%"><br>
 <em>Desktop / Steam Deck in dark mode, playing Mega: keyboard, mouse and gamepad. The screenshots show MomoGram's own starter puzzles.</em></p>
@@ -54,7 +54,7 @@ Nonograms do that too.
 - **Three ways to play:** the mode switch on the home screen cycles through *MomoGram*, *Mega MomoGram* and *Color MomoGram*. Each mode has its own progress, medals and high scores.
 - **Mega mode** for everything: Mega numbers span two rows or columns. Games that have Mega puzzles bring their own (a glowing dot marks them); for all others MomoGram chooses the pairs, checks that each puzzle still has one solution, and makes the same choice on every device. Mega has its own progress and scores.
 - **Color mode:** color nonograms, where every block has a color and blocks of different colors may touch. The games' own color puzzles (see below), MomoGram's own color starter puzzles, and color versions of the games' color pictures where they work (few, clearly different colors and exactly one solution, checked by MomoGram's color solver). A palette with the tools shows how many cells of each color are still missing.
-- **Points and PixElo** – points count everything you've solved, PixElo is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixElo is shown under your name.
+- **Points and PixELO** – points count everything you've solved, PixELO is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixELO is shown under your name.
 - **A board that feels like the handhelds:** the row and column you draw in light up into the clues, a counter shows the length of the block you're drawing, clue numbers grey out only when their block is certainly done, logic hints (💡) turn a clue blue when its line gives away a new cell, and your own marks stay while you fill and cross the rest.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
 - **A daily nonogram** (15 a day from all your games) and a **Random** button.
@@ -89,7 +89,10 @@ One importer reads each group of games below. Every number is what the games the
 | Oekaki Logic 1, 2 | Super Famicom (Nintendo Power) | 300 | – | – | – |
 | Oh-chan no Oekaki Logic | Super Famicom | 300 | – | – | – |
 | PiCross, Picross a (homebrew) | Arduboy (.hex) | 325 | – | – | – |
-| **Total** | | **14,594** | **3,867** | **3,371** | **849** |
+| Charm Studies | Steam (the game folder) | 169 | – | – | 7 |
+| SherloCAT Holmes Nonogram | Steam (the game folder) | 114 | – | – | 6 |
+| Paint it Back | Steam (the game folder) | 158 | – | – | – |
+| **Total** | | **15,035** | **3,867** | **3,371** | **862** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
 
@@ -104,6 +107,7 @@ Every song a game has is stored with its pack and listed in the sound test (Opti
 | DS / DSiWare | the game's SDAT sound archive | MomoGram's own SSEQ sequencer with the game's instruments |
 | 3DS | BCSTM streams | DSP-ADPCM decoded in the browser |
 | Switch | FMOD sound banks (FSB5) | the Vorbis streams rebuilt as Ogg files |
+| Steam | Ogg files, or an FSB5 bank rebuilt as Ogg | the browser |
 | Game Boy / Game Boy Color | the game's sound program | emulated sound hardware (CPU and APU), only the sound banks are kept |
 | Super Famicom / Satellaview | the game's sound program | emulated SPC700 and S-DSP, from a snapshot taken when the pack is made |
 
@@ -135,9 +139,9 @@ puzzles (one solution, a recognisable picture), but even that part is far too la
 pattern by chance. The same pattern in two games is the same puzzle, which happens when a game reuses puzzles of
 an earlier one (Picross S+ and the 3DS Picross e games, for example).
 
-## Points and PixElo
+## Points and PixELO
 
-MomoGram keeps two numbers for every player, and keeps them **twice**: once for normal puzzles and once for Mega puzzles (Mega is a game of its own, with its own progress, medals and high scores). The home screen shows the PixElo of the mode you're in under your name; the high scores have a tab for each. Everything below is computed from your saved progress, so all your devices (and the server) arrive at the same numbers.
+MomoGram keeps two numbers for every player, and keeps them **twice**: once for normal puzzles and once for Mega puzzles (Mega is a game of its own, with its own progress, medals and high scores). The home screen shows the PixELO of the mode you're in under your name; the high scores have a tab for each. Everything below is computed from your saved progress, so all your devices (and the server) arrive at the same numbers.
 
 Both start from what the solver knows about a puzzle (`src/game/difficulty.ts`): its **work**, the number of cells times the square root of the passes the line-by-line solver needs (at least 25), and whether it can be solved line by line at all. From the work come the puzzle's **rating** and its **par time**, the same on every device:
 
@@ -160,18 +164,18 @@ Points only go up. Every puzzle is worth **its best result, once**:
 
 When you do better later (a better medal, a faster time), you get only the difference, so replaying a puzzle on every difficulty doesn't add up: a 15×15 gold at par gives about 63, a platinum in half the par time about 104, and the platinum replaces the gold instead of adding to it. Puzzles solved before points existed are counted from their stored medals and times.
 
-### PixElo: how good you are
+### PixELO: how good you are
 
-PixElo is a rating like in chess, where every puzzle is an opponent with its own rating. Everyone starts at **1000**; a 1000 player is about even with a typical 10×10.
+PixELO is a rating like in chess, where every puzzle is an opponent with its own rating. Everyone starts at **1000**; a 1000 player is about even with a typical 10×10.
 
 1. **Which solves count:** the **first solve of a puzzle under each rule set** (Easy, Normal, Hard), so one puzzle can be rated up to three times. Replays are unrated (the solved screen says so), and leaving a puzzle costs nothing, since puzzles are always kept and can be continued.
 2. **Your score for a solve,** between 0 and 1, from your time against the par time: score = 1 / (1 + (time / par)^1.5). At par you score 0.5, in half the time about 0.74, in double the time about 0.26. Help makes the time count longer: Easy (mistakes are caught for you) ×1.5, logic hints ×1.2, each spin of the hint roulette +30 s.
 3. **What was expected** of you against that puzzle: expected = 1 / (1 + 10^((puzzle − you) / 400)). Against a puzzle rated 200 above you, you're expected to score 0.24; 200 below you, 0.76.
-4. **The change:** K · (score − expected), rounded. K is 40 for your first 15 rated solves (so you find your level fast) and 20 after that. Until then your PixElo is *provisional* (shown with a "?"). It never drops below 100.
+4. **The change:** K · (score − expected), rounded. K is 40 for your first 15 rated solves (so you find your level fast) and 20 after that. Until then your PixELO is *provisional* (shown with a "?"). It never drops below 100.
 
 Examples for a player at 1000: a 15×15 (rating ~1200) solved at par: +10; in half the par time: +20; in double the par time: +1. A 5×5 (rating ~650) at double par: −25, because a 1000 player should be much faster there.
 
-The highest PixElo you've reached is kept as your peak. Your PixElo isn't stored but recalculated from your rated solves in the order you made them, so a device that syncs later gets the same value. All constants are in `src/game/rating.ts` (`RATING`).
+The highest PixELO you've reached is kept as your peak. Your PixELO isn't stored but recalculated from your rated solves in the order you made them, so a device that syncs later gets the same value. All constants are in `src/game/rating.ts` (`RATING`).
 
 ## Platforms
 
@@ -196,13 +200,13 @@ A pack is a single `.momopack` file: a zip with `pack.json` (the puzzles, plus a
 
 ## Your own server
 
-If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there (each file stored once, music optional when downloading; a download that's interrupted, for example when the phone goes to sleep, continues where it stopped) and shows high scores (points, PixElo, puzzles solved, medals, fastest times, practice records). Up to 10 accounts. Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
+If you want to, you can run a small server on your own web space (PHP with MySQL, e.g. Plesk). It keeps progress, the paused puzzle and settings in sync between your devices. It also keeps packs for everyone with an account there (each file stored once, music optional when downloading; a download that's interrupted, for example when the phone goes to sleep, continues where it stopped) and shows high scores (points, PixELO, puzzles solved, medals, fastest times, practice records). Up to 10 accounts. Accounts need an invite code that you choose. Download `MomoGram-…-server.zip` from the releases and follow [server/README.md](server/README.md).
 
 **What the account keeps the same on every device, and what stays on each device:**
 
 | Synced with your account | Kept on each device |
 |---|---|
-| Progress of every puzzle: solved, medals, times per rules, points, PixElo | The server address and the login |
+| Progress of every puzzle: solved, medals, times per rules, points, PixELO | The server address and the login |
 | Boards you started (and the paused puzzle) | Your games and packs themselves (download them from the server's shelf) |
 | Practice records (per game and mode) | Music on/off, music volume, sound effects, the music style per rule set |
 | Language, hint roulette, logic hints, unlock all levels, difficulty, timer shown, how music is picked, the games' own music and colors, Mega mark, the mode (Normal / Mega / Color), which tutorials were offered | Light / dark mode, left-handed layout, tools on the right |

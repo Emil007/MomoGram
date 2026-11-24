@@ -145,7 +145,8 @@ export const Audio = {
       const src = ac!.createBufferSource(), gain = ac!.createGain();
       src.buffer = buf;
       const li = (buf as any).loopInfo;
-      if (loop && li?.loop) { src.loop = true; src.loopStart = li.loopStart / li.sampleRate; src.loopEnd = li.loopEnd / li.sampleRate; }
+      // a file with loop points repeats between them; other music repeats the whole piece
+      if (loop) { src.loop = true; if (li?.loop) { src.loopStart = li.loopStart / li.sampleRate; src.loopEnd = li.loopEnd / li.sampleRate; } }
       src.connect(gain).connect(master!);
       src.start();
       stream = { src, gain };

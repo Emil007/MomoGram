@@ -14,7 +14,7 @@ import { COLOR, MEGA, ctx, colorOfPz, colorView, curMode, fromText, h, header, h
 
 // ---------------------------------------------------------------- practice
 // Small games with random puzzles from your own games, in the mode that is on (Normal, Mega or Color). Nothing here
-// counts as solving the puzzle: no progress, medals, points or PixElo; only each game's best result is kept (per
+// counts as solving the puzzle: no progress, medals, points or PixELO; only each game's best result is kept (per
 // profile and mode, on this device).
 export type PracticeGame = 'errors' | 'finish' | 'sprint' | 'spot' | 'line' | 'memory';
 export const PRACTICE_GAMES: Array<{ id: PracticeGame; icon: string; higher?: boolean }> = [

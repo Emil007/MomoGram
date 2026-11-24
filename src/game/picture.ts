@@ -42,6 +42,15 @@ export class PictureAnimator {
         const p = bgr555(pal);
         for (const s of a.script) { this.frames.push(renderCell(s.cells, tiles, p)); this.durations.push(Math.max(1, s.frames)); }
         this.loopTo = a.loopTo;
+        // scripts often open and close on an empty cell: those frames are a blank icon and a blank flash
+        while (this.frames.length && frameEmpty(this.frames[0])) {
+          this.frames.shift(); this.durations.shift();
+          if (this.loopTo > 0) this.loopTo--;
+        }
+        while (this.frames.length > 1 && frameEmpty(this.frames[this.frames.length - 1])) { this.frames.pop(); this.durations.pop(); }
+        if (this.loopTo >= this.frames.length) this.loopTo = 0;
+        const first = this.frames.findIndex(f => !frameEmpty(f));
+        this.idx = first < 0 ? 0 : first;
         this.box = usedBox(this.frames);
       }
     }
@@ -57,10 +66,23 @@ export class PictureAnimator {
       this.acc -= this.durations[this.idx];
       this.idx++;
       if (this.idx >= this.frames.length) this.idx = Math.min(this.loopTo, this.frames.length - 1);
+      // a blank frame in the middle is skipped, so the picture never flashes empty
+      let guard = 0;
+      while (frameEmpty(this.frames[this.idx]) && guard++ < this.frames.length) {
+        this.idx++;
+        if (this.idx >= this.frames.length) this.idx = Math.min(this.loopTo, this.frames.length - 1);
+      }
+      if (frameEmpty(this.frames[this.idx])) break;
     }
   }
 
   lastFrame(): Frame | null { return this.frames.length ? this.frames[this.frames.length - 1] : null; }
+  /** the frame with the most drawn pixels: the icon on the puzzle list, not an empty hold frame */
+  bestFrame(): Frame | null {
+    let best: Frame | null = null, n = 0;
+    for (const f of this.frames) { const c = opaqueCount(f); if (c > n) { n = c; best = f; } }
+    return best;
+  }
   get usedBox() { return this.box; }
 
   draw(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
@@ -75,6 +97,17 @@ export class PictureAnimator {
     ctx.imageSmoothingEnabled = this.still.width > 64; // large illustrations smooth, pixel pictures sharp
     ctx.drawImage(this.still, x + (size - this.still.width * s) / 2, y + (size - this.still.height * s) / 2, this.still.width * s, this.still.height * s);
   }
+}
+
+function frameEmpty(f: Frame): boolean {
+  if (!f.width || !f.height) return true;
+  for (let i = 0; i < f.pixels.length; i++) if (f.pixels[i] >>> 24) return false;
+  return true;
+}
+function opaqueCount(f: Frame): number {
+  let n = 0;
+  for (let i = 0; i < f.pixels.length; i++) if (f.pixels[i] >>> 24) n++;
+  return n;
 }
 
 /** the smallest box holding every drawn (not transparent) pixel of all frames */
@@ -122,7 +155,7 @@ export function thumbnail(p: PackPuzzle & { anim?: AnimRef }, pck: PckGetter | n
   c.width = size; c.height = size;
   const ctx = c.getContext('2d')!;
   const a = new PictureAnimator(p, pck, packId);
-  const lf = a.lastFrame();
+  const lf = a.bestFrame();
   if (lf) drawFrame(ctx, lf, 0, 0, size, a.usedBox);
   else a.draw(ctx, 0, 0, size);
   return c;

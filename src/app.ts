@@ -11,7 +11,7 @@ import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/pictu
 import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
 import { readEntries, packRev, newRev } from './packs/io';
 import { upgradeStoredPack } from './packs/importers/index';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark } from './store';
 import { puzzleRating, performance as perfScore, points, RatedRules } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
 export { choose };
@@ -96,6 +96,12 @@ export async function boot() {
   setLang((want in LANG_NAMES ? want : 'en') as Lang);
   storage.persist();
   ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
+  // solved totals skip records whose puzzle the installed pack no longer lists; the records stay in the save
+  setKnownPuzzles(() => {
+    const m = new Map<string, Set<string>>();
+    for (const p of [STARTER, ...ctx.packs]) m.set(p.id, new Set(p.levels.flatMap(l => l.puzzles.map(z => z.id.replace(/@(mega|color)$/, '')))));
+    return m;
+  });
   // packs stored by older versions: each importer brings its own up to date
   for (const p of ctx.packs) if (upgradeStoredPack(p)) await storage.savePack(p);
   // desktop app started with --rom <file> (shortcuts): import that game
@@ -237,13 +243,13 @@ document.addEventListener('visibilitychange', () => {
   if (slot) { lastCheck = 0; showUpdate(slot); }
 });
 
-/** the profile button: the name, and below it the PixElo of the mode being played (provisional: fewer than 15 rated solves) */
+/** the profile button: the name, and below it the PixELO of the mode being played (provisional: fewer than 15 rated solves) */
 function profileChip(): HTMLElement {
   const st = localStats(curMode());
   const prov = st.rated < 15;
   return h('button', { class: 'btn profile-chip', onClick: () => profileDialog(home), title: t('profile') + (st.rated ? ' · ' + `${st.points} ${t('pointsShort')}` : '') },
     h('span', {}, '👤 ' + activeProfile().name),
-    h('small', { class: 'elo-line' + (prov ? ' prov' : ''), title: prov ? t('provisional') : '' }, 'PixElo ' + (st.rated ? st.elo + (prov ? '?' : '') : '–')));
+    h('small', { class: 'elo-line' + (prov ? ' prov' : ''), title: prov ? t('provisional') : '' }, 'PixELO ' + (st.rated ? st.elo + (prov ? '?' : '') : '–')));
 }
 
 async function backfillPoints() {
@@ -273,14 +279,17 @@ function modeIcon(): Element {
     + '<path d="M20 12a8 8 0 0 1-13.7 5.6"/><path d="M4 12a8 8 0 0 1 13.7-5.6"/><path d="M18.5 2.8v4h-4"/><path d="M5.5 21.2v-4h4"/></svg>';
   return box;
 }
-function megaSwitch(): HTMLElement {
-  const m = curMode(), next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
+/** the home-screen mode button: one tap moves to the next mode. `onPick` receives that next mode. */
+export function modeSwitchButton(m: Mode, onPick: (next: Mode) => void): HTMLElement {
+  const next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
   const label = (v: Mode) => (v === 'mega' ? t('megaOn') : v === 'color' ? t('colorOn') : t('megaOff'));
   return h('button', { class: 'mode-switch ms-' + m, title: t('megaHelp') + ' → ' + label(next), 'aria-label': label(m) + ' → ' + label(next),
-    onClick: () => { setMode(next); home(); if (next !== 'normal') offerTutorial(next); } },
-    // no words: the logo already says which mode is on; the arrows say "switch", the dots where you are
+    onClick: () => onPick(next) },
     modeIcon(),
     h('span', { class: 'ms-dots', 'aria-hidden': 'true' }, ...MODES.map(v => h('i', { class: v === m ? 'on' : '' }))));
+}
+function megaSwitch(): HTMLElement {
+  return modeSwitchButton(curMode(), next => { setMode(next); home(); if (next !== 'normal') offerTutorial(next); });
 }
 
 // ---------------------------------------------------------------- home: the game library
@@ -503,7 +512,7 @@ function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
     h('div', { class: 'stats' },
       stat(t('size'), `${pz.width}×${pz.height}`),
       stat(t('level'), h('span', { class: 'diff d' + puzzleLevel(pz) }, t('diff' + puzzleLevel(pz)))),
-      // the par time: what a 1000 PixElo player needs (beating it raises your PixElo and gives the speed bonus)
+      // the par time: what a 1000 PixELO player needs (beating it raises your PixELO and gives the speed bonus)
       h('div', { class: 'stat', title: t('parHelp') }, h('small', {}, t('best')), h('b', {}, pr.best !== undefined ? formatTime(pr.best) : '–'),
         h('small', { class: 'par' }, 'Par ' + formatTime(puzzleRating(pz.rows, curMode() === 'mega').par * 1000))),
       stat(t('medal'), pr.medal ? medalEl(pr.medal, true) : '–')),
@@ -612,6 +621,7 @@ export function allPacks(): Pack[] {
 // own (PICROSS e6–e9, the Switch games, S+ for every e game) or chosen by MomoGram (game/mega.ts: the same on
 // every device). Mega puzzles are puzzles of their own for progress and scores: their ids end in "@mega".
 export const MEGA = '@mega';
+/** this device's mode. `mega` is the old flag: it still wins when an older save has no mode of its own */
 export const curMode = (): Mode => (settings.mode && settings.mode !== 'normal' ? settings.mode : settings.mega ? 'mega' : 'normal');
 function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); }
 export const COLOR = '@color';
@@ -811,15 +821,22 @@ function trackName(ref: string): string {
   return (seq ?? file).replace(/\.(bcstm|sdat|gbsnd|spc|ogg)$/i, '').replace(/_SEQ$/i, '').replace(/[_-]+/g, ' ').trim();
 }
 
-/** "♪ track · game" on the home screen; tapping it skips to another track from all games */
+/** "♪ track · game" on the home screen; a tap skips, a long press edits this song the way the sound test does */
 function nowPlaying(): HTMLElement {
+  let hold = 0, held = false;
   const el = h('button', { class: 'now-playing', title: t('skipTrack'), onClick: () => {
+    if (held) { held = false; return; }
     const cur = idKey(Snd.current());
     const pool = uniqTracks(allPacks().flatMap(p => [...menuTracks(p), ...packTracks(p)])).filter(x => trackKey(x.pack.id, x.ref) !== cur);
     if (!pool.length) return;
     const tr = pool[Math.floor(Math.random() * pool.length)];
     Snd.playPack(tr.pack.id, tr.ref);
   } });
+  const arm = () => { held = false; window.clearTimeout(hold); hold = window.setTimeout(() => { held = true; songMenu(); }, 520); };
+  el.addEventListener('pointerdown', arm);
+  el.addEventListener('pointerup', () => window.clearTimeout(hold));
+  el.addEventListener('pointercancel', () => window.clearTimeout(hold));
+  el.addEventListener('pointerleave', () => window.clearTimeout(hold));
   const show = (id: string) => {
     const i = id.indexOf('/'), pack = allPacks().find(p => p.id === id.slice(0, i));
     el.hidden = !id || !pack;
@@ -1065,7 +1082,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // "show mistakes" (Normal and Hard): marks wrong cells, the medal is bronze from then on
   let usedWrong = !!(restore as any)?.usedWrong;
   view.showWrong = usedWrong && !!(restore as any)?.wrongOn;
-  // roulette spins (PixElo counts each as extra time)
+  // roulette spins (PixELO counts each as extra time)
   let roulette = (restore as any)?.roulette ?? 0;
   if (/[?&]debug/.test(location.search)) (window as any).__play = {
     board, view,
@@ -1214,22 +1231,19 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
           if (!board.color) box.append(btn(t('fillMarks'), () => { end(); board.pushUndo(); if (board.fillMarks()) Snd.sfx('mistake'); view.invalidate(); updateInfo(); if (board.checkSolved()) solved(); }));
           box.append(btn(t('clearMarks'), () => { end(); board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }));
         }
-        // music: pause / continue the same song, or the next one; the menu stays open
-        const playing = settings.music && !Snd.paused() && !!Snd.current();
-        box.append(h('div', { class: 'menu-row' },
-          btn(playing ? '⏸ ' + t('musicPause') : '▶ ' + t('musicPlay'), () => {
-            if (!settings.music) { settings.music = true; saveSettings(); playMusicFor(pack); }
-            else if (Snd.paused()) Snd.resume();
-            else if (!Snd.current()) playMusicFor(pack);
-            else Snd.pause();
-            setTimeout(draw, 30);
-          }),
-          btn('⏭ ' + t('musicNext'), () => { if (!settings.music) { settings.music = true; saveSettings(); } playMusicFor(pack); setTimeout(draw, 30); })));
-        box.append(btn('💡 ' + (logicOn ? t('logicOff') : t('logicOnBtn')) + (rules === 'free' && !usedHints && !logicOn ? ' · ' + t('noPlatinum') : ''), async () => { await setLogic(!logicOn); draw(); }));
-        if (rules !== 'easy') box.append(btn('🔍 ' + (view.showWrong ? t('wrongOff') : t('wrongOn')) + (!usedWrong ? ' · ' + t('onlyBronze') : ''), async () => {
-          if (!view.showWrong && !usedWrong && !(await confirmBox(t('wrongAsk'), t('wrongYes')))) return;
-          view.showWrong = !view.showWrong; if (view.showWrong) usedWrong = true;
-          view.invalidate(); draw();
+        const helps: HTMLElement[] = [];
+        helps.push(btn('💡 ' + (logicOn ? t('logicOff') : t('logicOnBtn')) + (rules === 'free' && !usedHints && !logicOn ? ' · ' + t('noPlatinum') : ''), async () => { await setLogic(!logicOn); draw(); }));
+        // one look at the mistakes per attempt; the next touch on the board clears the marks and play goes on
+        if (rules !== 'easy' && !usedWrong) helps.push(btn('🔍 ' + t('wrongOn') + ' · ' + t('onlyBronze'), async () => {
+          if (!(await confirmBox(t('wrongAsk'), t('wrongYes')))) return;
+          usedWrong = true; view.showWrong = true; view.invalidate();
+          end();
+        }));
+        box.append(h('div', { class: 'menu-row' }, ...helps));
+        box.append(btn(settings.toolsRight ? t('toolsLeft') : t('toolsRight'), () => {
+          settings.toolsRight = !settings.toolsRight; saveSettings();
+          document.querySelector('.play')?.classList.toggle('tools-right', settings.toolsRight);
+          draw();
         }));
         box.append(btn(t('restart'), () => { end(); cleanup(); clearBoard(pack.id, lv.id, pz.id); play(pack, lv, index, back, undefined, true); }));
         box.append(btn(t('endGame'), async () => {
@@ -1242,6 +1256,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
           else if (choice === 'drop') { cleanup(); clearBoard(pack.id, lv.id, pz.id); back(); }
           else { last = performance.now(); running = true; }
         }));
+        box.append(nowPlaying());
       };
       draw();
       return end; // back: continue playing
@@ -1273,7 +1288,7 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' || usedWrong ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
-    // points and PixElo (the first solve under these rules is rated); a daily puzzle counts in its own game
+    // points and PixELO (the first solve under these rules is rated); a daily puzzle counts in its own game
     const mode = curMode(), mega = pz.id.endsWith(MEGA);
     // shown mistakes: counts like Easy (bronze, rated and timed under Easy)
     const rr = usedWrong ? 'easy' : rules;
@@ -1316,7 +1331,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
       best !== undefined ? h('div', {}, t('best'), h('b', {}, formatTime(best))) : null),
     score ? h('div', { class: 'score-gain' },
       h('span', { class: 'pts' + (score.points ? ' up' : '') }, (score.points ? '+' + score.points : '±0') + ' ' + t('pointsShort')),
-      h('span', { class: 'elo' + (score.elo > 0 ? ' up' : score.elo < 0 ? ' down' : '') }, score.rated ? `${score.elo >= 0 ? '+' : ''}${score.elo} PixElo · ${score.now}` : t('unratedReplay'))) : null,
+      h('span', { class: 'elo' + (score.elo > 0 ? ' up' : score.elo < 0 ? ' down' : '') }, score.rated ? `${score.elo >= 0 ? '+' : ''}${score.elo} PixELO · ${score.now}` : t('unratedReplay'))) : null,
     fastestRow(pack.id, pz.id),
     h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => { stop(); back(); } }, t('toList')), next)));
   setTimeout(() => { Snd.stop(); usePack(pack, 'menu'); }, roleSongs(pack.theme, 'clear').length ? 4500 : 1500);
@@ -1483,7 +1498,7 @@ function serverSection(): HTMLElement {
           h('button', { class: 'btn primary', onClick: () => go(false) }, t('login')),
           h('button', { class: 'btn', onClick: () => go(true) }, t('register'))));
     }
-    box.append(msg, h('p', { class: 'fine left' }, t('serverHelp')));
+    box.append(msg);
   };
   draw();
   return box;
@@ -1551,24 +1566,59 @@ async function lengthOf(p: Pack, ref: string): Promise<[number, number?, number?
 }
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
+/** role chips, off, and the broken flag with its note — shared by the sound test and the player's long-press menu */
+function songTools(p: Pack, ref: string, all: Array<{ p: Pack; ref: string }>, after: () => void): HTMLElement {
+  const ROLES: Array<[SongRole, string]> = [['title', t('roleTitle')], ['menu', t('roleMenu')], ['play', t('rolePlay')], ['clear', t('roleClear')]];
+  const off = isOff(p, ref);
+  const has = (role: SongRole) => roleSongs(p.theme, role).includes(ref);
+  const everywhere = async (fn: (th: PackTheme, r: string) => void) => { for (const x of all) await editSongs(x.p, th => fn(th, x.ref)); };
+  const key = trackKey(p.id, ref);
+  const mark = songMark(key);
+  const note = h('input', { type: 'text', class: 'text song-note', maxlength: '200', placeholder: t('songNotePh'), value: mark?.note ?? '', 'aria-label': t('songNote') }) as HTMLInputElement;
+  note.addEventListener('change', () => { const m = songMark(key); setSongMark(key, { broken: !!m?.broken, note: note.value }); after(); });
+  return h('div', { class: 'song-tools' },
+    h('div', { class: 'chips' }, ...ROLES.map(([role, label]) => h('button', {
+      class: 'chip' + (has(role) ? ' on' : ''), 'aria-pressed': String(has(role)), disabled: p === STARTER || off ? true : undefined,
+      onClick: async () => {
+        const on = !has(role);
+        await everywhere((th, r) => { const cur = roleSongs(th, role).filter(x => x !== r); setRoleSongs(th, role, on ? [...cur, r] : cur); });
+        after();
+      } }, label)),
+      h('button', { class: 'chip off' + (off ? ' on' : ''), title: t('songOffTitle'), 'aria-pressed': String(off), disabled: p === STARTER ? true : undefined,
+        onClick: async () => { await everywhere((th, r) => { const o = new Set(th.off ?? []); if (off) o.delete(r); else o.add(r); th.off = [...o]; if (!th.off.length) delete th.off; }); after(); } }, '⊘ ' + t('songOff')),
+      h('button', { class: 'chip' + (mark?.broken ? ' on broken' : ''), 'aria-pressed': String(!!mark?.broken),
+        onClick: () => { const m = songMark(key); setSongMark(key, { broken: !m?.broken, note: m?.note }); after(); } }, '⚠ ' + t('songBroken'))),
+    note);
+}
+
+/** long-press on the player: the current song's sound-test settings */
+function songMenu() {
+  const id = Snd.current();
+  const i = id.indexOf('/');
+  const pack = i < 0 ? undefined : allPacks().find(p => p.id === id.slice(0, i));
+  if (!pack) return;
+  const ref = id.slice(i + 1);
+  const key = trackKey(pack.id, ref);
+  const all = gamesWith(id).map(p => ({ p, ref: songsOf(p.theme).find(r => trackKey(p.id, r) === key) ?? ref }));
+  panel((box, close) => {
+    const host = h('div');
+    const draw = () => host.replaceChildren(songTools(pack, ref, all.length ? all : [{ p: pack, ref }], draw));
+    box.append(h('h3', {}, trackName(ref)), host, h('button', { class: 'btn primary', onClick: close }, t('ok')));
+    draw();
+  });
+}
+
 /**
- * Every song of every game, playable. The buttons beside a song set where the games play it (title, menu,
- * puzzle, clear; several songs per role are fine) or switch it off. A song that several games have is one song:
- * its tags apply in all of them.
+ * Every song of every game, playable, one collapsible section per game. The buttons beside a song set where the
+ * games play it, switch it off, or mark it broken with a note. A song that several games have is one song.
  */
 function soundTest(filter: 'all' | 'once' | 'off' = 'all') {
   const body = h('div', { class: 'soundtest' });
-  screen(header(t('soundTest'), optionsScreen), body);
+  const sc = screen(header(t('soundTest'), optionsScreen), body);
   if (!settings.music || !settings.packMusic) body.append(h('p', { class: 'fine' }, t('soundTestOff')));
-  body.append(h('p', { class: 'fine' }, t('soundTestHelp2')));
-  const ROLES: Array<[SongRole, string]> = [['title', t('roleTitle')], ['menu', t('roleMenu')], ['play', t('rolePlay')], ['clear', t('roleClear')]];
-  const buttons: Array<[string, HTMLElement]> = [];
-  body.append(h('div', { class: 'st-bar' },
-    h('button', { class: 'btn ghost', onClick: () => Snd.stop() }, '■ ' + t('stop')),
-    h('span', { class: 'gap' }),
-    ...([['all', t('stAll')], ['once', t('stOnce')], ['off', t('stOff')]] as const).map(([f, label]) =>
-      h('button', { class: 'chip' + (filter === f ? ' on' : ''), onClick: () => soundTest(f) }, label))));
-  // every game that has each song (by content), and the first one in library order
+  const bar = h('div', { class: 'st-bar' });
+  const host = h('div', { class: 'st-games' });
+  body.append(bar, host);
   const games = new Map<string, Array<{ p: Pack; ref: string }>>();
   for (const p of allPacks()) for (const ref of songsOf(p.theme)) {
     const k = trackKey(p.id, ref);
@@ -1576,64 +1626,66 @@ function soundTest(filter: 'all' | 'once' | 'off' = 'all') {
     if (!l.some(x => x.p === p)) l.push({ p, ref });
     games.set(k, l);
   }
-  const lengths: Array<() => Promise<void>> = [];
-  for (const p of allPacks()) {
-    const songs = songsOf(p.theme);
-    if (!songs.length) continue;
-    const several = new Set(songs.map(songPlatform)).size > 1;
-    const list = h('div', { class: 'tracks' });
-    const draw = () => {
-      list.replaceChildren();
+  const buttons: Array<[string, HTMLElement]> = [];
+  let drew = false;
+  const draw = () => {
+    const keep = sc.scrollTop;
+    bar.replaceChildren(
+      h('button', { class: 'btn ghost', onClick: () => Snd.stop() }, '■ ' + t('stop')),
+      h('span', { class: 'gap' }),
+      ...([['all', t('stAll')], ['once', t('stOnce')], ['off', t('stOff')]] as const).map(([f, label]) =>
+        h('button', { class: 'chip' + (filter === f ? ' on' : ''), onClick: () => { filter = f; draw(); } }, label)));
+    buttons.length = 0;
+    host.replaceChildren();
+    const playing = Snd.current();
+    for (const p of allPacks()) {
+      const songs = songsOf(p.theme);
+      if (!songs.length) continue;
+      const several = new Set(songs.map(songPlatform)).size > 1;
+      const list = h('div', { class: 'tracks' });
       const seen = new Set<string>();
-      for (const ref of songsOf(p.theme)) {
+      for (const ref of songs) {
         const key = trackKey(p.id, ref);
-        if (seen.has(key)) continue; // the same song twice in one game
+        if (seen.has(key)) continue;
         seen.add(key);
         const all = games.get(key) ?? [{ p, ref }];
         const first = all[0].p !== p ? all[0].p : null;
         const off = isOff(p, ref);
         if (filter === 'once' && first) continue;
-        if (filter === 'off' && !off) continue;
+        if (filter === 'off' && !off && !songMark(key)?.broken) continue;
         const has = (role: SongRole) => roleSongs(p.theme, role).includes(ref);
         const lenEl = h('small', { class: 'len' });
         const others = all.filter(x => x.p !== p);
-        const note = [several ? songPlatform(ref) : '', first ? t('sameAs', { game: pickAny(first.title, packLang()) }) : others.length ? t('alsoIn', { n: others.length }) : ''].filter(Boolean).join(' · ');
+        const extra = [several ? songPlatform(ref) : '', first ? t('sameAs', { game: pickAny(first.title, packLang()) }) : others.length ? t('alsoIn', { n: others.length }) : '', songMark(key)?.note ?? ''].filter(Boolean).join(' · ');
         const playBtn = h('button', { class: 'btn track', title: others.length ? t('alsoInList') + '\n' + others.map(x => pickAny(x.p.title, packLang())).join('\n') : '',
           onClick: () => { void Snd.playPack(p.id, ref, !has('clear') && !/jingle|jng|_j_|jg_\d/i.test(ref)); } },
-          h('b', {}, '▶ ' + trackName(ref)), lenEl, note ? h('small', {}, note) : null);
-        lengths.push(async () => {
-          const l = await lengthOf(p, ref);
-          if (l) lenEl.textContent = mmss(l[0]) + (l[1] !== undefined && (l[1] > 0.5 || (l[2] ?? l[0]) < l[0] - 0.5) ? ` · ↻ ${mmss(l[1])}–${mmss(l[2] ?? l[0])}` : l[1] !== undefined ? ' · ↻' : '');
+          h('b', {}, '▶ ' + trackName(ref)), lenEl, extra ? h('small', {}, extra) : null);
+        void lengthOf(p, ref).then(l => {
+          if (l && lenEl.isConnected) lenEl.textContent = mmss(l[0]) + (l[1] !== undefined && (l[1] > 0.5 || (l[2] ?? l[0]) < l[0] - 0.5) ? ` · ↻ ${mmss(l[1])}–${mmss(l[2] ?? l[0])}` : l[1] !== undefined ? ' · ↻' : '');
         });
         buttons.push([p.id + '/' + ref, playBtn]);
-        // a change applies to this song in every game that has it
-        const everywhere = async (fn: (th: PackTheme, r: string) => void) => { for (const x of all) await editSongs(x.p, th => fn(th, x.ref)); };
-        const chips = h('div', { class: 'chips' }, ...ROLES.map(([role, label]) => h('button', {
-          class: 'chip' + (has(role) ? ' on' : ''), 'aria-pressed': String(has(role)), disabled: p === STARTER || off ? true : undefined,
-          onClick: async () => {
-            const on = !has(role);
-            await everywhere((th, r) => {
-              const cur = roleSongs(th, role).filter(x => x !== r);
-              setRoleSongs(th, role, on ? [...cur, r] : cur);
-            });
-            soundTest(filter);
-          } }, label)),
-          h('button', { class: 'chip off' + (off ? ' on' : ''), title: t('songOffTitle'), 'aria-pressed': String(off), disabled: p === STARTER ? true : undefined,
-            onClick: async () => { await everywhere((th, r) => { const o = new Set(th.off ?? []); if (off) o.delete(r); else o.add(r); th.off = [...o]; if (!th.off.length) delete th.off; }); soundTest(filter); } }, '⊘ ' + t('songOff')));
-        list.append(h('div', { class: 'song' + (first ? ' dup' : '') + (off ? ' is-off' : '') }, playBtn, chips));
+        list.append(h('div', { class: 'song' + (first ? ' dup' : '') + (off ? ' is-off' : '') + (songMark(key)?.broken ? ' broken' : '') }, playBtn, songTools(p, ref, all, draw)));
       }
-      mark(Snd.current());
-    };
-    draw();
-    if (list.childElementCount) body.append(h('section', { class: 'opt-card' }, h('h2', {}, pickAny(p.title, packLang())), list));
+      if (!list.childElementCount) continue;
+      const open = playing.startsWith(p.id + '/');
+      host.append(h('details', { class: 'opt-card st-game' + (open ? ' playing' : ''), open: open ? true : undefined },
+        h('summary', {}, pickAny(p.title, packLang())), list));
+    }
+    if (!buttons.length) host.append(h('p', { class: 'fine' }, t('soundTestNone')));
+    mark(playing);
+    if (drew) sc.scrollTop = keep;
+    drew = true;
+  };
+  function mark(cur: string) {
+    for (const [id, b] of buttons) b.classList.toggle('on', id === cur);
+    for (const d of host.querySelectorAll('details.st-game')) d.classList.remove('playing');
+    const packId = cur.slice(0, cur.indexOf('/'));
+    const sec = [...host.querySelectorAll('details.st-game')].find(d => buttons.some(([id, b]) => id.startsWith(packId + '/') && d.contains(b) && id === cur));
+    if (sec) { sec.classList.add('playing'); (sec as HTMLDetailsElement).open = true; }
   }
-  if (!buttons.length) body.append(h('p', { class: 'fine' }, t('soundTestNone')));
-  function mark(cur: string) { for (const [id, b] of buttons) b.classList.toggle('on', id === cur); }
-  mark(Snd.current());
+  draw();
   const on = (id: string) => { if (body.isConnected) mark(id); else Snd.offChange(on); };
   queueMicrotask(() => Snd.onChange(on));
-  // lengths: read one file after the other in the background (they're kept on this device after that)
-  (async () => { for (const f of lengths) { if (!body.isConnected) return; await f(); } })();
 }
 
 function optionsScreen() {
@@ -1655,8 +1707,9 @@ function optionsScreen() {
   const row = (label: string, ctl: Node, note?: string) => h('div', { class: 'opt' }, h('div', { class: 'opt-label' }, h('span', {}, label), note ? h('small', {}, note) : null), ctl);
   const card = (title: string, ...rows: Array<Node | null>) => h('section', { class: 'opt-card' }, h('h2', {}, title), ...rows);
   screen(header(t('options'), home), h('div', { class: 'options' },
-    h('button', { class: 'btn big opt-packs', onClick: () => packsScreen(optionsScreen) }, h('b', {}, '📦 ' + t('packs')), h('small', {}, t('packsHelp'))),
-    h('button', { class: 'btn big opt-tuts', onClick: () => tutorialsScreen() }, h('b', {}, '🎓 ' + t('tutorials')), h('small', {}, t('tutorialsHelp'))),
+    h('div', { class: 'opt-links' },
+      h('button', { class: 'btn big opt-packs', onClick: () => packsScreen(optionsScreen) }, h('b', {}, '📦 ' + t('packs'))),
+      h('button', { class: 'btn big opt-tuts', onClick: () => tutorialsScreen() }, h('b', {}, '🎓 ' + t('tutorials')))),
     card(t('secSound'),
       row(t('music'), toggle('music', () => settings.music ? menuMusic(null, true) : Snd.stop())),
       settings.music ? row(t('volume'), vol) : null,
@@ -1674,14 +1727,16 @@ function optionsScreen() {
       row(t('toolsRight'), toggle('toolsRight')),
       row(t('language'), langSel)),
     card(t('secSave'), saveSection()),
-    card(t('secServer'), serverSection()),
+    card(t('secServer'), serverSection(),
+      h('details', { class: 'opt-more' }, h('summary', {}, t('more')), h('p', { class: 'fine left' }, t('serverHelp')))),
     card(t('secAbout'),
       row(t('version'), h('b', { class: 'version' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION)),
-      h('p', { class: 'fine left' }, t('controls')),
-      h('p', { class: 'fine left' }, t('musicNote')),
       h('button', { class: 'btn', onClick: () => galleryScreen() }, '🔍 ' + t('gallery')),
-      /[?&]debug/.test(location.search) ? h('button', { class: 'btn', onClick: () => textureInspector(screen, header('3DS textures', optionsScreen)) }, '3DS textures (debug)') : null,
-      h('p', { class: 'fine left' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · ' + t('noGameData')))));
+      h('details', { class: 'opt-more' }, h('summary', {}, t('more')),
+        h('p', { class: 'fine left' }, t('controls')),
+        h('p', { class: 'fine left' }, t('musicNote')),
+        h('p', { class: 'fine left' }, 'MomoGram ' + (window as any).MOMOGRAM_VERSION + ' · MIT · ' + t('noGameData'))),
+      /[?&]debug/.test(location.search) ? h('button', { class: 'btn', onClick: () => textureInspector(screen, header('3DS textures', optionsScreen)) }, '3DS textures (debug)') : null)));
 }
 
 /**

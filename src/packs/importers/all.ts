@@ -16,3 +16,6 @@ import './sfc-oekaki-logic';
 import './sfc-ohchan-logic';
 import './sfc-picross-np';
 import './sfc-picross';
+import './steam-charm-studies';
+import './steam-paint-it-back';
+import './steam-sherlocat';

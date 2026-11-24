@@ -53,10 +53,36 @@ export interface BoardShape {
   cellStyle: 'dither' | 'solid' | 'bevel'; fillStyle: 'dither' | 'solid' | 'inset' | 'bevel' | 'gloss'; cellBevel: [string, string]; fillBevel: [string, string];
 }
 
+function parseHex(c: string): RGB | null {
+  const m = c.trim().match(/^#([0-9a-f]{6})$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function relLum([r, g, b]: RGB) {
+  const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function contrastOf(a: RGB, b: RGB) {
+  const x = relLum(a), y = relLum(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+/** an error colour that stays readable on this board (a red theme must not hide red mistakes) */
+function standOut(against: string[], current: string): string {
+  const bgs = against.map(parseHex).filter((c): c is RGB => !!c);
+  if (!bgs.length) return current;
+  const score = (hex: string) => { const c = parseHex(hex); return c ? Math.min(...bgs.map(b => contrastOf(c, b))) : 0; };
+  if (score(current) >= 3) return current;
+  const cands = ['#00c8f0', '#ffe14a', '#3ddc6a', '#ffffff', '#111111', '#6aa2ff', '#ff5ad8'];
+  return cands.reduce((best, c) => score(c) > score(best) ? c : best);
+}
+
 /** a skin, then the game's exact values over it */
 function finish(c: ThemeColors, p: NonNullable<PackTheme['palette']>): ThemeColors {
   if (p.board) Object.assign(c.board, p.board);
   if (p.screen) { if (p.screen.bg) c.bg = p.screen.bg; if (p.screen.panel) c.panel = p.screen.panel; if (p.screen.top) c.top = p.screen.top; }
+  const b = c.board;
+  b.mistake = standOut([b.fill, b.cell, b.cross, b.bg], b.mistake ?? '#e03030');
   return c;
 }
 

@@ -216,8 +216,9 @@ registerSetImporter({
       const m = n.match(/^(.*?)(?:StreamingAssets\/AssetBundles\/)?puzzledata(\.unity3d)?$/i) ?? n.match(/^(.*?)StreamingAssets\/aa\/[^/]+\/puzzledata_assets_all[^/]*\.bundle$/i);
       if (m && !/\.manifest$/i.test(n)) { roots.add(m[1]); continue; }
       // PICROSS S keeps everything in resources.assets
+      // a Unity player's <game>_Data/resources.assets is not a Switch game
       const r = n.match(/^(.*\/)?resources\.assets$/i);
-      if (r && !names.some(x => x.startsWith((r[1] ?? '') + AB + 'puzzledata'))) roots.add(r[1] ?? '');
+      if (r && !/_Data\/resources\.assets$/i.test(n) && !names.some(x => x.startsWith((r[1] ?? '') + AB + 'puzzledata'))) roots.add(r[1] ?? '');
     }
     // the folder above Data/ is the game's
     return [...roots];
