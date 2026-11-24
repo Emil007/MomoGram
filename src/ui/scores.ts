@@ -103,8 +103,9 @@ export async function scoresScreen() {
         other(u) ? h('span', {}, other(u)) : null,
         h('span', {}, t('solvedTab') + ' ' + u.solved),
         u.week ? h('span', {}, t('thisWeek', { n: u.week })) : null,
-        medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze),
-        u.records ? h('span', {}, t('recordsN', { n: u.records })) : null)))));
+        u.records ? h('span', {}, t('recordsN', { n: u.records })) : null),
+      h('div', { class: 'rank-medals' },
+        medalCount('platinum', u.medals.platinum), medalCount('gold', u.medals.gold), medalCount('silver', u.medals.silver), medalCount('bronze', u.medals.bronze))))))
     // practice: per game the best results of everyone (this mode), the best first
     const pracOf = (name: string) => (name === mine.name ? practiceBests() : sc?.users.find(x => x.name === name)?.practice ?? {});
     const slot = (g: PracticeGame) => (mode === 'normal' ? g : g + '@' + mode);
@@ -124,15 +125,15 @@ export async function scoresScreen() {
       panel((box, close) => {
         box.append(h('h3', {}, u.name + (m === 'mega' ? ' · Mega' : '')));
         if (!packs.length) box.append(h('p', { class: 'fine' }, t('noScores')));
+        const bar = (n: number, total: number) => h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` }));
+        const line = (label: string, n: number, total: number, kind: string) => h('div', { class: 'pg-line ' + kind },
+          h('span', { class: 'pg-who' }, label), bar(n, total), h('span', { class: 'pg-n' }, `${n}/${total}`));
         box.append(h('div', { class: 'pg-list' }, ...packs.map(p => {
           const total = countPack(p)[1], n = u.packs[p.id] ?? 0, mineN = mineRow.packs?.[p.id] ?? 0;
           const you = u.name !== mine.name;
-          return h('div', { class: 'pg-row' + (you ? ' with-you' : '') }, h('b', {}, pickAny(p.title, packLang())),
-            h('div', { class: 'pg-bars' },
-              h('div', { class: 'bar-outer slim' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` })),
-              you ? h('div', { class: 'bar-outer slim you' }, h('div', { class: 'bar-inner', style: `width:${total ? (mineN / total) * 100 : 0}%` })) : null),
-            h('small', { class: 'pg-n' }, `${n}/${total}`),
-            you ? h('small', { class: 'pg-you' }, t('you') + ' ' + mineN) : null);
+          return h('div', { class: 'pg-row' }, h('b', {}, pickAny(p.title, packLang())),
+            you ? line(u.name, n, total, 'them') : h('div', { class: 'pg-line self' }, bar(n, total), h('span', { class: 'pg-n' }, `${n}/${total}`)),
+            you ? line(t('you'), mineN, total, 'you') : null);
         })));
         box.append(h('button', { class: 'btn primary', onClick: close }, t('ok')));
       });
