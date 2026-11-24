@@ -127,13 +127,14 @@ export async function scoresScreen() {
         if (!packs.length) box.append(h('p', { class: 'fine' }, t('noScores')));
         const bar = (n: number, total: number) => h('div', { class: 'bar-outer' }, h('div', { class: 'bar-inner', style: `width:${total ? (n / total) * 100 : 0}%` }));
         const line = (label: string, n: number, total: number, kind: string) => h('div', { class: 'pg-line ' + kind },
-          h('span', { class: 'pg-who' }, label), bar(n, total), h('span', { class: 'pg-n' }, `${n}/${total}`));
+          h('div', { class: 'pg-meta' }, h('span', { class: 'pg-who' }, label), h('span', { class: 'pg-n' }, `${n}/${total}`)),
+          bar(n, total));
         box.append(h('div', { class: 'pg-list' }, ...packs.map(p => {
           const total = countPack(p)[1], n = u.packs[p.id] ?? 0, mineN = mineRow.packs?.[p.id] ?? 0;
           const you = u.name !== mine.name;
           return h('div', { class: 'pg-row' }, h('b', {}, pickAny(p.title, packLang())),
-            you ? line(u.name, n, total, 'them') : h('div', { class: 'pg-line self' }, bar(n, total), h('span', { class: 'pg-n' }, `${n}/${total}`)),
-            you ? line(t('you'), mineN, total, 'you') : null);
+            you ? h('div', { class: 'pg-pair' }, line(u.name, n, total, 'them'), line(t('you'), mineN, total, 'you'))
+              : h('div', { class: 'pg-line self' }, bar(n, total), h('span', { class: 'pg-n' }, `${n}/${total}`)));
         })));
         box.append(h('button', { class: 'btn primary', onClick: close }, t('ok')));
       });
