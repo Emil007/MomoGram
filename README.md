@@ -92,7 +92,8 @@ One importer reads each group of games below. Every number is what the games the
 | Charm Studies | Steam (the game folder) | 169 | – | – | 7 |
 | SherloCAT Holmes Nonogram | Steam (the game folder) | 114 | – | – | 6 |
 | Paint it Back | Steam (the game folder) | 158 | – | – | – |
-| **Total** | | **15,035** | **3,867** | **3,371** | **862** |
+| Pixel Puzzle Makeout League | Steam (the game folder) | 288 | – | 288 | 6 |
+| **Total** | | **15,323** | **3,867** | **3,659** | **868** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
 
@@ -107,7 +108,7 @@ Every song a game has is stored with its pack and listed in the sound test (Opti
 | DS / DSiWare | the game's SDAT sound archive | MomoGram's own SSEQ sequencer with the game's instruments |
 | 3DS | BCSTM streams | DSP-ADPCM decoded in the browser |
 | Switch | FMOD sound banks (FSB5) | the Vorbis streams rebuilt as Ogg files |
-| Steam | Ogg files, or an FSB5 bank rebuilt as Ogg | the browser |
+| Steam | Ogg files, or an FSB5 bank rebuilt as Ogg (a PCM16 sting stays a WAV) | the browser |
 | Game Boy / Game Boy Color | the game's sound program | emulated sound hardware (CPU and APU), only the sound banks are kept |
 | Super Famicom / Satellaview | the game's sound program | emulated SPC700 and S-DSP, from a snapshot taken when the pack is made |
 

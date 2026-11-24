@@ -5,6 +5,7 @@ import type { ChipMessage } from './worklet';
 
 export class ChipPlayer {
   private node: AudioWorkletNode | ScriptProcessorNode | null = null;
+  private trim: GainNode;
   private gain: GainNode;
   private ready: Promise<void> | null = null;
   private sent = new Set<string>();
@@ -14,8 +15,20 @@ export class ChipPlayer {
   private last: { kind: ChipKind; key: string; data: Uint8Array; song: number } | null = null;
 
   constructor(private ac: AudioContext, out: AudioNode) {
+    this.trim = ac.createGain();
     this.gain = ac.createGain();
-    this.gain.connect(out);
+    this.trim.connect(this.gain).connect(out);
+  }
+
+  /** chip audio before the fade, so a meter hears the song and not the fade-out */
+  get monitor(): AudioNode { return this.trim; }
+
+  setTrim(v: number, ramp = false) {
+    const t = this.ac.currentTime;
+    const g = this.trim.gain;
+    g.cancelScheduledValues(t);
+    if (ramp) { g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(v, t + 0.3); }
+    else g.setValueAtTime(v, t);
   }
 
   private setup(): Promise<void> {

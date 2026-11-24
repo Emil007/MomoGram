@@ -18,4 +18,5 @@ import './sfc-picross-np';
 import './sfc-picross';
 import './steam-charm-studies';
 import './steam-paint-it-back';
+import './steam-pixel-puzzle';
 import './steam-sherlocat';
