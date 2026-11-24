@@ -613,7 +613,8 @@ export function allPacks(): Pack[] {
   const ps = [STARTER, ...ctx.packs], m = curMode();
   if (m === 'mega') return ps.map(megaView).filter(p => p.levels.length);
   if (m === 'color') return ps.map(colorView).filter(p => p.levels.length);
-  return ps.map(plainView);
+  // a game of only colour or only Mega puzzles has nothing to play here
+  return ps.map(plainView).filter(p => p.levels.length);
 }
 
 // ---------------------------------------------------------------- Mega mode
@@ -1402,7 +1403,7 @@ function saveSection(): HTMLElement {
   const me = activeProfile();
   const sum = progressSummary();
   const total = [...sum.values()].reduce((a, b) => a + b, 0);
-  const known = new Set(allPacks().map(p => p.id));
+  const known = new Set([STARTER.id, ...ctx.packs.map(p => p.id)]);
   const waiting = [...sum.entries()].filter(([id, n]) => n && !known.has(id) && id !== 'daily').length;
   const exportSave = () => {
     const file = me.name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().replace(/\s+/g, '-') || 'MomoGram';

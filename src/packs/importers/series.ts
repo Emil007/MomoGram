@@ -12,8 +12,8 @@ export function seriesOf(p: Pack): string {
     [/^picross e\d*$/i, 'Picross e'], [/^picross s/i, 'Picross S'], [/^picross np/i, 'Picross NP'], [/^picross ds/i, 'Picross DS'],
     [/mario|^picross 2$/i, 'Mario'], [/pok[eé]mon/i, 'Pokémon'], [/club nintendo|my ?nintendo/i, 'Nintendo rewards'], [/tamori/i, 'Tamori'],
     [/sanrio|hello kitty/i, 'Sanrio'], [/puzzle iro iro/i, 'Puzzle Iro Iro'],
-    // these were one folder; they are different series
-    [/illu-logi/i, 'Illu-Logi'], [/illust logic/i, 'Illust Logic'], [/illust puzzle/i, 'Illust Puzzle'],
+    // Illu-Logi VOW belongs with Hudson's Illust Logic; SIMPLE DS Illust Puzzle stays its own folder
+    [/illu-logi/i, 'Illust Logic'], [/illust logic/i, 'Illust Logic'], [/illust puzzle/i, 'Illust Puzzle'],
     [/oekaki/i, 'Oekaki'], [/ds puzzler|challenge me/i, 'DS Puzzler'],
   ];
   for (const [re, name] of rules) if (re.test(n)) return name;
