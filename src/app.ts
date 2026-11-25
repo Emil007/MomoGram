@@ -1592,9 +1592,15 @@ function saveSection(): HTMLElement {
 }
 
 export function serverError(e: any): string {
-  const code = e instanceof Sync.ServerError ? e.code : String(e?.message || e);
-  const s = t('err.' + code);
-  return s === 'err.' + code ? t('err.other', { code }) : s;
+  if (e instanceof Sync.ServerError) {
+    // blob truncated / hash mismatch from the wire → same wording as a damaged download
+    if (e.code === 'truncated' || e.code === 'hash') return t('downloadBroken');
+    const s = t('err.' + e.code);
+    return s === 'err.' + e.code ? t('err.other', { code: e.code }) : s;
+  }
+  // plain Error from our own checks (validatePack, SHA-1, …): keep the message (incl. which file)
+  const msg = String(e?.message || e || '');
+  return msg || t('err.other', { code: '?' });
 }
 
 /** all lessons in one place: the three tutorials and the three technique lessons, per mode */

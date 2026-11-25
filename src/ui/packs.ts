@@ -279,7 +279,10 @@ export function openPackManager(pm: PM) {
     const actions = h('div', { class: 'row wrap' });
     const upSlot = h('div', { class: 'up-slot' });
     if (list.length) {
-      const all = h('button', { class: 'btn' + (missing.length + updates.length ? ' primary' : ''), disabled: missing.length + updates.length ? undefined : true }, `⤓ ${t('downloadAll')} (${missing.length + updates.length})`) as HTMLButtonElement;
+      const need = missing.length + updates.length;
+      // one pack left: say "Download", not "Download all"
+      const all = h('button', { class: 'btn' + (need ? ' primary' : ''), disabled: need ? undefined : true },
+        `⤓ ${need === 1 ? t('download') : t('downloadAll')} (${need})`) as HTMLButtonElement;
       all.onclick = () => fetchPacks([...updates, ...missing], all, withMusic.checked);
       const upd = h('button', { class: 'btn', disabled: updates.length ? undefined : true }, `⟳ ${t('updateAll')} (${updates.length})`) as HTMLButtonElement;
       upd.onclick = () => fetchPacks(updates, upd, withMusic.checked);
@@ -310,6 +313,7 @@ export function openPackManager(pm: PM) {
               if (await Sync.serverApi() >= 2) {
                 // pack.json + files by hash: files the server has (from other packs) aren't sent again
                 const { assets: _a, ...json } = p;
+                if (!validatePack(json)) throw new Error(t('downloadBroken') + ' (pack)');
                 const musicFiles = new Set(songsOf(p.theme).map(r => r.split('#')[0]));
                 const files = [];
                 for (const name of await storage.assetNames(p.id)) {
@@ -391,13 +395,16 @@ export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: 
       let made: Pack[];
       if (split) {
         const raw = split.pack as Pack;
-        if (!validatePack(raw) || raw.id !== sps[i].id) throw new Error(t('downloadBroken'));
+        if (!raw || raw.id !== sps[i].id) throw new Error(t('downloadBroken') + ` (${sps[i].id}: id)`);
+        if (!validatePack(raw)) throw new Error(t('downloadBroken') + ` (${sps[i].id}: pack)`);
         const p = raw;
         p.assets = [];
-        const want = split.assets.filter(a => music || !a.music);
+        const want = (split.assets ?? []).filter(a => music || !a.music);
         for (let k = 0; k < want.length; k++) {
           const a = want[k];
-          if (!a.name || a.name.length > 240 || a.name.includes('..') || a.name.startsWith('/') || a.name.includes('\\') || a.name.includes('\0') || !/^[0-9a-f]{40}$/.test(a.hash)) throw new Error(t('downloadBroken'));
+          if (!a.name || a.name.length > 240 || a.name.includes('..') || a.name.startsWith('/') || a.name.includes('\\') || a.name.includes('\0') || !/^[0-9a-f]{40}$/.test(a.hash)) {
+            throw new Error(t('downloadBroken') + ` (${a?.name || 'asset'}: list)`);
+          }
           step(`${i + 1}/${sps.length} · ${k + 1}/${want.length}`);
           // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again —
           // but only if its bytes still match the hash (a half-written cache must not be trusted)
@@ -405,7 +412,8 @@ export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: 
           if (data && await sha1(data) !== a.hash) data = undefined;
           if (!data) {
             data = await steady(sig => Sync.downloadBlob(a.hash, sig), () => step(`${i + 1}/${sps.length} · ${k + 1}/${want.length} · ${t('waiting')}`));
-            if (await sha1(data) !== a.hash) throw new Error(t('downloadBroken'));
+            if (data.length !== (a.size || data.length)) throw new Error(t('downloadBroken') + ` (${a.name}: size ${data.length}/${a.size})`);
+            if (await sha1(data) !== a.hash) throw new Error(t('downloadBroken') + ` (${a.name}: hash)`);
             await storage.saveDownload(data);
           }
           p.assets.push({ name: a.name, data });
@@ -413,7 +421,7 @@ export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: 
         made = [p];
       } else {
         made = (await readEntries(unzipAll(await steady(() => Sync.downloadPack(sps[i].id))), lang(), t)).made.filter(p => p.id === sps[i].id && validatePack(p));
-        if (!made.length) throw new Error(t('downloadBroken'));
+        if (!made.length) throw new Error(t('downloadBroken') + ` (${sps[i].id}: zip)`);
       }
       // a pack from the server keeps its revision (old uploads without one count as 1)
       for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;

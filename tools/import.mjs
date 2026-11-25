@@ -14,7 +14,7 @@ if (!args.length) { console.log('usage: node tools/import.mjs <game file>... [--
 // the importers, bundled for Node (build.mjs keeps all.ts up to date; run it once after adding a file)
 const entry = `import './src/packs/importers/all'; export { importGameFile, importFileSet } from './src/packs/importers/index';`;
 const res = await build({ stdin: { contents: entry, resolveDir: join(dirname(fileURLToPath(import.meta.url)), '..'), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
-const tmp = join(process.env.TMPDIR || '/tmp', `momogram-import-${process.pid}.mjs`);
+const tmp = join(process.env.TEMP || process.env.TMPDIR || '/tmp', `momogram-import-${process.pid}.mjs`);
 writeFileSync(tmp, res.outputFiles[0].text);
 const { importGameFile, importFileSet } = await import(pathToFileURL(tmp).href);
 
