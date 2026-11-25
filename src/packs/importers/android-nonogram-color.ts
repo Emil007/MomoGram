@@ -407,7 +407,6 @@ registerSetImporter({
         const dir = m[1].replace(/\/$/, '');
         roots.add(dir || '.');
       }
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     return [...roots];
   },

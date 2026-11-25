@@ -502,7 +502,6 @@ registerSetImporter({
       } else if (/^AndroidManifest\.xml$/i.test(n)) {
         roots.add('.');
       }
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     return [...roots];
   },

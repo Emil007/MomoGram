@@ -9,8 +9,8 @@ export interface Importer {
   name: string;
   /** raised whenever the importer reads more or differently: packs made by an older version can be updated */
   version?: number;
-  /** cheap check on the bytes */
-  detect(data: Uint8Array, fileName: string): boolean;
+  /** cheap check on the bytes (may be async when the marker needs a nested look) */
+  detect(data: Uint8Array, fileName: string): boolean | Promise<boolean>;
   read(data: Uint8Array, fileName: string): Pack[] | Promise<Pack[]>;
   /** brings a pack stored by an older MomoGram up to date (without the game file); true when it changed it */
   upgrade?(pack: Pack): boolean;
@@ -30,7 +30,7 @@ export class ImportCancelled extends Error { constructor() { super('cancelled');
 /** every importer's upgrade for a stored pack (see Importer.upgrade); true when the pack changed */
 export function upgradeStoredPack(p: Pack): boolean {
   let changed = false;
-  for (const i of importers) if (i.upgrade?.(p)) changed = true;
+  for (const i of [...importers, ...setImporters]) if (i.upgrade?.(p)) changed = true;
   return changed;
 }
 
@@ -48,6 +48,7 @@ export interface SetImporter {
   /** the games among the paths: a root folder each (every file under it is the game's) */
   find(names: string[]): string[];
   read(files: GameFiles, root: string): Promise<Pack[]>;
+  upgrade?(pack: Pack): boolean;
 }
 const setImporters: SetImporter[] = [];
 export function registerSetImporter(i: SetImporter) { setImporters.push(i); }
@@ -105,18 +106,23 @@ export async function importFileSet(files: GameFiles, each?: (r: ImportResult) =
     for (const root of imp.find(files.names)) {
       // a blank root must not hide every later game, and must not be treated as already covered by "" 
       if (!blankRoot(root) && roots.some(r => !blankRoot(r) && root.startsWith(r))) continue;
-      roots.push(root);
       const label = root.replace(/\/$/, '') || imp.name;
       const token = folderStamp(root, files, imp.name);
       if (token && known.some(p => scansOf(p).some(s => s.file === token.file && s.size === token.size && s.v === importerVersion(s.by)))) {
+        roots.push(root);
         await push({ file: label, ok: false, packs: [], message: 'uptodate' }); continue;
       }
       try {
         const packs = await imp.read(files, root);
+        // only claim the root when this importer actually produced a pack — a speculative find
+        // (e.g. every .apk) must not block later importers for the same file
+        if (!packs.length) continue;
+        roots.push(root);
         stamp(packs, imp, token?.file ?? label, token?.size ?? 0);
-        await push({ file: label, ok: packs.length > 0, packs, message: packs.length ? imp.name : 'unsupported' });
+        await push({ file: label, ok: true, packs, message: imp.name });
       } catch (e: any) {
-        await push({ file: label, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` });
+        // wrong game for this importer: leave the files for the next one (do not mark used)
+        if (e instanceof ImportCancelled) await push({ file: label, ok: false, packs: [], message: 'cancelled' });
       }
     }
   }
@@ -136,7 +142,7 @@ export function is3dsEncrypted(d: Uint8Array): boolean | null {
 export async function importGameFile(name: string, data: Uint8Array): Promise<ImportResult> {
   for (const imp of importers) {
     let ok = false;
-    try { ok = imp.detect(data, name); } catch { ok = false; }
+    try { ok = !!(await imp.detect(data, name)); } catch { ok = false; }
     if (!ok) continue;
     try {
       const packs = await imp.read(data, name);

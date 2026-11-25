@@ -50,7 +50,7 @@ const SIZES: Record<number, Array<[number, number]>> = {
 
 registerSetImporter({
   name: 'Piczle Cross Adventure (Steam)',
-  version: 4, // 4: texture pairing, loose bgm uexp, Ogg trimmed to its last page
+  version: 5, // 5: shared pack id with Switch (one menu entry)
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {
@@ -71,6 +71,12 @@ registerSetImporter({
     const data = await opened.files.get(uexp);
     if (!data) throw new Error('puzzledata.uexp could not be read.');
     return [await packOf(data, opened.files, opened.root, files, root)];
+  },
+  upgrade(pack) {
+    if (pack.id !== 'nsw-piczle-cross-adventure' && pack.id !== 'steam-piczle-cross-adventure') return false;
+    pack.id = 'piczle-cross-adventure';
+    pack.source.platform = 'Nintendo Switch / Steam';
+    return true;
   },
 });
 
@@ -248,9 +254,10 @@ async function packOf(data: Uint8Array, files: GameFiles, root: string, allFiles
   return {
     format: 'momogram-pack',
     version: 1,
-    id: 'steam-piczle-cross-adventure',
+    // one pack for Steam and Switch (same game; see nsw-piczle-adventure.ts)
+    id: 'piczle-cross-adventure',
     title: { en: 'Piczle Cross Adventure' },
-    source: { game: 'Piczle Cross Adventure', platform: 'Steam', developer: 'Score Studios' },
+    source: { game: 'Piczle Cross Adventure', platform: 'Nintendo Switch / Steam', developer: 'Score Studios' },
     theme: {
       ...music.theme,
       palette: {

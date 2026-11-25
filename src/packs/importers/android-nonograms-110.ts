@@ -752,7 +752,6 @@ registerSetImporter({
         const r = n.slice(0, n.indexOf('res/'));
         roots.add(r === '' ? '.' : r.replace(/\/$/, ''));
       }
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     return [...roots];
   },

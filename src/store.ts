@@ -351,6 +351,45 @@ export function deleteProfile(id: string) {
   if (localStorage.getItem('momogram.profile') === id) switchProfile(all[0].id);
 }
 
+/** move progress / boards / pack times from one pack id to another (importer upgrades that rename a pack) */
+export function rekeyPackProgress(oldId: string, newId: string) {
+  if (oldId === newId) return;
+  loadActive();
+  const pre = oldId + '/';
+  let any = false;
+  for (const [k, v] of Object.entries(progress)) {
+    if (!k.startsWith(pre)) continue;
+    const nk = newId + '/' + k.slice(pre.length);
+    progress[nk] = bestOf(progress[nk], v);
+    delete progress[k];
+    any = true;
+  }
+  if (packTimes[oldId]) {
+    if (!packTimes[newId] || packTimes[oldId] > packTimes[newId]) packTimes[newId] = packTimes[oldId];
+    delete packTimes[oldId];
+    any = true;
+  }
+  if (resetTimes[oldId]) {
+    if (!resetTimes[newId] || resetTimes[oldId] > resetTimes[newId]) resetTimes[newId] = resetTimes[oldId];
+    delete resetTimes[oldId];
+    localStorage.setItem(pk('resets'), JSON.stringify(resetTimes));
+    any = true;
+  }
+  const boards = loadBoards();
+  let boardsChanged = false;
+  for (const [k, v] of Object.entries(boards)) {
+    if (!k.startsWith(oldId + '|')) continue;
+    const nk = newId + k.slice(oldId.length);
+    const q = v.q ? { ...v.q, packId: newId } : null;
+    const cur = boards[nk];
+    if (!cur || (v.saved > cur.saved)) boards[nk] = { q, saved: v.saved };
+    delete boards[k];
+    boardsChanged = true;
+  }
+  if (boardsChanged) storeBoards(boards);
+  if (any) persist([newId]);
+}
+
 export function getProgress(packId: string, puzzleId: string): PuzzleProgress {
   return progress[packId + '/' + puzzleId] ?? {};
 }

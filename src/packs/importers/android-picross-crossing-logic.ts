@@ -399,7 +399,6 @@ registerSetImporter({
       // an already-extracted game folder: its assets/bin/Data/<hash> level files live here
       if (isDataName(n)) roots.add(n.slice(0, n.indexOf('assets/')) || '.');
       // a picked distribution file: only the file itself as root (never shadow real folders)
-      if (/^(?:[^/]+)\.(?:apk|xapk|apkm|zip)$/i.test(n) && !n.includes('/')) roots.add(n);
     }
     return [...roots];
   },

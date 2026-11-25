@@ -190,6 +190,8 @@ export function mergePacks(a: Pack, b: Pack): Pack {
   out.title = { ...b.title, ...a.title };
   const regions = new Set([a.source.region, b.source.region].flatMap(r => (r ?? '').split('/')).filter(Boolean));
   out.source.region = [...regions].join('/');
+  const platforms = new Set([a.source.platform, b.source.platform].flatMap(r => (r ?? '').split(/\s*\/\s*/)).filter(Boolean));
+  if (platforms.size) out.source.platform = [...platforms].join(' / ');
   // remember every file both were read from, so none of them is read again needlessly
   const scans = joinScans(scansOf(a), scansOf(b));
   delete out.source.scan;

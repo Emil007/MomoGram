@@ -339,7 +339,6 @@ registerSetImporter({
         roots.add(r === '' ? '.' : r.replace(/\/$/, ''));
       }
       // an APK/XAPK/APKM/ZIP file inside the picked folder
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     return [...roots];
   },

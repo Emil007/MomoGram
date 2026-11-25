@@ -456,7 +456,6 @@ registerSetImporter({
     for (const n of names) {
       // an already-extracted base APK folder: its assets/bin/Data/data.unity3d live here
       if (/^assets\/bin\/Data\/data\.unity3d$/i.test(n)) roots.add(n.slice(0, n.indexOf('assets/')) || '.');
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     return [...roots];
   },
