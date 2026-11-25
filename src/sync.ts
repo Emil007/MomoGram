@@ -1,6 +1,7 @@
 // Connection to a MomoGram server (server/api.php): accounts, the synced save and the shared pack shelf.
 // The server address is set per device; every profile can log in to its own account.
 import { activeProfile, makeSave, mergeSave, onLocalChange, isSaveFile, profiles, switchProfile, createProfile, rekeyProfile, SaveFile, setServerTime } from './store';
+import { sha1 } from './util/files';
 
 export interface Account { name: string; token: string; admin: boolean; rev: number; synced?: string }
 export interface ServerPack {
@@ -55,7 +56,13 @@ async function call(a: string, opts: { method?: string; json?: unknown; body?: B
 
 async function readResponse(r: Response, raw?: boolean): Promise<any> {
   const opts = { raw };
-  if (opts.raw && r.ok) return new Uint8Array(await r.arrayBuffer());
+  if (opts.raw && r.ok) {
+    const buf = new Uint8Array(await r.arrayBuffer());
+    // a proxy that gzip-compresses or truncates the body would break SHA-1 checks on music files
+    const cl = r.headers.get('Content-Length');
+    if (cl && Number(cl) !== buf.length) throw new ServerError('truncated', r.status, { want: Number(cl), got: buf.length });
+    return buf;
+  }
   let data: any = null;
   try { data = await r.json(); } catch { throw new ServerError(r.ok ? 'notmomogram' : 'http' + r.status, r.status); }
   if (data?.now) setServerTime(data.now);
@@ -240,6 +247,8 @@ export async function uploadPackSplit(id: string, meta: ServerPack['meta'], pack
     const f = need[k];
     const d = await f.data();
     if (!d) throw new ServerError('missing', 0);
+    // the hash on the file list must match the bytes we send (a bad IndexedDB decompress would fail here)
+    if (await sha1(d) !== f.hash) throw new ServerError('hash', 0);
     const n = Math.max(1, Math.ceil(d.length / part));
     for (let i = 0; i < n; i++) {
       await call('blob_part', { method: 'POST', body: d.slice(i * part, (i + 1) * part), args: { hash: f.hash, i, n } });

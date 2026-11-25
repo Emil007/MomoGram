@@ -313,10 +313,10 @@ export function openPackManager(pm: PM) {
                 const musicFiles = new Set(songsOf(p.theme).map(r => r.split('#')[0]));
                 const files = [];
                 for (const name of await storage.assetNames(p.id)) {
-                  let hash = await storage.assetHash(p.id, name);
-                  let cached: Uint8Array | undefined;
-                  if (!hash) { cached = await storage.loadAsset(p.id, name); if (!cached) continue; hash = await sha1(cached); }
-                  files.push({ name, hash, size: cached?.length ?? 0, music: musicFiles.has(name), data: async () => cached ?? await storage.loadAsset(p.id, name) });
+                  const data = await storage.loadAsset(p.id, name);
+                  if (!data) continue;
+                  const hash = await sha1(data);
+                  files.push({ name, hash, size: data.length, music: musicFiles.has(name), data: async () => data });
                 }
                 await Sync.uploadPackSplit(p.id, meta, json, files, prog);
               } else await Sync.uploadPack(p.id, meta, await momopackOf(p), prog);
@@ -399,8 +399,10 @@ export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: 
           const a = want[k];
           if (!a.name || a.name.length > 240 || a.name.includes('..') || a.name.startsWith('/') || a.name.includes('\\') || a.name.includes('\0') || !/^[0-9a-f]{40}$/.test(a.hash)) throw new Error(t('downloadBroken'));
           step(`${i + 1}/${sps.length} · ${k + 1}/${want.length}`);
-          // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again
+          // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again —
+          // but only if its bytes still match the hash (a half-written cache must not be trusted)
           let data = await storage.loadBlob(a.hash).catch(() => undefined);
+          if (data && await sha1(data) !== a.hash) data = undefined;
           if (!data) {
             data = await steady(sig => Sync.downloadBlob(a.hash, sig), () => step(`${i + 1}/${sps.length} · ${k + 1}/${want.length} · ${t('waiting')}`));
             if (await sha1(data) !== a.hash) throw new Error(t('downloadBroken'));
