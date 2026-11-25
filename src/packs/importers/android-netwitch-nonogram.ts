@@ -863,8 +863,9 @@ export async function entriesOf(data: Uint8Array, depth = 0): Promise<Entry[]> {
 registerImporter({
   name: 'NetWitch (Android)',
   version: 1,
-  detect(data, fileName) {
-    return /\.(apk|xapk|apkm|zip)$/i.test(fileName);
+  async detect(data, fileName) {
+    if (data.length < 4096) return false;
+    try { return await looksLike(await entriesOf(data)); } catch { return false; }
   },
   async read(data, fileName) {
     const entries = await entriesOf(data);
@@ -884,7 +885,6 @@ registerSetImporter({
     let hasData = false;
     for (const n of names) {
       if (/^assets\/bin\/Data\/[0-9a-f]{32}$/.test(n)) { hasData = true; roots.add(n.slice(0, n.indexOf('assets/')) || '.'); }
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     if (hasData) roots.add('.');
     return [...roots];

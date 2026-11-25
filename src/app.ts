@@ -8,10 +8,10 @@ import { colorOf, colorSolutionCount, inkOn } from './game/color';
 import { Board, formatTime, FILL, CROSS } from './game/board';
 import { BoardView } from './game/view';
 import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/picture';
-import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
+import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole, mergePacks } from './packs/format';
 import { readEntries, packRev, newRev } from './packs/io';
 import { upgradeStoredPack } from './packs/importers/index';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark, needsRatingRebuild, applyRatingRebuild, Rules, PuzzleProgress } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark, needsRatingRebuild, applyRatingRebuild, Rules, PuzzleProgress, rekeyPackProgress } from './store';
 import { puzzleRating, performance as perfScore, points, RatedRules, RATING } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
 export { choose };
@@ -102,8 +102,35 @@ export async function boot() {
     for (const p of [STARTER, ...ctx.packs]) m.set(p.id, new Set(p.levels.flatMap(l => l.puzzles.map(z => z.id.replace(/@(mega|color)$/, '')))));
     return m;
   });
-  // packs stored by older versions: each importer brings its own up to date
-  for (const p of ctx.packs) if (upgradeStoredPack(p)) await storage.savePack(p);
+  // packs stored by older versions: each importer brings its own up to date (may rename an id)
+  {
+    const before = ctx.packs.map(p => p.id);
+    let touched = false;
+    for (const p of ctx.packs) if (upgradeStoredPack(p)) touched = true;
+    for (let i = 0; i < before.length; i++) {
+      const from = before[i], to = ctx.packs[i].id;
+      if (from === to) continue;
+      rekeyPackProgress(from, to);
+      for (const name of await storage.assetNames(from)) {
+        const data = await storage.loadAsset(from, name);
+        if (data) await storage.saveAsset(to, name, data);
+      }
+      await storage.deleteAssets(from).catch(() => {});
+      await storage.deletePack(from).catch(() => {});
+      touched = true;
+    }
+    // upgrades can land two packs on one id (Switch + Steam of the same game): keep one merged pack
+    const byId = new Map<string, Pack>();
+    for (const p of ctx.packs) {
+      const have = byId.get(p.id);
+      byId.set(p.id, have ? mergePacks(have, p) : p);
+    }
+    if (byId.size !== ctx.packs.length) touched = true;
+    if (touched) {
+      ctx.packs = [...byId.values()];
+      for (const p of ctx.packs) await storage.savePack(p);
+    }
+  }
   // desktop app started with --rom <file> (shortcuts): import that game
   if (new URLSearchParams(location.search).has('rom')) {
     try {

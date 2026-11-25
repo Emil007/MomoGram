@@ -479,7 +479,6 @@ registerSetImporter({
     for (const n of names) {
       if (/^assets\/bin\/Data\/data\.unity3d$/i.test(n)) roots.add('assets/bin/Data');
       else if (/^AndroidManifest\.xml$/i.test(n)) roots.add('.');
-      if (/\.(apk|xapk|apkm|zip)$/i.test(n)) roots.add(n);
     }
     return [...roots];
   },
