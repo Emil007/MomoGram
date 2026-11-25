@@ -54,6 +54,8 @@ const GAMES: Record<string, Game> = {
   OVL: { id: 'nsw-picross-nazarick', title: { en: 'PICROSS Lord of the Nazarick' }, year: 2020 },
   RK: { id: 'nsw-picross-logiart-grimoire', title: { en: 'Picross -LogiartGrimoire-' }, year: 2023 },
   DL: { id: 'nsw-picross-s-plus', title: { en: 'PICROSS S+' }, year: 2025 },
+  SC: { id: 'nsw-picross-s-capcom', title: { en: 'PICROSS S CAPCOM CLASSICS edition' }, year: 2025 },
+  SSN: { id: 'nsw-picross-s-snk', title: { en: 'PICROSS S SNK CLASSICS & NEOGEO edition' }, year: 2025 },
   KEMONO: { id: 'nsw-picross-kemono-friends', title: { en: 'Kemono Friends Picross', ja: 'けものフレンズピクロス' }, year: 2019 },
   VTUBER: { id: 'nsw-picross-raden', title: { en: "Picross Juufuutei Raden's Guide for Pixel Museum" }, year: 2024 },
   // PICROSS S+ holds the Picross e games: the 3DS pack ids, so both versions become one pack
@@ -209,16 +211,23 @@ const AB = 'StreamingAssets/AssetBundles/';
 
 registerSetImporter({
   name: 'Picross S (Switch)',
-  version: 6, // raise when the importer reads more or reads differently
+  version: 7, // 7: CAPCOM (SC_) and SNK (SSN_); roots that have their own importer are left alone
   find(names) {
     const roots = new Set<string>();
+    // another importer owns this folder (NAMCO/Shield sn_|ta_, Doraemon sf_, Kemono, Sumikko prince_)
+    const owned = (root: string) => names.some(x => x.startsWith(root) && !/\.manifest$/i.test(x) && (
+      /\/gifanimations\/(sn_|ta_|sf_)/i.test(x) ||
+      /\/kemochara\.unity3d$/i.test(x) ||
+      /\/prince_/i.test(x)
+    ));
+    const squeak = (root: string) => names.some(x => x.startsWith(root) && /StreamingAssets\/aa\/catalog\.(json|bundle)$/i.test(x));
     for (const n of names) {
       const m = n.match(/^(.*?)(?:StreamingAssets\/AssetBundles\/)?puzzledata(\.unity3d)?$/i) ?? n.match(/^(.*?)StreamingAssets\/aa\/[^/]+\/puzzledata_assets_all[^/]*\.bundle$/i);
-      if (m && !/\.manifest$/i.test(n)) { roots.add(m[1]); continue; }
+      if (m && !/\.manifest$/i.test(n) && !owned(m[1])) { roots.add(m[1]); continue; }
       // PICROSS S keeps everything in resources.assets
-      // a Unity player's <game>_Data/resources.assets is not a Switch game
+      // a Unity player's <game>_Data/resources.assets is not a Switch game; Squeakross is Data/resources.assets plus an aa catalog
       const r = n.match(/^(.*\/)?resources\.assets$/i);
-      if (r && !/_Data\/resources\.assets$/i.test(n) && !names.some(x => x.startsWith((r[1] ?? '') + AB + 'puzzledata'))) roots.add(r[1] ?? '');
+      if (r && !/_Data\/resources\.assets$/i.test(n) && !owned(r[1] ?? '') && !squeak(r[1] ?? '') && !names.some(x => x.startsWith((r[1] ?? '') + AB + 'puzzledata'))) roots.add(r[1] ?? '');
     }
     // the folder above Data/ is the game's
     return [...roots];

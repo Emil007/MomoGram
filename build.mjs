@@ -23,6 +23,17 @@ const opts = {
   entryPoints: { app: 'src/main.ts', worklet: 'src/audio/worklet.ts' },
   bundle: true, minify: true, sourcemap: true, target: ['es2020', 'safari15'],
   outdir: out, define: { '__VERSION__': JSON.stringify(pkg.version) }, logLevel: 'info',
+  // the Oodle decoder's Node startup uses top-level await, which a classic script bundle cannot carry.
+  // The browser never takes that branch.
+  plugins: [{
+    name: 'ooz-browser',
+    setup(b) {
+      b.onLoad({ filter: /[\\/]ooz\.js$/ }, async (args) => ({
+        contents: readFileSync(args.path, 'utf8').replace('await import("module")', 'null'),
+        loader: 'js',
+      }));
+    },
+  }],
 };
 if (process.argv.includes('--watch')) (await esbuild.context(opts)).watch();
 else await esbuild.build(opts);

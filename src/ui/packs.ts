@@ -30,24 +30,112 @@ export async function filesToEntries(f: { name: string; data?: Uint8Array; file?
 
 export function openPackManager(pm: PM) {
   const list = h('div', { class: 'packlist' });
+  const pickBar = h('div', { class: 'pick-bar' });
+  const marked = new Set<string>();
+  let picking = false;
+  // the click that ends a long-press must not also toggle the pack the finger is still on
+  let ignoreClickUntil = 0;
+  let withMusicOn = true;
   const count = (p: Pack) => p.levels.reduce((a, l) => a + l.puzzles.length, 0);
+
+  async function deleteMarked() {
+    const ps = pm.packs().filter(p => marked.has(p.id));
+    if (!ps.length) return;
+    const q = ps.length === 1 ? t('delete') + ': ' + pickAny(ps[0].title, lang()) + '?' : t('deleteAsk', { n: ps.length });
+    if (!(await confirmBox(q, t('delete'), true))) return;
+    for (const p of ps) {
+      await storage.deletePack(p.id);
+      await storage.deleteAssets(p.id).catch(() => {});
+    }
+    const drop = new Set(ps.map(p => p.id));
+    pm.setPacks(pm.packs().filter(x => !drop.has(x.id)));
+    marked.clear(); picking = false;
+    render(); renderOnline();
+  }
+
+  async function updateMarked(btn: HTMLButtonElement) {
+    const ps = pm.packs().filter(p => marked.has(p.id));
+    if (!ps.length) return;
+    if (!Sync.account()) { await message(t('serverLogin')); return; }
+    const label = btn.textContent;
+    btn.disabled = true;
+    try {
+      const server = await Sync.serverPacks();
+      const byId = new Map(server.map(s => [s.id, s]));
+      const want: Sync.ServerPack[] = [];
+      for (const p of ps) {
+        const sp = byId.get(p.id);
+        if (!sp) continue;
+        if ((sp.meta?.rev ?? 1) > packRev(p) || await missingFiles(p.id)) want.push(sp);
+      }
+      if (!want.length) { await message(t('noneToUpdate')); btn.disabled = false; btn.textContent = label; return; }
+      await fetchServerPacks(pm, want, text => { btn.textContent = text; }, withMusicOn);
+      marked.clear(); picking = false;
+      render(); renderOnline();
+    } catch (e) { await message(serverError(e)); btn.disabled = false; btn.textContent = label; }
+  }
+
   const render = () => {
     list.innerHTML = '';
     const packs = pm.packs();
+    for (const id of [...marked]) if (!packs.some(p => p.id === id)) marked.delete(id);
+    if (!marked.size) picking = false;
+    pickBar.replaceChildren();
+    if (picking) {
+      const n = marked.size;
+      const del = h('button', { class: 'btn danger', disabled: n ? undefined : true, onClick: () => deleteMarked() }, '🗑 ' + t('delete')) as HTMLButtonElement;
+      const dl = h('button', { class: 'btn', disabled: n ? undefined : true, onClick: () => exportAll(packs.filter(p => marked.has(p.id))) }, '⤓ ' + t('download')) as HTMLButtonElement;
+      const upd = h('button', { class: 'btn', disabled: n ? undefined : true }, '⟳ ' + t('update')) as HTMLButtonElement;
+      upd.onclick = () => updateMarked(upd);
+      pickBar.append(h('b', {}, t('markedN', { n })), del, dl, upd,
+        h('button', { class: 'btn ghost', onClick: () => { marked.clear(); picking = false; render(); } }, t('back')));
+    }
     if (!packs.length) list.append(h('p', { class: 'fine' }, t('noPacks')));
+    else if (!picking) list.append(h('p', { class: 'fine' }, t('holdToMark')));
     for (const p of packs) {
-      list.append(h('div', { class: 'pack' },
-        h('button', { class: 'btn packbtn', onClick: () => pm.openPack(p) },
-          h('b', {}, pickAny(p.title, lang())),
-          h('small', {}, `${p.source.platform}${p.source.region ? ' · ' + p.source.region : ''} · ${count(p)} ${t('puzzles')}` + (p.theme?.music ? ' · ♪' : ''))),
-        h('button', { class: 'btn ghost', title: t('download'), onClick: async () => download(momopackName(p), await momopackOf(p)) }, '⤓'),
-        h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
-          if (!(await confirmBox(t('delete') + ': ' + pickAny(p.title, lang()) + '?', t('delete'), true))) return;
-          await storage.deletePack(p.id);
-          await storage.deleteAssets(p.id).catch(() => {});
-          pm.setPacks(pm.packs().filter(x => x.id !== p.id));
-          render(); renderOnline();
-        } }, '🗑')));
+      const open = h('button', { class: 'btn packbtn', title: t('holdToMark') },
+        h('b', {}, (marked.has(p.id) ? '✓ ' : '') + pickAny(p.title, lang())),
+        h('small', {}, `${p.source.platform}${p.source.region ? ' · ' + p.source.region : ''} · ${count(p)} ${t('puzzles')}` + (p.theme?.music ? ' · ♪' : ''))) as HTMLButtonElement;
+      let timer = 0, held = false, sx = 0, sy = 0;
+      const stop = () => { window.clearTimeout(timer); timer = 0; };
+      const arm = () => {
+        picking = true;
+        marked.add(p.id);
+        ignoreClickUntil = performance.now() + 700;
+        try { navigator.vibrate?.(15); } catch { /* this device doesn't vibrate */ }
+        render();
+      };
+      open.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        held = false; sx = e.clientX; sy = e.clientY;
+        timer = window.setTimeout(() => { timer = 0; held = true; arm(); }, 450);
+      });
+      open.addEventListener('pointermove', e => { if (timer && Math.hypot(e.clientX - sx, e.clientY - sy) > 12) stop(); });
+      open.addEventListener('pointerup', stop);
+      open.addEventListener('pointercancel', stop);
+      open.addEventListener('contextmenu', e => { e.preventDefault(); arm(); });
+      open.addEventListener('click', () => {
+        if (held || performance.now() < ignoreClickUntil) { held = false; return; }
+        if (picking) {
+          if (marked.has(p.id)) marked.delete(p.id); else marked.add(p.id);
+          if (!marked.size) picking = false;
+          render();
+          return;
+        }
+        pm.openPack(p);
+      });
+      const row = h('div', { class: 'pack' + (marked.has(p.id) ? ' marked' : '') }, open);
+      if (!picking) {
+        row.append(h('button', { class: 'btn ghost', title: t('download'), onClick: async () => download(momopackName(p), await momopackOf(p)) }, '⤓'),
+          h('button', { class: 'btn ghost', title: t('delete'), onClick: async () => {
+            if (!(await confirmBox(t('delete') + ': ' + pickAny(p.title, lang()) + '?', t('delete'), true))) return;
+            await storage.deletePack(p.id);
+            await storage.deleteAssets(p.id).catch(() => {});
+            pm.setPacks(pm.packs().filter(x => x.id !== p.id));
+            render(); renderOnline();
+          } }, '🗑'));
+      }
+      list.append(row);
     }
   };
 
@@ -177,7 +265,7 @@ export function openPackManager(pm: PM) {
         render(); renderOnline();
       } catch (e) { bad(e); btn.disabled = false; btn.textContent = label; }
     };
-    const withMusic = h('input', { type: 'checkbox', checked: true }) as HTMLInputElement;
+    const withMusic = h('input', { type: 'checkbox', checked: withMusicOn ? true : undefined, onChange: () => { withMusicOn = withMusic.checked; } }) as HTMLInputElement;
     const mb = (n: number) => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
     // installed packs whose music was left out
     const musicMissing = async (p: Pack) => {
@@ -185,13 +273,62 @@ export function openPackManager(pm: PM) {
       return songsOf(p.theme).some(r => !have.has(r.split('#')[0]));
     };
     const missing = list.filter(s => state(s) === 'new'), updates = list.filter(s => state(s) === 'update');
+    const actions = h('div', { class: 'row wrap' });
+    const upSlot = h('div', { class: 'up-slot' });
     if (list.length) {
       const all = h('button', { class: 'btn' + (missing.length + updates.length ? ' primary' : ''), disabled: missing.length + updates.length ? undefined : true }, `⤓ ${t('downloadAll')} (${missing.length + updates.length})`) as HTMLButtonElement;
       all.onclick = () => fetchPacks([...updates, ...missing], all, withMusic.checked);
       const upd = h('button', { class: 'btn', disabled: updates.length ? undefined : true }, `⟳ ${t('updateAll')} (${updates.length})`) as HTMLButtonElement;
       upd.onclick = () => fetchPacks(updates, upd, withMusic.checked);
-      online.append(h('div', { class: 'row wrap' }, all, upd), h('label', { class: 'with-music' }, withMusic, ' ♪ ' + t('withMusic')));
-    } else online.append(h('p', { class: 'fine' }, t('serverEmpty')));
+      actions.append(all, upd);
+    }
+    // upload lives with download and update, above the server packs (the checklist opens just under them)
+    const onServer = new Map(list.map(s => [s.id, s]));
+    if (pm.packs().length) {
+      const up = h('button', { class: 'btn', onClick: () => {
+        const box = h('div', { class: 'uplist' });
+        const checks = pm.packs().map(p => {
+          const s = onServer.get(p.id);
+          const want = !s || packRev(p) > (s.meta?.rev ?? 1);
+          const c = h('input', { type: 'checkbox', checked: want ? true : undefined }) as HTMLInputElement;
+          box.append(h('label', {}, c, pickAny(p.title, lang()) + (s ? (want ? ' (☁ ' + t('older') + ')' : ' (☁ ✓)') : '')));
+          return [p, c] as const;
+        });
+        const bar = h('div', { class: 'bar-inner', style: 'width:0%' });
+        const go = h('button', { class: 'btn primary' }, '⇧ ' + t('upload')) as HTMLButtonElement;
+        go.onclick = async () => {
+          const pick = checks.filter(([, c]) => c.checked).map(([p]) => p);
+          go.disabled = true;
+          try {
+            for (let i = 0; i < pick.length; i++) {
+              const p = pick[i];
+              const meta = { title: p.title, puzzles: count(p), platform: p.source.platform, rev: packRev(p) };
+              const prog = (d: number) => { bar.style.width = ((i + d) / pick.length) * 100 + '%'; };
+              if (await Sync.serverApi() >= 2) {
+                // pack.json + files by hash: files the server has (from other packs) aren't sent again
+                const { assets: _a, ...json } = p;
+                const musicFiles = new Set(songsOf(p.theme).map(r => r.split('#')[0]));
+                const files = [];
+                for (const name of await storage.assetNames(p.id)) {
+                  let hash = await storage.assetHash(p.id, name);
+                  let cached: Uint8Array | undefined;
+                  if (!hash) { cached = await storage.loadAsset(p.id, name); if (!cached) continue; hash = await sha1(cached); }
+                  files.push({ name, hash, size: cached?.length ?? 0, music: musicFiles.has(name), data: async () => cached ?? await storage.loadAsset(p.id, name) });
+                }
+                await Sync.uploadPackSplit(p.id, meta, json, files, prog);
+              } else await Sync.uploadPack(p.id, meta, await momopackOf(p), prog);
+            }
+            renderOnline();
+          } catch (e) { bad(e); go.disabled = false; }
+        };
+        box.append(h('div', { class: 'bar-outer' }, bar), go);
+        upSlot.replaceChildren(box);
+      } }, '⇧ ' + t('uploadPacks'));
+      actions.append(up);
+    }
+    if (actions.childNodes.length) online.append(actions, upSlot);
+    if (list.length) online.append(h('label', { class: 'with-music' }, withMusic, ' ♪ ' + t('withMusic')));
+    else online.append(h('p', { class: 'fine' }, t('serverEmpty')));
     for (const sp of list) {
       const title = pickAny(sp.meta?.title, lang()) || sp.id;
       const st = state(sp);
@@ -216,48 +353,6 @@ export function openPackManager(pm: PM) {
           renderOnline();
         } }, '🗑') : null));
     }
-    // upload: local packs the server doesn't have, or has an older version of, are ticked
-    const onServer = new Map(list.map(s => [s.id, s]));
-    const up = h('button', { class: 'btn', onClick: () => {
-      const box = h('div', { class: 'uplist' });
-      const checks = pm.packs().map(p => {
-        const s = onServer.get(p.id);
-        const want = !s || packRev(p) > (s.meta?.rev ?? 1);
-        const c = h('input', { type: 'checkbox', checked: want ? true : undefined }) as HTMLInputElement;
-        box.append(h('label', {}, c, pickAny(p.title, lang()) + (s ? (want ? ' (☁ ' + t('older') + ')' : ' (☁ ✓)') : '')));
-        return [p, c] as const;
-      });
-      const bar = h('div', { class: 'bar-inner', style: 'width:0%' });
-      const go = h('button', { class: 'btn primary' }, '⇧ ' + t('upload')) as HTMLButtonElement;
-      go.onclick = async () => {
-        const pick = checks.filter(([, c]) => c.checked).map(([p]) => p);
-        go.disabled = true;
-        try {
-          for (let i = 0; i < pick.length; i++) {
-            const p = pick[i];
-            const meta = { title: p.title, puzzles: count(p), platform: p.source.platform, rev: packRev(p) };
-            const prog = (d: number) => { bar.style.width = ((i + d) / pick.length) * 100 + '%'; };
-            if (await Sync.serverApi() >= 2) {
-              // pack.json + files by hash: files the server has (from other packs) aren't sent again
-              const { assets: _a, ...json } = p;
-              const musicFiles = new Set(songsOf(p.theme).map(r => r.split('#')[0]));
-              const files = [];
-              for (const name of await storage.assetNames(p.id)) {
-                let hash = await storage.assetHash(p.id, name);
-                let cached: Uint8Array | undefined;
-                if (!hash) { cached = await storage.loadAsset(p.id, name); if (!cached) continue; hash = await sha1(cached); }
-                files.push({ name, hash, size: cached?.length ?? 0, music: musicFiles.has(name), data: async () => cached ?? await storage.loadAsset(p.id, name) });
-              }
-              await Sync.uploadPackSplit(p.id, meta, json, files, prog);
-            } else await Sync.uploadPack(p.id, meta, await momopackOf(p), prog);
-          }
-          renderOnline();
-        } catch (e) { bad(e); go.disabled = false; }
-      };
-      box.append(h('div', { class: 'bar-outer' }, bar), go);
-      up.replaceWith(box);
-    } }, '⇧ ' + t('uploadPacks'));
-    if (pm.packs().length) online.append(up);
   }
 
   render();
@@ -267,7 +362,7 @@ export function openPackManager(pm: PM) {
       h('button', { class: 'btn', onClick: addFolder }, '📁 ' + t('addFolder')),
       h('button', { class: 'btn', onClick: () => exportAll(pm.packs()) }, '⤓ ' + t('exportAll'))),
     h('p', { class: 'fine' }, t('createHelp')),
-    status, list, online));
+    status, pickBar, list, online));
   renderOnline();
 }
 

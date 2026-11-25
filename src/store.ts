@@ -175,6 +175,8 @@ export interface Settings {
   tutAsked?: string[];
   difficulty: 'auto' | 'easy' | 'normal' | 'hard'; // auto = the level's own rules
   logicHints: boolean;
+  /** finished lines get their crosses filled in. Silver at best. */
+  lazy: boolean;
   toolsRight: boolean;
   musicMode: 'random-pack' | 'random-all' | 'fixed'; // in-game music
   mega: boolean; // the whole game in Mega mode
@@ -183,7 +185,7 @@ export interface Settings {
 const DEFAULTS: Settings = {
   lang: '', music: true, musicVolume: 0.7, sfx: true, hints: 'ask', unlockAll: false,
   normalStyle: 'stage_jazz_SEQ', freeStyle: 'stage_musicbox_SEQ', lefty: false, showTimer: true,
-  packMusic: true, packColors: true, megaMark: 'mark', look: 'auto', mode: 'normal', tutAsked: [], difficulty: 'auto', logicHints: false, toolsRight: false, musicMode: 'random-pack', mega: false,
+  packMusic: true, packColors: true, megaMark: 'mark', look: 'auto', mode: 'normal', tutAsked: [], difficulty: 'auto', logicHints: false, lazy: false, toolsRight: false, musicMode: 'random-pack', mega: false,
 };
 
 function readJson<T>(k: string, def: T): T {

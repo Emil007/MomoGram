@@ -135,6 +135,7 @@ export class Board {
       this.version++;
       this.cache.delete('r' + (this.rowPair[y] >= 0 ? this.rowPair[y] : y));
       this.cache.delete('c' + (this.colPair[x] >= 0 ? this.colPair[x] : x));
+      if (this.lazy) this.crossSolvedLines();
     }
     return r;
   }
@@ -261,9 +262,71 @@ export class Board {
   colDone(x: number): boolean[] { const d = this.line('c', x).done; return this.hideDone ? d.map(() => false) : d; }
   /** no clue number turns grey (practice: finding the mistakes must not be given away) */
   hideDone = false;
+  /** finished lines: the cells that are still open become crosses */
+  lazy = false;
   /** logic hint: the line allows a new cell to be deduced from its clue alone */
   rowCanProgress(y: number): boolean { return this.line('r', y).progress; }
   colCanProgress(x: number): boolean { return this.line('c', x).progress; }
+
+  /**
+   * A line whose filled cells already match its clue: the open cells can only be crosses.
+   * Uses the clues, never the solution. One undo step belongs to whoever called this.
+   * Repeats until nothing new appears: a crossed column can finish a row, and that row another column.
+   * A mega block covers two lines, so those lines are crossed only once the whole pair is solved.
+   * A finished line elsewhere does not cross into that pair early.
+   */
+  crossSolvedLines(): boolean {
+    let changed = false;
+    const drop = (x: number, y: number) => {
+      this.cache.delete('r' + (this.rowPair[y] >= 0 ? this.rowPair[y] : y));
+      this.cache.delete('c' + (this.colPair[x] >= 0 ? this.colPair[x] : x));
+    };
+    const mark = (x: number, y: number) => {
+      const i = y * this.w + x;
+      if (this.trial) {
+        if (!blank(this.cells[i]) || this.trial[i]) return false;
+        this.trial[i] = CROSS;
+        if (this.trialColors) this.trialColors[i] = 0;
+      } else {
+        if (!blank(this.cells[i])) return false;
+        this.cells[i] = CROSS;
+        this.colors[i] = 0;
+      }
+      drop(x, y);
+      changed = true;
+      return true;
+    };
+    const solved = (kind: 'r' | 'c', k: number) => {
+      const d = this.line(kind, k).done;
+      return d.length > 0 && d.every(Boolean);
+    };
+    for (let guard = this.w * this.h + 1; guard > 0; guard--) {
+      let step = false;
+      for (let y = 0; y < this.h; y++) {
+        if (this.rowPair[y] >= 0 && this.rowPair[y] !== y) continue;
+        if (!solved('r', y)) continue;
+        const rows = this.rowPair[y] === y ? [y, y + 1] : [y];
+        for (const yy of rows) for (let x = 0; x < this.w; x++) {
+          // a mega column block stays open until both of its columns are solved
+          if (this.colPair[x] >= 0 && !solved('c', this.colPair[x])) continue;
+          if (mark(x, yy)) step = true;
+        }
+      }
+      for (let x = 0; x < this.w; x++) {
+        if (this.colPair[x] >= 0 && this.colPair[x] !== x) continue;
+        if (!solved('c', x)) continue;
+        const cols = this.colPair[x] === x ? [x, x + 1] : [x];
+        for (const xx of cols) for (let y = 0; y < this.h; y++) {
+          // a mega row block stays open until both of its rows are solved
+          if (this.rowPair[y] >= 0 && !solved('r', this.rowPair[y])) continue;
+          if (mark(xx, y)) step = true;
+        }
+      }
+      if (!step) break;
+    }
+    if (changed) this.touch();
+    return changed;
+  }
 
   /** Cross out every row and column whose clue is 0 (done for the player at the start, no undo step). */
   crossEmptyLines() {

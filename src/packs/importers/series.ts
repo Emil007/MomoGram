@@ -5,6 +5,8 @@ import { Pack, pickAny } from '../format';
 /** series of a game, from its title (all Picross e games together, the Mario games, …) */
 export function seriesOf(p: Pack): string {
   const n = pickAny(p.title, 'en');
+  // before the Switch catch-all, which would otherwise hide Piczle's Switch games in Picross S Specials
+  if (/piczle/i.test(n)) return 'Piczle';
   // Jupiter's other Switch games (special editions, LogiartGrimoire, Nazarick, Kemono Friends, …): a folder of their own
   if (p.source.platform === 'Nintendo Switch' && !/^picross (s\d*\+?|e\d*)$/i.test(n.trim())) return 'Picross S Specials';
   if (p.source.platform === 'Arduboy') return 'Arduboy';
@@ -17,5 +19,7 @@ export function seriesOf(p: Pack): string {
     [/oekaki/i, 'Oekaki'], [/ds puzzler|challenge me/i, 'DS Puzzler'],
   ];
   for (const [re, name] of rules) if (re.test(n)) return name;
+  // one-off Steam games share a folder; a Steam game that matched a series above stays there
+  if (p.source.platform === 'Steam') return 'Steam';
   return n;
 }

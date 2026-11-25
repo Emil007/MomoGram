@@ -233,7 +233,13 @@ body { background: var(--surface); }
 .packs { max-width: 760px; width: 100%; margin: 0 auto; padding: 1.2rem 1rem; display: flex; flex-direction: column; gap: .8rem; }
 .packlist { display: flex; flex-direction: column; gap: .6rem; }
 .pack { display: flex; gap: .3rem; align-items: stretch; }
-.packbtn { flex: 1; align-items: flex-start; }
+.packbtn { flex: 1; align-items: flex-start; touch-action: manipulation; -webkit-touch-callout: none; }
+.pack.marked .packbtn { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.pick-bar { position: sticky; top: 3.2rem; z-index: 3; display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+  background: var(--bg); padding: .4rem 0; }
+.pick-bar:empty { display: none; }
+.pick-bar .btn { padding: .4em .7em; }
+.up-slot:empty { display: none; }
 .results { margin: 0; padding-left: 1.2rem; font-size: .85rem; line-height: 1.5; user-select: text; }
 .status { background: var(--surface); border: 2px solid var(--line); border-radius: 10px; padding: .3rem .6rem; }
 .status:empty { display: none; }
@@ -269,10 +275,10 @@ body { background: var(--surface); }
 
 /* ---------- home: the game library ---------- */
 .section-title { margin: .4rem .2rem -.2rem; font-size: 1rem; font-weight: 900; }
-.library { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .7rem; }
-.game { --game: var(--accent); align-items: stretch; text-align: left; gap: .25rem; padding: .7em .8em .6em; min-height: 6.2rem; position: relative; overflow: hidden; }
-.game::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--game); }
-.game b { font-size: 1rem; line-height: 1.2; padding-left: .2rem; }
+.library { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: .45rem; }
+.game { --game: var(--accent); align-items: stretch; text-align: left; gap: .15rem; padding: .5em .55em .4em; min-height: 4.4rem; position: relative; overflow: hidden; }
+.game::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--game); }
+.game b { font-size: .86rem; line-height: 1.15; padding-left: .2rem; }
 .game small { padding-left: .2rem; }
 .game .count { color: var(--ink); font-weight: 800; }
 .game .bar-outer.slim { height: 8px; flex: none; margin: .2rem 0 0 .2rem; }
@@ -512,8 +518,9 @@ input.text:focus { outline: 3px solid var(--accent2); outline-offset: 1px; }
 .soundtest .track.on { background: radial-gradient(circle at 35% 25%, #fff6b0 0 20%, #ffd21a 65%, #e8a800 100%); }
 
 /* game menu: two buttons side by side (music) */
-.menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
-.menu-row .btn { padding-left: .4em; padding-right: .4em; }
+.menu-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: .4rem; }
+.menu-row .btn { padding: .45em .25em; font-size: .8rem; min-width: 0; }
+.menu-row .btn.on { background: linear-gradient(color-mix(in srgb, var(--accent) 75%, #fff), var(--accent)); color: #fff; }
 
 /* where a Mega puzzle comes from */
 .mega-src { align-self: center; margin: 0; padding: .25em .8em; border-radius: 999px; font-weight: 800; font-size: .85rem; border: 2px solid var(--line); background: var(--surface); }

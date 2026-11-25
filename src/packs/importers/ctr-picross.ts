@@ -21,6 +21,7 @@ import { Lang, Pack, PackLevel, PackPuzzle, PackTheme, PackAsset, Text, rowsFrom
 import { accentFromColors } from '../theme';
 import { jtexPixels, dominantColors, jtexImage, jtexOldHeader, packPictures } from '../../rom/jtex';
 import { isBcstm } from '../../audio/bcstm';
+import { solutionCount } from '../../game/unique';
 
 interface Raw { file: string; w: number; h: number; cells: Uint8Array; title: string }
 
@@ -45,6 +46,75 @@ export function parseDpc(d: Uint8Array, sizeHint?: [number, number]): { w: numbe
     return { w, h, cells, title: new TextDecoder('utf-16le').decode(d.subarray(12, p)), cols: pairs(flags.subarray(0, w)), rows: pairs(flags.subarray(w)) };
   }
   return null;
+}
+
+/**
+ * .MRS ("Master" / "Micross") next to the .bprs2 files: utf16 ".MRS", a title, then the grid.
+ * Sanrio and Pictlogica keep some puzzles only this way. A grid already stored as .bprs is not added twice.
+ */
+function parseMrs(f: CtrFile): Raw | null {
+  const d = lz11(f.data);
+  const td = new TextDecoder('utf-16le');
+  let m = -1;
+  for (let i = 0; i + 8 <= d.length && i < 128; i += 2) {
+    if (d[i] === 0x2e && d[i + 2] === 0x4d && d[i + 4] === 0x52 && d[i + 6] === 0x53) { m = i; break; }
+  }
+  if (m < 0) return null;
+  const n = u16(d, m + 10), p = m + 12 + n * 2;
+  if (p < 0 || p > d.length) return null;
+  const title = td.decode(d.subarray(m + 12, p)).replace(/\0.*$/, '').trim();
+  const candidates: Array<[number, number]> = [];
+  for (const [a, b] of [[d[p + 4], d[p + 5]], [d[p + 2], d[p + 3]], [d[p + 1], d[p + 2]], [d[p], d[p + 1]], [d[p + 5], d[p + 6]]]) {
+    if (a === undefined || b === undefined) continue;
+    if (a >= 3 && b >= 3 && a <= 25 && b <= 25) candidates.push([a, b]);
+  }
+  const seen = new Set<string>();
+  let best: { w: number; h: number; cells: Uint8Array; score: number } | null = null;
+  for (const [w, h] of candidates) {
+    const k = `${w}x${h}`; if (seen.has(k)) continue; seen.add(k);
+    if (w * h > 625 || w * h < 16) continue;
+    const sweeps: Array<{ off: number; clue: boolean }> = [];
+    for (let off = p + 2; off <= Math.min(p + 34, d.length - w * h); off++) {
+      const g = d.subarray(off, off + w * h);
+      if ([...g].some(v => v > 1)) continue;
+      const fill = [...g].filter(v => v).length;
+      if (fill < 3 || fill > w * h - 3) continue;
+      sweeps.push({ off, clue: mrsCluesMatch(d, g, w, h, off + w * h) });
+    }
+    if (!sweeps.length) continue;
+    let chosen = sweeps.find(s => s.clue) ?? null;
+    if (!chosen) {
+      for (const s of sweeps) {
+        const rows: string[] = [];
+        const g = d.subarray(s.off, s.off + w * h);
+        for (let y = 0; y < h; y++) rows.push([...g.subarray(y * w, y * w + w)].map(v => (v ? '#' : '.')).join(''));
+        if (solutionCount(rows, 200) === 1) { chosen = s; break; }
+      }
+    }
+    chosen ??= sweeps[0];
+    const score = (chosen.clue ? 2 : 0) + (chosen === sweeps[0] ? 0 : 1);
+    if (!best || score > best.score) best = { w, h, cells: d.slice(chosen.off, chosen.off + w * h), score };
+  }
+  return best ? { file: f.path, title, w: best.w, h: best.h, cells: best.cells } : null;
+}
+
+function mrsCluesMatch(d: Uint8Array, grid: Uint8Array, w: number, h: number, after: number): boolean {
+  const cols: number[][] = [];
+  for (let x = 0; x < w; x++) {
+    const line: number[] = []; let run = 0;
+    for (let y = 0; y < h; y++) { if (grid[y * w + x]) run++; else if (run) { line.push(run); run = 0; } }
+    if (run) line.push(run);
+    cols.push(line);
+  }
+  if (!cols.length) return false;
+  const seq: number[] = [];
+  for (const line of cols) seq.push(line.length, ...line);
+  for (let s = after; s + seq.length <= d.length && s <= after + 120; s++) {
+    let ok = true;
+    for (let i = 0; i < seq.length; i++) if (d[s + i] !== seq[i]) { ok = false; break; }
+    if (ok) return true;
+  }
+  return false;
 }
 
 function parseBprs(f: CtrFile): Raw | null {
@@ -102,6 +172,7 @@ export function read3ds(data: Uint8Array): Pack[] {
   const raws = t.files.filter(f => /\.bprs2?$/i.test(f.path) && !/sample/i.test(f.path)).map(parseBprs).filter((r): r is Raw => !!r);
   if (!raws.length) throw new Error('No puzzles found in this 3DS title.');
   raws.sort((a, b) => a.file.localeCompare(b.file, 'en', { numeric: true }));
+  const mrs = t.files.map(f => ({ f, r: /\/.*\.(mrs|bmrs)$/i.test(f.path) ? parseMrs(f) : null })).filter((x): x is { f: CtrFile; r: Raw } => !!x.r);
   const toPuzzle = (r: Raw, id: string): PackPuzzle => ({
     id, width: r.w, height: r.h,
     rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1),
@@ -155,6 +226,7 @@ export function read3ds(data: Uint8Array): Pack[] {
     }
   }
   addMega(t.files, raws, levels);
+  addMrs(mrs, levels);
   addNames(t, data, raws, levels);
   const title: Text = {};
   t.names.forEach((n, i) => { const l = SMDH_LANGS[i] as Lang; if (n && ['ja', 'en', 'fr', 'de', 'it', 'es', 'ko'].includes(l)) title[l] = n; });
@@ -168,9 +240,10 @@ export function read3ds(data: Uint8Array): Pack[] {
   const byPath = new Map(t.files.map(f => [f.path, f]));
   const pics: Array<{ key: string; w: number; h: number; rgba: Uint8Array }> = [];
   const seenPic = new Set<string>();
-  const upright = uprightPictures(raws, byPath);
-  for (const r of raws) {
-    const base = r.file.replace(/\.bprs2?$/i, '');
+  const pictureRaws = [...raws, ...mrs.map(m => m.r)];
+  const upright = uprightPictures(pictureRaws, byPath);
+  for (const r of pictureRaws) {
+    const base = r.file.replace(/\.bprs2?|\.\w*mrs$/i, '');
     for (const suf of ['_I', '_PC', '_C']) {
       const f = byPath.get(base + suf + '.jtex');
       const img = f ? jtexImage(f.data, upright) : null;
@@ -251,6 +324,30 @@ function addMega(files: CtrFile[], raws: Raw[], levels: PackLevel[]) {
   }
   if (only.length) levels.push(...chunk('mega-', { en: 'Mega', de: 'Mega', fr: 'Méga', it: 'Mega', es: 'Mega', ja: 'デカ' }, 'mega', only.map(o => o.p)));
   void raws;
+}
+
+/** .MRS puzzles that are not already in the pack, grouped by size */
+function addMrs(mrs: Array<{ f: CtrFile; r: Raw }>, levels: PackLevel[]) {
+  if (!mrs.length) return;
+  const sorted = [...mrs].sort((a, b) => a.r.file.localeCompare(b.r.file, 'en', { numeric: true }));
+  const have = new Set<string>();
+  for (const l of levels) for (const p of l.puzzles) have.add(p.rows.join('/'));
+  const bySize = new Map<string, Array<{ r: Raw; id: string }>>();
+  for (const { f, r } of sorted) {
+    const rows = rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1);
+    if (have.has(rows.join('/'))) continue;
+    have.add(rows.join('/'));
+    const base = f.path.split('/').pop()!.replace(/\.\w+$/i, '');
+    bySize.set(`${r.w}x${r.h}`, [...(bySize.get(`${r.w}x${r.h}`) || []), { r, id: base }]);
+  }
+  const sizes = [...bySize.keys()].sort((a, b) => { const [aw, ah] = a.split('x').map(Number), [bw, bh] = b.split('x').map(Number); return aw * ah - bw * bh; });
+  const out: PackLevel[] = [];
+  for (const s of sizes) {
+    const list = bySize.get(s)!.map(({ r, id }) => ({ id: 'mr-' + id, width: r.w, height: r.h, rows: rowsFromBits(r.w, r.h, (x, y) => r.cells[y * r.w + x] === 1), name: ownTitle(r.title) }));
+    out.push(...chunk(`mrs${s}-`, { en: s.replace('x', '×') }, 'mrs', list));
+  }
+  if (out.length) out[0].groupTitle = { en: 'Micross', ja: 'マイクロス' };
+  levels.push(...out);
 }
 
 // ---- the board's look: the colours a game's textures don't give, measured from screenshots ----

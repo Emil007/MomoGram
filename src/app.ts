@@ -890,6 +890,28 @@ function puzzlePool(stable = false): Array<{ pack: Pack; lv: PackLevel; i: numbe
   return out;
 }
 
+/** the longer side: 5×5, 10×10, 15×15, or bigger */
+function sizeBucket(rows: string[]): 5 | 10 | 15 | 0 {
+  let w = 0;
+  for (const r of rows) if (r.length > w) w = r.length;
+  const m = Math.max(w, rows.length);
+  return m <= 5 ? 5 : m <= 10 ? 10 : m <= 15 ? 15 : 0;
+}
+
+/** n puzzles of a size, drawn at random. The daily categories use this; the random picker stays on difficulty. */
+function drawBySize(rand: () => number, bucket: 5 | 10 | 15 | 0, n: number, skip = new Set<string>(), stable = false) {
+  const pool = puzzlePool(stable);
+  const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
+  for (let tries = 0; tries < 4000 && out.length < n && pool.length; tries++) {
+    const k = Math.floor(rand() * pool.length);
+    const e = pool[k]; pool.splice(k, 1);
+    const pz = e.lv.puzzles[e.i];
+    if (skip.has(pz.rows.join('/'))) continue;
+    if (sizeBucket(pz.rows) === bucket) { out.push(e); skip.add(pz.rows.join('/')); }
+  }
+  return out;
+}
+
 /** n puzzles of a measured difficulty, drawn at random (difficulty is computed only for the ones looked at) */
 function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new Set<string>(), stable = false) {
   const pool = puzzlePool(stable);
@@ -938,16 +960,17 @@ function dailyToGames() {
   }
 }
 
-/** 15 puzzles a day, 5 per difficulty, from all visible games; solved ones are saved for the day */
+/** 15 puzzles a day, 5 per size, from all visible games; solved ones are saved for the day */
 async function daily() {
   const d = new Date();
   const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
   const rand = rng(seed), seen = new Set<string>();
-  const levels: PackLevel[] = ([1, 2, 3] as const).map(level => ({
-    id: `daily-${seed}-d${level}`, title: { en: t('diff' + level) }, rules: 'normal' as const,
+  const buckets = [5, 10, 15, 0] as const;
+  const levels: PackLevel[] = buckets.map(bucket => ({
+    id: `daily-${seed}-${bucket ? 's' + bucket : 'big'}`, title: { en: bucket ? `${bucket}×${bucket}` : 'Big' }, rules: 'normal' as const,
     // a daily puzzle is known by its pattern: the same puzzle has the same id on every device and for everyone
     // (each device draws from its own games, so the lists can differ)
-    puzzles: drawPuzzles(rand, level, 5, seen, true).map(e => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-${patternId(e.lv.puzzles[e.i].rows)}`, from: fromText(e), origin: `${e.pack.id}/${e.lv.puzzles[e.i].id}`, name: undefined })),
+    puzzles: drawBySize(rand, bucket, 5, seen, true).map(e => ({ ...e.lv.puzzles[e.i], id: `daily-${seed}-${patternId(e.lv.puzzles[e.i].rows)}`, from: fromText(e), origin: `${e.pack.id}/${e.lv.puzzles[e.i].id}`, name: undefined })),
   })).filter(l => l.puzzles.length);
   if (!levels.length) return;
   // coloured pictures of the games the puzzles come from
@@ -976,6 +999,10 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   const rules = rulesFor(lv);
   const board = new Board(pz.rows, rules, megaPairsOf(pz), colorOfPz(pz));
   if (restore) board.restore(restore); else board.crossEmptyLines();
+  // on Hard, lazy stays off until this puzzle turns it on: it costs gold and platinum
+  const lazyFromSave = !!(restore as any)?.usedLazy;
+  board.lazy = !!settings.lazy && (rules !== 'free' || lazyFromSave);
+  if (board.lazy) board.crossSolvedLines();
   playMusicFor(pack);
 
   // slim status bar instead of a second screen: picture, level, LCD timer; the board gets the rest
@@ -1044,6 +1071,20 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     view.invalidate();
     return true;
   }
+  let lazyOn = board.lazy;
+  async function setLazy(on: boolean) {
+    // on Hard, the first switch-on costs gold and platinum: asked first. Mistakes already made it bronze.
+    if (on && rules === 'free' && !usedLazy && !usedWrong && !(await confirmBox(t('lazyAsk'), t('lazyYes')))) return false;
+    lazyOn = on; board.lazy = on; if (on) usedLazy = true;
+    settings.lazy = on; saveSettings();
+    if (on) {
+      board.pushUndo();
+      if (!board.crossSolvedLines()) board.undo();
+      updateInfo();
+    }
+    view.invalidate();
+    return true;
+  }
   const menuBtn = h('button', { class: 'rbtn hud-menu', title: t('menu'), 'aria-label': t('menu'), onClick: () => pauseMenu() }, icon('menu'));
   // third tool: the player's own marks, which stay while the rest is filled and crossed
   const markBtn = h('button', { class: 'rbtn mark-tool', title: t('mark'), 'aria-label': t('mark'), 'aria-pressed': 'false', onClick: () => toggleMark() }, icon('mark'));
@@ -1080,6 +1121,8 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   // medal: bronze on Easy, silver on Normal, gold on Hard, platinum on Hard without logic hints. Whether hints
   // were on at any moment of this puzzle is kept (with the saved board too), not only whether they are on at the end.
   let usedHints = logicOn || !!restore?.usedHints;
+  // lazy mode at any moment of this puzzle: silver at best (bronze if the rules were Easy, or mistakes were shown)
+  let usedLazy = lazyOn || lazyFromSave;
   // "show mistakes" (Normal and Hard): marks wrong cells, the medal is bronze from then on
   let usedWrong = !!(restore as any)?.usedWrong;
   view.showWrong = usedWrong && !!(restore as any)?.wrongOn;
@@ -1155,12 +1198,12 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   });
   ro.observe(boardWrap);
 
-  // timer
-  let last = performance.now(), running = true, finished = false;
+  // timer. A hidden tab delays the next tick by the whole gap, so that gap must not count.
+  let last = performance.now(), running = true, finished = false, away = document.visibilityState === 'hidden';
   const tick = () => {
     if (finished) return;
     const now = performance.now();
-    if (running && !board.solved) board.elapsedMs += now - last;
+    if (running && !board.solved && !away && document.visibilityState !== 'hidden') board.elapsedMs += now - last;
     last = now;
     updateInfo();
     timerId = window.setTimeout(tick, 250);
@@ -1176,12 +1219,13 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     const k = e.key;
     const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
     if (dirs[k]) { e.preventDefault(); view.moveCursor(dirs[k][0], dirs[k][1], held as any); return; }
+    if ((k === 'z' || k === 'Z') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (board.undo()) view.invalidate(); return; }
     if ((k === 'z' || k === ' ' || k === 'Enter') && !e.repeat) { held = view.pressAtCursor(view.tool === 'mark' ? 'mark' : 'fill'); }
     else if (k === 'v' && !e.repeat) { held = view.pressAtCursor('mark'); }
     else if ((k === 'x' || k === 'Shift') && !e.repeat) { held = view.pressAtCursor('cross'); }
     else if (k === 'c') view.toggleZoom();
     else if (k === 'Escape') pauseMenu();
-    else if ((k === 'u' || (k === 'z' && (e.ctrlKey || e.metaKey)))) { if (board.undo()) view.invalidate(); }
+    else if (k === 'u') { if (board.undo()) view.invalidate(); }
   };
   const keyUp = (e: KeyboardEvent) => { if (['z', 'x', 'v', ' ', 'Enter', 'Shift'].includes(e.key)) held = null; };
   window.addEventListener('keydown', key);
@@ -1199,10 +1243,14 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
   /** keep the board as it is, to come back to (pause menu, or when the app is put away) */
   function keepBoard() {
     if (finished) return;
-    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints, roulette, usedWrong, wrongOn: view.showWrong } as any,
+    saveBoard({ packId: pack.id, levelId: lv.id, puzzleId: pz.id, state: { ...board.snapshot(), usedHints, roulette, usedWrong, usedLazy, wrongOn: view.showWrong } as any,
       puzzle: pz, level: { title: lv.title, rules: lv.rules }, packTitle: pack.title });
   }
-  const onHide = () => { if (document.visibilityState === 'hidden' && board.elapsedMs > 0) keepBoard(); };
+  const onHide = () => {
+    away = document.visibilityState === 'hidden';
+    last = performance.now();
+    if (away && board.elapsedMs > 0) keepBoard();
+  };
   const onLeave = () => { if (board.elapsedMs > 0) keepBoard(); };
   document.addEventListener('visibilitychange', onHide);
   window.addEventListener('pagehide', onLeave);
@@ -1233,13 +1281,18 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
           box.append(btn(t('clearMarks'), () => { end(); board.pushUndo(); board.clearMarks(); view.invalidate(); updateInfo(); }));
         }
         const helps: HTMLElement[] = [];
-        helps.push(btn('💡 ' + (logicOn ? t('logicOff') : t('logicOnBtn')) + (rules === 'free' && !usedHints && !logicOn ? ' · ' + t('noPlatinum') : ''), async () => { await setLogic(!logicOn); draw(); }));
+        helps.push(btn(t('menuTips'), async () => { await setLogic(!logicOn); draw(); }, 'btn' + (logicOn ? ' on' : '')));
         // one look at the mistakes per attempt; the next touch on the board clears the marks and play goes on
-        if (rules !== 'easy' && !usedWrong) helps.push(btn('🔍 ' + t('wrongOn') + ' · ' + t('onlyBronze'), async () => {
+        if (rules !== 'easy' && !usedWrong) helps.push(btn(t('menuErrors'), async () => {
           if (!(await confirmBox(t('wrongAsk'), t('wrongYes')))) return;
           usedWrong = true; view.showWrong = true; view.invalidate();
           end();
         }));
+        helps.push(btn(t('menuLazy'), async () => {
+          if (!(await setLazy(!lazyOn))) return;
+          if (board.solved) { end(); solved(); return; }
+          draw();
+        }, 'btn' + (lazyOn ? ' on' : '')));
         box.append(h('div', { class: 'menu-row' }, ...helps));
         box.append(btn(settings.toolsRight ? t('toolsLeft') : t('toolsRight'), () => {
           settings.toolsRight = !settings.toolsRight; saveSettings();
@@ -1288,11 +1341,11 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     if (roleSongs(pack.theme, 'clear').length && settings.packMusic) usePack(pack, 'clear', false);
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
-    const medal: Medal = rules === 'easy' || usedWrong ? 'bronze' : rules === 'normal' ? 'silver' : usedHints ? 'gold' : 'platinum';
+    const medal: Medal = rules === 'easy' || usedWrong ? 'bronze' : rules === 'normal' || usedLazy ? 'silver' : usedHints ? 'gold' : 'platinum';
     // points and PixELO (the first solve under these rules is rated); a daily puzzle counts in its own game
     const mode = curMode(), mega = pz.id.endsWith(MEGA);
-    // shown mistakes: counts like Easy (bronze, rated and timed under Easy)
-    const rr = usedWrong ? 'easy' : rules;
+    // shown mistakes: counts like Easy. Lazy mode on Hard counts like Normal (silver).
+    const rr = usedWrong ? 'easy' : usedLazy && rules === 'free' ? 'normal' : rules;
     const { pr, par } = puzzleRating(pz.rows, mega);
     const before = localStats(mode);
     const extra = {
@@ -1720,6 +1773,7 @@ function optionsScreen() {
     card(t('secPlay'),
       row(t('hints'), seg('hints', [['ask', t('ask')], ['always', t('always')], ['never', t('never')]])),
       row(t('logicDefault'), toggle('logicHints')),
+      row(t('lazyOpt'), toggle('lazy'), t('lazyHelp')),
       row(t('unlockAll'), toggle('unlockAll'))),
     card(t('secLook'),
       row(t('look'), seg('look', [['auto', t('lookAuto')], ['light', t('lookLight')], ['dark', t('lookDark')]], () => applyLook())),

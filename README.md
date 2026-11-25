@@ -57,7 +57,7 @@ Nonograms do that too.
 - **Points and PixELO** – points count everything you've solved, PixELO is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixELO is shown under your name.
 - **A board that feels like the handhelds:** the row and column you draw in light up into the clues, a counter shows the length of the block you're drawing, clue numbers grey out only when their block is certainly done, logic hints (💡) turn a clue blue when its line gives away a new cell, and your own marks stay while you fill and cross the rest.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
-- **A daily nonogram** (15 a day from all your games) and a **Random** button.
+- **A daily nonogram** (up to 20 a day, in 5×5, 10×10, 15×15 and Big, from all your games) and a **Random** button.
 - **The games' own music**, every song of every game, with a sound test to choose where each plays.
 - **Practice:** little games with random puzzles from your own games, in the mode that is on (Normal, Mega or Color), which don't count as solved: *Find the mistakes* (a finished picture with a few wrong cells), *Finish it* (most of a puzzle already solved), *5×5 sprint* (as many small puzzles as you can in a minute), *The next step* (a puzzle halfway through: find a cell that is certain now), *One line* (find every cell one marked line decides) and *Memory* (see the picture for 3 seconds, then solve it). Your best result in each is kept.
 - **Interactive tutorials** for nonograms, Mega and Color (each offered once, all in the options), plus **technique lessons** for each (overlap from both ends, edges, joining, gaps, what-if, Mega shapes, color rules), one technique per step, an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
@@ -74,7 +74,7 @@ One importer reads each group of games below. Every number is what the games the
 |---|---|---:|---:|---:|---:|
 | Picross DS and its demos (Download Station, Nintendo Channel) | DS | 366 | – | – | 27 |
 | Picross e – e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross: Zelda TP, Sanrio Characters Picross | 3DS (decrypted) | 2,062 | 1,956 | – | 88 |
-| PICROSS S – S9, S+, S GENESIS, S Doraemon, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 2,407 | 1,911 | 297 | 254 |
+| PICROSS S – S9, S+, S GENESIS, S Doraemon, S CAPCOM, S SNK, S NAMCO, Shield Hero, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 3,182 | 2,518 | 433 | 325 |
 | Hudson's Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and + Nihon no Mukashi Banashi (DSiWare) | DS, DSiWare | 1,000 | – | 100 | 80 |
 | DS Puzzler / Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS | 1,000 | – | – | 7 |
 | SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | DS | 2,801 | – | 2,800 | 17 |
@@ -93,7 +93,14 @@ One importer reads each group of games below. Every number is what the games the
 | SherloCAT Holmes Nonogram | Steam (the game folder) | 114 | – | – | 6 |
 | Paint it Back | Steam (the game folder) | 158 | – | – | – |
 | Pixel Puzzle Makeout League | Steam (the game folder) | 288 | – | 288 | 6 |
-| **Total** | | **15,323** | **3,867** | **3,659** | **868** |
+| Hatena Satena | Game Boy Advance | 352 | – | 352 | – |
+| Oekaki Puzzle Battle! Yuusha Ou GaoGaiGar Hen | DS | 282 | – | 282 | 7 |
+| Squeakross: Home Squeak Home | Switch (decrypted RomFS folder or zip) | 650 | – | – | – |
+| Eiga Sumikkogurashi: Asobo Characross | Switch (decrypted RomFS folder or zip) | 133 | – | – | 11 |
+| Piczle Cross Adventure | Steam, Switch | 634 | – | – | – |
+| Piczle Cross: Story of Seasons | Switch | 342 | – | – | – |
+| Piczle Cross: Rune Factory | Switch | 600 | – | 300 | – |
+| **Total** | | **19,091** | **4,474** | **4,729** | **957** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
 
@@ -210,7 +217,7 @@ If you want to, you can run a small server on your own web space (PHP with MySQL
 | Progress of every puzzle: solved, medals, times per rules, points, PixELO | The server address and the login |
 | Boards you started (and the paused puzzle) | Your games and packs themselves (download them from the server's shelf) |
 | Practice records (per game and mode) | Music on/off, music volume, sound effects, the music style per rule set |
-| Language, hint roulette, logic hints, unlock all levels, difficulty, timer shown, how music is picked, the games' own music and colors, Mega mark, the mode (Normal / Mega / Color), which tutorials were offered | Light / dark mode, left-handed layout, tools on the right |
+| Language, hint roulette, logic hints, lazy mode, unlock all levels, difficulty, timer shown, how music is picked, the games' own music and colors, Mega mark, the mode (Normal / Mega / Color), which tutorials were offered | Light / dark mode, left-handed layout, tools on the right |
 | | How the library is arranged (order, folders, hidden games) |
 
 When both sides changed something, the better result wins per puzzle and per practice game. For settings, the newest change wins.
