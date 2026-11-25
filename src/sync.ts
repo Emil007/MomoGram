@@ -47,7 +47,9 @@ async function call(a: string, opts: { method?: string; json?: unknown; body?: B
   // a request that never answers (phone put away mid-request) must not block all later syncs
   const ctl = new AbortController();
   opts.signal?.addEventListener('abort', () => ctl.abort());
-  const timeout = window.setTimeout(() => ctl.abort(), opts.raw || a === 'upload_part' ? 300000 : 30000);
+  // pack_split embeds the full pack.json (large libraries); blob / upload_part transfers can be many MB
+  const long = opts.raw || a === 'upload_part' || a === 'pack_split' || a === 'pack_put';
+  const timeout = window.setTimeout(() => ctl.abort(), long ? 300000 : 30000);
   let r: Response;
   try { r = await fetch(endpoint(a, opts.args), { method: opts.method ?? (body ? 'POST' : 'GET'), headers, body, keepalive: opts.keepalive, signal: ctl.signal }); }
   catch { window.clearTimeout(timeout); throw new ServerError('offline', 0); }
@@ -215,11 +217,21 @@ export async function serverUsers(): Promise<Array<{ name: string; admin: boolea
 export async function setPassword(name: string, password: string) { await call('set_password', { json: { name, password } }); }
 
 // ---- packs on the server ----
+/** older pack ids replaced by a shared one — hide them when the replacement is also on the server */
+const SUPERSEDED_BY: Record<string, string> = {
+  'nsw-piczle-cross-adventure': 'piczle-cross-adventure',
+  'steam-piczle-cross-adventure': 'piczle-cross-adventure',
+};
 export async function serverPacks(): Promise<ServerPack[]> {
   const list: ServerPack[] = (await call('packs')).packs;
+  const ids = new Set(list.map(s => s.id));
+  const visible = list.filter(s => {
+    const better = SUPERSEDED_BY[s.id];
+    return !better || !ids.has(better);
+  });
   // remembered (per profile) for the "newer version on the server" badges in the library
-  try { localStorage.setItem('momogram.serverpacks.' + activeProfile().id, JSON.stringify(list.map(s => ({ id: s.id, rev: s.meta?.rev ?? 1 })))); } catch { /* full */ }
-  return list;
+  try { localStorage.setItem('momogram.serverpacks.' + activeProfile().id, JSON.stringify(visible.map(s => ({ id: s.id, rev: s.meta?.rev ?? 1 })))); } catch { /* full */ }
+  return visible;
 }
 /** the server's pack revisions as last seen (no request) */
 export function knownServerRevs(): Map<string, number> {

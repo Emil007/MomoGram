@@ -26,7 +26,7 @@ import { fsbClipOgg } from '../../audio/fsb5';
 
 registerSetImporter({
   name: 'Squeakross: Home Squeak Home (Switch)',
-  version: 3, // 3: raw grids use transpose(vreverse); BGM is a bounded set of clips
+  version: 4, // 4: music files use safe ASCII names (no spaces / '!')
   find(names) {
     // Only this game: puzzles live in Data/resources.assets, and that same Data/ folder has an
     // Addressables catalog (catalog.json or catalog.bundle). A bare catalog is not enough —
@@ -164,7 +164,9 @@ async function gameMusic(files: GameFiles, root: string): Promise<{ theme: Pack[
   }
   play.sort();
   const want = [title, ...play.slice(0, 8)];
-  const assets: PackAsset[] = [], made = new Set<string>();
+  // file names must be path-safe (no spaces / '!'); theme refs use the same names
+  const fileOf = (clip: string) => slug(clip).replace(/-/g, '_') + '.ogg';
+  const assets: PackAsset[] = [], made = new Map<string, string>(); // clip → file
   let bytes = 0;
   const MAX_OGG = 32 * 1024 * 1024;
   for (const name of want) {
@@ -174,18 +176,19 @@ async function gameMusic(files: GameFiles, root: string): Promise<{ theme: Pack[
       if (!ogg) continue;
       if (made.size && bytes + ogg.length > MAX_OGG) continue;
       bytes += ogg.length;
-      assets.push({ name: name + '.ogg', data: ogg });
-      made.add(name);
+      const file = fileOf(name);
+      assets.push({ name: file, data: ogg });
+      made.set(name, file);
     } catch (e) { console.warn(`FSB5 ${name}: ${e instanceof Error ? e.message : e}`); }
   }
   if (!made.size) return { theme: undefined, assets: [] };
-  const f = (c?: string) => (c && made.has(c) ? c + '.ogg' : undefined);
-  const tracks = play.filter(c => made.has(c)).map(c => c + '.ogg');
+  const f = (c?: string) => (c && made.has(c) ? made.get(c)! : undefined);
+  const tracks = play.filter(c => made.has(c)).map(c => made.get(c)!);
   const menu = f(title) ?? tracks[0];
   return {
     theme: {
       music: { title: menu, menu, play: tracks[0] },
-      tracks, songs: [...made].sort().map(c => c + '.ogg'),
+      tracks, songs: [...made.values()].sort(),
     },
     assets,
   };
