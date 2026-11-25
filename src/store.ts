@@ -256,6 +256,11 @@ const listeners: Array<() => void> = [];
 export function onLocalChange(f: () => void) { listeners.push(f); }
 function changed() { for (const f of listeners) try { f(); } catch { /* ignore */ } }
 
+/** home-screen pack solved totals: pack id, or null when every pack's progress may have changed */
+let packProgressHook: ((packId: string | null) => void) | null = null;
+export function onPackProgressChange(f: (packId: string | null) => void) { packProgressHook = f; }
+function packProgressChanged(packId: string | null) { try { packProgressHook?.(packId); } catch { /* ignore */ } }
+
 type ProgressMap = Record<string, PuzzleProgress>;
 
 // ---- profiles: each one has its own progress and quick save on this device ----
@@ -332,7 +337,13 @@ function persist(touched?: string[]) {
   if (touched?.length) changed();
 }
 
-export function switchProfile(id: string) { if (loadProfiles().some(p => p.id === id)) { localStorage.setItem('momogram.profile', id); loadActive(); } }
+export function switchProfile(id: string) {
+  if (loadProfiles().some(p => p.id === id)) {
+    localStorage.setItem('momogram.profile', id);
+    loadActive();
+    packProgressChanged(null);
+  }
+}
 export function createProfile(name: string, id = newId()): Profile {
   const p: Profile = { id, name: name.trim().slice(0, 40) || 'Player', created: nowIso() };
   storeProfiles([...loadProfiles(), p]);
@@ -420,6 +431,7 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
   if (extra?.pts) p.pts = Math.max(p.pts ?? 0, extra.pts(p));
   progress[k] = p;
   persist([packId]);
+  packProgressChanged(packId);
   return better;
 }
 
@@ -456,6 +468,7 @@ export function resetProgress(packId: string) {
   resetTimes[packId] = nowIso();
   localStorage.setItem(pk('resets'), JSON.stringify(resetTimes));
   persist([packId]);
+  packProgressChanged(packId);
 }
 
 export interface QuickSave {
@@ -682,7 +695,7 @@ export function mergeSave(s: SaveFile): boolean {
     packTimes[id] = same(rp.progress) ? rp.updated : nowIso();
     any = true;
   }
-  if (any) { localStorage.setItem(pk('resets'), JSON.stringify(resetTimes)); persist(); }
+  if (any) { localStorage.setItem(pk('resets'), JSON.stringify(resetTimes)); persist(); packProgressChanged(null); }
   any = mergePractice(s.practice) || any;
   if (s.boards) any = mergeBoards(s.boards) || any;
   else if (s.quick && s.quickSaved) any = mergeBoards({ [bkey(s.quick.packId, s.quick.levelId, s.quick.puzzleId)]: { q: s.quick, saved: s.quickSaved } }) || any;
@@ -802,6 +815,7 @@ export function importSave(s: SaveFile): { profile: string; created: boolean; pa
     taken++;
   }
   persist();
+  if (taken) packProgressChanged(null);
   if (s.boards) mergeBoards(s.boards);
   else if (s.quick) mergeBoards({ [bkey(s.quick.packId, s.quick.levelId, s.quick.puzzleId)]: { q: s.quick, saved: s.quickSaved ?? s.saved } });
   if (!exists && s.settings) { Object.assign(settings, s.settings); saveSettings(); }

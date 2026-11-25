@@ -11,7 +11,7 @@ import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/pictu
 import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole, mergePacks } from './packs/format';
 import { readEntries, packRev, newRev } from './packs/io';
 import { upgradeStoredPack } from './packs/importers/index';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark, needsRatingRebuild, applyRatingRebuild, Rules, PuzzleProgress, rekeyPackProgress } from './store';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark, needsRatingRebuild, applyRatingRebuild, Rules, PuzzleProgress, rekeyPackProgress, onPackProgressChange } from './store';
 import { puzzleRating, performance as perfScore, points, RatedRules, RATING } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
 export { choose };
@@ -96,12 +96,7 @@ export async function boot() {
   setLang((want in LANG_NAMES ? want : 'en') as Lang);
   storage.persist();
   ctx.packs = (await storage.allPacks().catch(() => [])) ?? [];
-  // solved totals skip records whose puzzle the installed pack no longer lists; the records stay in the save
-  setKnownPuzzles(() => {
-    const m = new Map<string, Set<string>>();
-    for (const p of [STARTER, ...ctx.packs]) m.set(p.id, new Set(p.levels.flatMap(l => l.puzzles.map(z => z.id.replace(/@(mega|color)$/, '')))));
-    return m;
-  });
+  onPackProgressChange(invalidatePackCount);
   // packs stored by older versions: each importer brings its own up to date (may rename an id)
   {
     const before = ctx.packs.map(p => p.id);
@@ -131,6 +126,7 @@ export async function boot() {
       for (const p of ctx.packs) await storage.savePack(p);
     }
   }
+  packsChanged();
   // desktop app started with --rom <file> (shortcuts): import that game
   if (new URLSearchParams(location.search).has('rom')) {
     try {
@@ -162,7 +158,7 @@ async function addGameFiles(files: Array<{ name: string; data: Uint8Array }>): P
     try { found.push(...(await readEntries(await filesToEntries(f), lang(), t, ctx.packs)).made); }
     catch (e) { console.warn('import', f.name, e); }
   }
-  if (found.length) ctx.packs = await storePacks(ctx.packs, found);
+  if (found.length) { ctx.packs = await storePacks(ctx.packs, found); packsChanged(); }
   return found;
 }
 
@@ -362,10 +358,52 @@ function megaSwitch(): HTMLElement {
 
 // ---------------------------------------------------------------- home: the game library
 
+/** solved/total per pack for the current mode — rebuilt only when progress or packs change */
+const packCounts = new Map<string, [number, number]>();
+const megaFlagCache = new Map<string, boolean>();
+const countKey = (packId: string) => `${packId}|${curMode()}|${settings.megaMark ?? 'mark'}`;
+
+/** drop cached solved totals (one pack, or every pack when `packId` is null/omitted) */
+export function invalidatePackCount(packId?: string | null) {
+  if (packId == null || packId === '') { packCounts.clear(); megaFlagCache.clear(); return; }
+  const pre = packId + '|';
+  for (const k of [...packCounts.keys()]) if (k.startsWith(pre)) packCounts.delete(k);
+  megaFlagCache.delete(packId);
+}
+
+/** whether any puzzle in this pack is the game's own Mega version (cached; same pack id across mode views) */
+export function packHasGameMega(pack: Pack): boolean {
+  let v = megaFlagCache.get(pack.id);
+  if (v === undefined) {
+    v = pack.levels.some(l => l.puzzles.some(z => z.mega));
+    megaFlagCache.set(pack.id, v);
+  }
+  return v;
+}
+
 export function countPack(pack: Pack): [number, number] {
+  const k = countKey(pack.id);
+  const hit = packCounts.get(k);
+  if (hit) return hit;
   let a = 0, b = 0;
   for (const l of pack.levels) for (const p of l.puzzles) { b++; if (progressOf(pack, p).cleared) a++; }
-  return [a, b];
+  const v: [number, number] = [a, b];
+  packCounts.set(k, v);
+  return v;
+}
+
+/** known-puzzle index for stats: built once per pack list, not on every puzzleCounts call */
+let knownPuzzleMap: Map<string, Set<string>> = new Map();
+function refreshKnownPuzzles() {
+  const m = new Map<string, Set<string>>();
+  for (const p of [STARTER, ...ctx.packs]) m.set(p.id, new Set(p.levels.flatMap(l => l.puzzles.map(z => z.id.replace(/@(mega|color)$/, '')))));
+  knownPuzzleMap = m;
+  setKnownPuzzles(() => knownPuzzleMap);
+}
+/** pack list changed (import, delete, editor): drop counts and rebuild the known-puzzle index */
+export function packsChanged() {
+  invalidatePackCount();
+  refreshKnownPuzzles();
 }
 
 /** the pack played last (its menu music plays on the home screen) */
@@ -399,8 +437,8 @@ export function home() {
     h('button', { class: 'btn big mode practice', onClick: () => practiceScreen() }, h('b', {}, t('practice'))));
 
   const lib = h('div', { class: 'library' });
-  renderLibrary(lib, null);
-  const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { const on = toggleLibEdit(); renderLibrary(lib, null); arrange.classList.toggle('on', on); } }, t('arrange'));
+  renderLibrary(lib, null, packs);
+  const arrange = h('button', { class: 'btn ghost arrange', onClick: () => { const on = toggleLibEdit(); renderLibrary(lib, null, packs); arrange.classList.toggle('on', on); } }, t('arrange'));
 
   const upd = h('div', { class: 'update-slot' });
   showUpdate(upd);
@@ -702,7 +740,7 @@ export function allPacks(): Pack[] {
 export const MEGA = '@mega';
 /** this device's mode. `mega` is the old flag: it still wins when an older save has no mode of its own */
 export const curMode = (): Mode => (settings.mode && settings.mode !== 'normal' ? settings.mode : settings.mega ? 'mega' : 'normal');
-function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); }
+function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); invalidatePackCount(); }
 export const COLOR = '@color';
 /** which rules a medal is earned with (its time is what points look at) */
 export const RULES_OF: Record<string, Rules> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'platinum' };
@@ -1489,7 +1527,7 @@ function editorScreen() {
   themeRoot(null);
   editorHome({
     packs: () => ctx.packs,
-    setPacks: p => { ctx.packs = p.sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en'))); },
+    setPacks: p => { ctx.packs = p.sort((a, b) => pickAny(a.title, 'en').localeCompare(pickAny(b.title, 'en'))); packsChanged(); },
     header: (title, back) => header(title, back),
     screen, home, choose,
     test: (pack, lv, i, back) => play(pack, lv, i, back),
@@ -1502,7 +1540,7 @@ function packsScreen(back: () => void = home) {
   openPackManager({
     root: root(),
     packs: () => ctx.packs,
-    setPacks: p => { ctx.packs = p; for (const id of [...ctx.pcks.keys()]) if (!p.some(x => x.id === id)) ctx.pcks.delete(id); },
+    setPacks: p => { ctx.packs = p; for (const id of [...ctx.pcks.keys()]) if (!p.some(x => x.id === id)) ctx.pcks.delete(id); packsChanged(); },
     header: (title: string) => header(title, back),
     screen,
     openPack: (p: Pack) => openPack(p, () => packsScreen(back)),
