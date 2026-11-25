@@ -161,8 +161,12 @@ export function validatePack(p: any): p is Pack {
   for (const l of p.levels) {
     if (!Array.isArray(l.puzzles)) return false;
     for (const z of l.puzzles) {
-      if (!Array.isArray(z.rows) || z.rows.length !== z.height) return false;
-      if (z.rows.some((r: string) => typeof r !== 'string' || r.length !== z.width || /[^#.]/.test(r))) return false;
+      // coerce after a JSON round-trip (some hosts have re-encoded numbers as strings)
+      const w = Number(z.width), h = Number(z.height);
+      if (!Number.isFinite(w) || !Number.isFinite(h)) return false;
+      z.width = w; z.height = h;
+      if (!Array.isArray(z.rows) || z.rows.length !== h) return false;
+      if (z.rows.some((r: string) => typeof r !== 'string' || r.length !== w || /[^#.]/.test(r))) return false;
     }
   }
   return true;

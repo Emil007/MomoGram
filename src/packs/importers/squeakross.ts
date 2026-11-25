@@ -31,10 +31,11 @@ registerSetImporter({
     // Only this game: puzzles live in Data/resources.assets, and that same Data/ folder has an
     // Addressables catalog (catalog.json or catalog.bundle). A bare catalog is not enough —
     // other games ship one too (a Steam _Data folder must not be read as this game).
+    // Paths may be "Data/resources.assets" (picked RomFS root) or "…/Data/resources.assets".
     const roots = new Set<string>();
     const catalog = /StreamingAssets\/aa\/catalog\.(json|bundle)$/i;
     for (const n of names) {
-      if (!/\/Data\/resources\.assets$/i.test(n)) continue;
+      if (!/(^|\/)Data\/resources\.assets$/i.test(n)) continue;
       const root = n.slice(0, -'resources.assets'.length);
       if (names.some(x => x.startsWith(root) && catalog.test(x))) roots.add(root);
     }

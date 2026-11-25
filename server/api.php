@@ -434,7 +434,10 @@ switch ($a) {
     if ($r['assets'] === null) out(['kind' => 'zip']);
     $f = "$dataDir/packs/{$r['file']}";
     if (!is_file($f)) fail('missing', 404);
-    out(['kind' => 'split', 'pack' => json_decode((string)file_get_contents($f)), 'assets' => json_decode((string)$r['assets'])]);
+    $pack = json_decode((string)file_get_contents($f), true);
+    $assets = json_decode((string)$r['assets'], true);
+    if (!is_array($pack) || !is_array($assets)) fail('broken', 500);
+    out(['kind' => 'split', 'pack' => $pack, 'assets' => $assets]);
   }
 
   case 'blobs_missing': {
@@ -451,7 +454,11 @@ switch ($a) {
     user();
     $h = (string)($_GET['hash'] ?? ''); $i = (int)($_GET['i'] ?? -1); $n = (int)($_GET['n'] ?? 0);
     if (!preg_match(HASH_RE, $h) || $i < 0 || $n < 1 || $i >= $n || $n > ASSETS_MAX) fail('args');
-    if (is_file("$dataDir/blobs/$h")) out(['ok' => true]);
+    // an existing blob whose bytes no longer match its name must be replaced, not trusted
+    if (is_file("$dataDir/blobs/$h")) {
+      if (sha1_file("$dataDir/blobs/$h") === $h) out(['ok' => true]);
+      @unlink("$dataDir/blobs/$h");
+    }
     $data = (string)file_get_contents('php://input');
     if (strlen($data) > PART_MAX) fail('part', 413);
     $part = "$dataDir/blobs/$h.part";
@@ -473,10 +480,15 @@ switch ($a) {
     user();
     $h = (string)($_GET['hash'] ?? '');
     if (!preg_match(HASH_RE, $h) || !is_file("$dataDir/blobs/$h")) fail('missing', 404);
+    $path = "$dataDir/blobs/$h";
+    // proxies must not gzip this: the client checks SHA-1 of the raw bytes
     header('Content-Type: application/octet-stream');
-    header('Content-Length: ' . filesize("$dataDir/blobs/$h"));
+    header('Content-Encoding: identity');
+    header('Cache-Control: no-store');
+    @ini_set('zlib.output_compression', '0');
+    header('Content-Length: ' . filesize($path));
     while (ob_get_level()) ob_end_clean();
-    readfile("$dataDir/blobs/$h");
+    readfile($path);
     exit;
   }
 
@@ -500,6 +512,7 @@ switch ($a) {
       $name = (string)($f['name'] ?? '');
       if (!assetNameOk($name)) fail('name');
       if (!preg_match(HASH_RE, $h) || !is_file("$dataDir/blobs/$h")) fail('blob', 409, ['hash' => $h]);
+      if (sha1_file("$dataDir/blobs/$h") !== $h) fail('hash', 409, ['hash' => $h]);
       $sz = (int)filesize("$dataDir/blobs/$h");
       if ($sz > BLOB_MAX || $size + $sz > PACK_MAX) fail('size', 413);
       $assets[] = ['name' => $name, 'hash' => $h, 'size' => $sz, 'music' => !empty($f['music'])];
