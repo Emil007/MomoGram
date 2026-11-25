@@ -134,7 +134,7 @@ One importer reads each group of games below (click a system to open it). Every 
 </details>
 
 <details>
-<summary><b>Android</b> · 84,141 nonograms, 16,794 color nonograms, 15 songs</summary>
+<summary><b>Android</b> · 84,138 nonograms, 16,794 color nonograms, 15 songs</summary>
 
 | Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
 |---|---|---:|---:|---:|---:|
@@ -172,7 +172,7 @@ One importer reads each group of games below (click a system to open it). Every 
 
 | | Nonograms | Mega nonograms | Color nonograms | Songs |
 |---|---:|---:|---:|---:|
-| **Total** | **103,232** | **4,474** | **21,523** | **1,034** |
+| **Total** | **103,229** | **4,474** | **21,523** | **1,034** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare).
 
