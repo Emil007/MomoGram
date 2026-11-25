@@ -134,21 +134,21 @@ One importer reads each group of games below (click a system to open it). Every 
 </details>
 
 <details>
-<summary><b>Android</b> · ~95,000 nonograms, ~16,800 color nonograms, 15+ songs</summary>
+<summary><b>Android</b> · 84,141 nonograms, 16,794 color nonograms, 15 songs</summary>
 
 | Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
 |---|---|---:|---:|---:|---:|
-| Nonogram Crossing Logic | Android (.apk, .xapk, .apkm) | 22,679 | – | ~22,600 reveal | – |
-| Nonogram.com | Android (.apk, .xapk, .apkm) | ~8,900 | – | ~7,800 | – |
-| Nonogram Color | Android (.apk, .xapk, .apkm) | – | – | 7,424 | – |
-| Nonogram - Jigsaw Puzzle Game | Android (.apk, .xapk, .apkm) | 14,193 | – | – | 2 |
+| Nonogram Crossing Logic | Android (.apk, .xapk, .apkm) | 22,679 | – | – | – |
+| Nonogram - Jigsaw Puzzle Game | Android (.apk, .xapk, .apkm) | 11,808 | – | – | 2 |
 | kungfu nonogram | Android (.apk, .xapk, .apkm) | 13,932 | – | – | 5 |
+| Nonogram.com | Android (.apk, .xapk, .apkm) | 8,893 | – | 7,810 | – |
 | Gem Nonogram | Android (.apk, .xapk, .apkm) | 8,640 | – | – | 3 |
 | No2g: Nonogram | Android (.apk, .xapk, .apkm) | 8,399 | – | – | – |
+| Nonogram Color | Android (.apk, .xapk, .apkm) | – | – | 7,424 | – |
 | Nonogram King | Android (.apk, .xapk, .apkm) | 4,162 | – | – | 3 |
-| Nonograms (Classic) | Android (.apk, .xapk, .apkm) | ~840 | – | ~1,560 | – |
 | Eyes Nonogram | Android (.apk, .xapk, .apkm) | 1,683 | – | – | 2 |
 | Somnus : Nonogram | Android (.apk, .xapk, .apkm) | 1,068 | – | – | – |
+| Nonograms (Classic) | Android (.apk, .xapk, .apkm) | 837 | – | 1,560 | – |
 | Sky Castle (nonogram) | Android (.apk, .xapk, .apkm) | 797 | – | – | – |
 | Nonogram (Kimbuja) | Android (.apk, .xapk, .apkm) | 476 | – | – | – |
 | NetWitch | Android (.apk, .xapk, .apkm) | 379 | – | – | – |
@@ -172,7 +172,7 @@ One importer reads each group of games below (click a system to open it). Every 
 
 | | Nonograms | Mega nonograms | Color nonograms | Songs |
 |---|---:|---:|---:|---:|
-| **Total** | **70,303** | **4,474** | **12,539** | **1,034** |
+| **Total** | **103,232** | **4,474** | **21,523** | **1,034** |
 
 MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare).
 
