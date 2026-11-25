@@ -43,21 +43,21 @@ Nonograms do that too.
 ## What you get
 
 - **All your nonogram games in one library**, each with its own modes and levels, the puzzle names, solved pictures, music and colors of the original. Series form folders (all Picross e games, the S series, Picross NP, Illust Logic …); show them as cards, tiles or a list, sorted by series or system.
-- **Every puzzle on every difficulty**, with medals:
+- **Every puzzle on every rules set**, with a medal as flair (points are what count):
 
   | | Mistakes | Hint roulette | Medal |
   |---|---|---|---|
-  | **Easy** | caught, no time penalty | offered | 🥉 Bronze |
-  | **Normal** | caught, +2 / 4 / 8 minutes | offered | 🥈 Silver |
-  | **Hard** | not checked, *Try it out* to test ideas | none | 🥇 Gold, 💠 **Platinum** without logic hints |
+  | **Bronze** | caught, no time penalty | offered | 🥉 Bronze |
+  | **Silver** | caught, +2 / 4 / 8 minutes | offered | 🥈 Silver |
+  | **Gold** | not checked, *Try it out* to test ideas | none | 🥇 Gold, 💠 **Platinum** without logic hints |
 
-- **Three ways to play:** the mode switch on the home screen cycles through *MomoGram*, *Mega MomoGram* and *Color MomoGram*. Each mode has its own progress, medals and high scores.
+- **Three ways to play:** the mode switch on the home screen cycles through *MomoGram*, *Mega MomoGram* and *Color MomoGram*. Each mode has its own progress, points, PixELO and high scores.
 - **Mega mode** for everything: Mega numbers span two rows or columns. Games that have Mega puzzles bring their own (a glowing dot marks them); for all others MomoGram chooses the pairs, checks that each puzzle still has one solution, and makes the same choice on every device. Mega has its own progress and scores.
 - **Color mode:** color nonograms, where every block has a color and blocks of different colors may touch. The games' own color puzzles (see below), MomoGram's own color starter puzzles, and color versions of the games' color pictures where they work (few, clearly different colors and exactly one solution, checked by MomoGram's color solver). A palette with the tools shows how many cells of each color are still missing.
-- **Points and PixELO** – points count everything you've solved, PixELO is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixELO is shown under your name.
+- **Points and PixELO** – **points** are the score that ranks players; medals are a badge. PixELO is a chess-style rating of how good you are ([how they work](#points-and-pixelo)). Your PixELO is shown under your name.
 - **A board that feels like the handhelds:** the row and column you draw in light up into the clues, a counter shows the length of the block you're drawing, clue numbers grey out only when their block is certainly done, logic hints (💡) turn a clue blue when its line gives away a new cell, and your own marks stay while you fill and cross the rest.
 - **Made for one hand on a phone:** portrait layout, tools at the bottom (or right), stepless pinch zoom, drags that stay on their line. Keyboard, mouse and gamepad on the desktop and Steam Deck.
-- **A daily nonogram** (up to 20 a day, in 5×5, 10×10, 15×15 and Big, from all your games) and a **Random** button.
+- **A daily nonogram** (**20** a day: 5 each in 5×5, 10×10, 15×15 and Big, from all your games). Clearing one counts on the **original game** (points and PixELO once); the daily list links to that progress. **Random** uses the same four sizes.
 - **The games' own music**, every song of every game, with a sound test to choose where each plays.
 - **Practice:** little games with random puzzles from your own games, in the mode that is on (Normal, Mega or Color), which don't count as solved: *Find the mistakes* (a finished picture with a few wrong cells), *Finish it* (most of a puzzle already solved), *5×5 sprint* (as many small puzzles as you can in a minute), *The next step* (a puzzle halfway through: find a cell that is certain now), *One line* (find every cell one marked line decides) and *Memory* (see the picture for 3 seconds, then solve it). Your best result in each is kept.
 - **Interactive tutorials** for nonograms, Mega and Color (each offered once, all in the options), plus **technique lessons** for each (overlap from both ends, edges, joining, gaps, what-if, Mega shapes, color rules), one technique per step, an **editor** for your own puzzles, light and **dark mode**, and six languages (English, German, French, Spanish, Italian, Japanese) – the puzzle names come in every language the games have. [Adding a language](#translations) is one file.
@@ -66,15 +66,16 @@ Nonograms do that too.
 
 ## Supported games
 
-**Options → Puzzle packs → Add games or packs** reads game files you own (raw, or in `.zip` / `.7z` / `.rar`), or a whole folder with everything in it. MomoGram makes one pack per game, with the original level structure; regional versions of a game become **one** pack with every language's names, and the same song in several games is stored only once. Do it once: export the packs, or keep them on your own server, and use them on every device.
+**Options → Puzzle packs → Add games or packs** reads game files you own (raw, or in `.zip` / `.7z` / `.rar`; Android games as `.apk`, `.xapk`, `.apkm` or `.apks`), or a whole folder with everything in it — pointing at your full dump folder and letting it scan is the usual workflow. MomoGram makes one pack per game, with the original level structure; regional versions of a game become **one** pack with every language's names, and the same song in several games is stored only once. Do it once: export the packs, or keep them on your own server, and use them on every device.
 
-One importer reads each group of games below. Every number is what the games themselves contain (all regions together where there are several):
+One importer reads each group of games below (click a system to open it). Every number is what the games themselves contain (all regions together where there are several):
+
+<details>
+<summary><b>Nintendo DS, DSi and DSiWare</b> · 6,171 nonograms, 3,356 color nonograms</summary>
 
 | Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
 |---|---|---:|---:|---:|---:|
 | Picross DS and its demos (Download Station, Nintendo Channel) | DS | 366 | – | – | 27 |
-| Picross e – e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross: Zelda TP, Sanrio Characters Picross | 3DS (decrypted) | 2,062 | 1,956 | – | 88 |
-| PICROSS S – S9, S+, S GENESIS, S Doraemon, S CAPCOM, S SNK, S NAMCO, Shield Hero, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 3,182 | 2,518 | 433 | 325 |
 | Hudson's Illust Logic: Puzzle Series Vol. 6, Illust Logic DS + Colorful Logic, Illust Logic and + Nihon no Mukashi Banashi (DSiWare) | DS, DSiWare | 1,000 | – | 100 | 80 |
 | DS Puzzler / Challenge Me: Brain Puzzles, DS Puzzler Wi-Fi Taiou | DS | 1,000 | – | – | 7 |
 | SIMPLE DS Vol. 7 / Vol. 28: THE Illust Puzzle | DS | 2,801 | – | 2,800 | 17 |
@@ -82,27 +83,98 @@ One importer reads each group of games below. Every number is what the games the
 | Puzzle Mate DS: Oekaki Mate | DS | 443 | – | 8 | 4 |
 | Hello Kitty no Paku Paku & Logic | DS | 122 | – | – | 4 |
 | Puzzle Iro Iro: Gekkan Crossword House Vol. 1 – 6 | DSiWare | 18 | – | – | 36 |
+| Oekaki Puzzle Battle! Yuusha Ou GaoGaiGar Hen | DS | 282 | – | 282 | 7 |
+
+</details>
+
+<details>
+<summary><b>Nintendo 3DS</b> · 2,062 nonograms, 1,956 Mega nonograms</summary>
+
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---|---:|---:|---:|---:|
+| Picross e – e9, Pokémon Picross, Club Nintendo Picross (+ Plus), My Nintendo Picross: Zelda TP, Sanrio Characters Picross | 3DS (decrypted) | 2,062 | 1,956 | – | 88 |
+
+</details>
+
+<details>
+<summary><b>Nintendo Switch</b> · 5,541 nonograms, 2,518 Mega nonograms, 733 color nonograms</summary>
+
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---|---:|---:|---:|---:|
+| PICROSS S – S9, S+, S GENESIS, S Doraemon, S CAPCOM, S SNK, S NAMCO, Shield Hero, Kemono Friends, Lord of the Nazarick, LogiartGrimoire, Raden's Guide | Switch (decrypted RomFS folder or zip) | 3,182 | 2,518 | 433 | 325 |
+| Squeakross: Home Squeak Home | Switch (decrypted RomFS folder or zip) | 650 | – | – | 43 |
+| Eiga Sumikkogurashi: Asobo Characross | Switch (decrypted RomFS folder or zip) | 133 | – | – | 11 |
+| Piczle Cross Adventure | Switch, Steam | 634 | – | – | 19 |
+| Piczle Cross: Story of Seasons | Switch | 342 | – | – | – |
+| Piczle Cross: Rune Factory | Switch | 600 | – | 300 | – |
+
+</details>
+
+<details>
+<summary><b>Game Boy, Game Boy Color and Game Boy Advance</b> · 1,946 nonograms, 352 color nonograms</summary>
+
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---|---:|---:|---:|---:|
 | Mario's Picross, Picross 2 | Game Boy | 1,104 | – | – | 47 |
 | Pokémon Picross (unreleased prototype) | Game Boy Color | 490 | – | – | 36 |
+| Hatena Satena | Game Boy Advance | 352 | – | 352 | – |
+
+</details>
+
+<details>
+<summary><b>Super Famicom</b> · 2,317 nonograms</summary>
+
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---|---:|---:|---:|---:|
 | Mario's Super Picross, Tamori no Picross | Super Famicom, Satellaview | 397 | – | – | 41 |
 | Picross NP Vol. 1 – 8 | Super Famicom (Nintendo Power) | 1,320 | – | – | 168 |
 | Oekaki Logic 1, 2 | Super Famicom (Nintendo Power) | 300 | – | – | – |
 | Oh-chan no Oekaki Logic | Super Famicom | 300 | – | – | – |
+
+</details>
+
+<details>
+<summary><b>Android</b> · ~95,000 nonograms, ~16,800 color nonograms, 15+ songs</summary>
+
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---|---:|---:|---:|---:|
+| Nonogram Crossing Logic | Android (.apk, .xapk, .apkm) | 22,679 | – | ~22,600 reveal | – |
+| Nonogram.com | Android (.apk, .xapk, .apkm) | ~8,900 | – | ~7,800 | – |
+| Nonogram Color | Android (.apk, .xapk, .apkm) | – | – | 7,424 | – |
+| Nonogram - Jigsaw Puzzle Game | Android (.apk, .xapk, .apkm) | 14,193 | – | – | 2 |
+| kungfu nonogram | Android (.apk, .xapk, .apkm) | 13,932 | – | – | 5 |
+| Gem Nonogram | Android (.apk, .xapk, .apkm) | 8,640 | – | – | 3 |
+| No2g: Nonogram | Android (.apk, .xapk, .apkm) | 8,399 | – | – | – |
+| Nonogram King | Android (.apk, .xapk, .apkm) | 4,162 | – | – | 3 |
+| Nonograms (Classic) | Android (.apk, .xapk, .apkm) | ~840 | – | ~1,560 | – |
+| Eyes Nonogram | Android (.apk, .xapk, .apkm) | 1,683 | – | – | 2 |
+| Somnus : Nonogram | Android (.apk, .xapk, .apkm) | 1,068 | – | – | – |
+| Sky Castle (nonogram) | Android (.apk, .xapk, .apkm) | 797 | – | – | – |
+| Nonogram (Kimbuja) | Android (.apk, .xapk, .apkm) | 476 | – | – | – |
+| NetWitch | Android (.apk, .xapk, .apkm) | 379 | – | – | – |
+| Cat Sitter (+ nonogram) | Android (.apk, .xapk, .apkm) | 312 | – | – | – |
+| Nonogram Classic Games | Android (.apk, .xapk, .apkm) | 73 | – | – | – |
+
+</details>
+
+<details>
+<summary><b>Misc: Steam and Arduboy</b> · 1,054 nonograms, 288 color nonograms</summary>
+
+| Games | System | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---|---:|---:|---:|---:|
 | PiCross, Picross a (homebrew) | Arduboy (.hex) | 325 | – | – | – |
 | Charm Studies | Steam (the game folder) | 169 | – | – | 7 |
 | SherloCAT Holmes Nonogram | Steam (the game folder) | 114 | – | – | 6 |
 | Paint it Back | Steam (the game folder) | 158 | – | – | – |
 | Pixel Puzzle Makeout League | Steam (the game folder) | 288 | – | 288 | 6 |
-| Hatena Satena | Game Boy Advance | 352 | – | 352 | – |
-| Oekaki Puzzle Battle! Yuusha Ou GaoGaiGar Hen | DS | 282 | – | 282 | 7 |
-| Squeakross: Home Squeak Home | Switch (decrypted RomFS folder or zip) | 650 | – | – | – |
-| Eiga Sumikkogurashi: Asobo Characross | Switch (decrypted RomFS folder or zip) | 133 | – | – | 11 |
-| Piczle Cross Adventure | Steam, Switch | 634 | – | – | – |
-| Piczle Cross: Story of Seasons | Switch | 342 | – | – | – |
-| Piczle Cross: Rune Factory | Switch | 600 | – | 300 | – |
-| **Total** | | **19,091** | **4,474** | **4,729** | **957** |
 
-MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare) and two of Puzzle Mate's Color nonograms.
+</details>
+
+| | Nonograms | Mega nonograms | Color nonograms | Songs |
+|---|---:|---:|---:|---:|
+| **Total** | **70,303** | **4,474** | **12,539** | **1,034** |
+
+MomoGram adds more on top: every nonogram can also be played as a Mega nonogram (with Mega numbers MomoGram places), and a game's pictures with a few colors become Color nonograms where they have exactly one solution (95 of Hudson's in Illust Logic DS, for example). Still to come: Animal Color Cross (DSiWare).
 
 To add another game, see [docs/writing-importers.md](docs/writing-importers.md); each file in `src/packs/importers/` lists the games it reads and where their data is.
 
@@ -116,6 +188,7 @@ Every song a game has is stored with its pack and listed in the sound test (Opti
 | 3DS | BCSTM streams | DSP-ADPCM decoded in the browser |
 | Switch | FMOD sound banks (FSB5) | the Vorbis streams rebuilt as Ogg files |
 | Steam | Ogg files, or an FSB5 bank rebuilt as Ogg (a PCM16 sting stays a WAV) | the browser |
+| Android | MP3 or Ogg in the package (Cocos / Unity / plain assets) | the browser |
 | Game Boy / Game Boy Color | the game's sound program | emulated sound hardware (CPU and APU), only the sound banks are kept |
 | Super Famicom / Satellaview | the game's sound program | emulated SPC700 and S-DSP, from a snapshot taken when the pack is made |
 
@@ -149,41 +222,40 @@ an earlier one (Picross S+ and the 3DS Picross e games, for example).
 
 ## Points and PixELO
 
-MomoGram keeps two numbers for every player, and keeps them **twice**: once for normal puzzles and once for Mega puzzles (Mega is a game of its own, with its own progress, medals and high scores). The home screen shows the PixELO of the mode you're in under your name; the high scores have a tab for each. Everything below is computed from your saved progress, so all your devices (and the server) arrive at the same numbers.
+MomoGram keeps two numbers for every player, and keeps them **twice**: once for normal puzzles and once for Mega puzzles (Mega is a game of its own). **Points** are what rank players; medals are a badge beside them. The home screen shows the PixELO of the mode you're in under your name; the high scores have a tab for each. Everything below is computed from your saved progress, so all your devices (and the server) arrive at the same numbers.
 
-Both start from what the solver knows about a puzzle (`src/game/difficulty.ts`): its **work**, the number of cells times the square root of the passes the line-by-line solver needs (at least 25), and whether it can be solved line by line at all. From the work come the puzzle's **rating** and its **par time**, the same on every device:
+Both start from what the line solver knows about a puzzle (`src/game/difficulty.ts`): **passes**, **filled** cells, and **area**. Sparse empty canvas no longer farms the same as a dense picture: an **effective area** scales with density. From that come three separate signals (same on every device) — puzzle **rating** (opponent skill), **par** (clock), and **points work** — see `RATING.version` 2 in `src/game/rating.ts`.
 
-| | Rating | Par time |
-|---|---|---|
-| Formula | 500 + 220 · ln(work / 25), +250 if not solvable line by line, +120 for Mega | 10 s + 0.35 s · work, ×1.25 for Mega |
-| typical 5×5 | about 650 | about 30 s |
-| typical 10×10 | about 950 | about 1:20 |
-| typical 15×15 | about 1200 | about 3:40 |
-| typical 25×20 | about 1340 | about 6:40 |
+| Band (after calibration) | Puzzle rating (about) |
+|---|---|
+| Easy 5×5 | ~400–550 |
+| Typical 10×10 | ~700–850 |
+| Hard 15×15 | ~1000–1200 |
+| Expert / deep not-logic | above that |
+
+Colour mode uses the same black-and-white `rows` path for rating for now (plus Mega multipliers where they apply).
 
 ### Points: everything you've solved
 
 Points only go up. Every puzzle is worth **its best result, once**:
 
-- **Base:** 5 · (1 + ln(work / 25)), +5 if it can't be solved line by line. A 5×5 gives about 8, a 15×15 about 21.
-- **× medal**, only the best one counts: 🥉 bronze ×1 (Easy), 🥈 silver ×2 (Normal), 🥇 gold ×3 (Hard), 💠 platinum ×4 (Hard without logic hints). Platinum is worth more than gold because it's harder.
-- **+ speed bonus:** up to +50 % for a time under par (none at par or slower).
+- **Base** from effort-aligned work on effective area and passes, +5 if it can't be solved line by line.
+- **× medal** (flair multiplier on the points): 🥉 bronze ×1, 🥈 silver ×2, 🥇 gold ×3, 💠 platinum ×4. Lazy mode on Gold scores as Silver.
+- **+ speed bonus:** up to +50 % for a time under par (none at par or slower). Gold and platinum keep **separate** best times so a later gold run cannot inflate a platinum’s speed bonus.
 - **× 1.25** for Mega puzzles.
 
-When you do better later (a better medal, a faster time), you get only the difference, so replaying a puzzle on every difficulty doesn't add up: a 15×15 gold at par gives about 63, a platinum in half the par time about 104, and the platinum replaces the gold instead of adding to it. Puzzles solved before points existed are counted from their stored medals and times.
+When you do better later, you get only the difference. A daily clear records on the **original** puzzle once (the daily UI links there).
 
 ### PixELO: how good you are
 
-PixELO is a rating like in chess, where every puzzle is an opponent with its own rating. Everyone starts at **1000**; a 1000 player is about even with a typical 10×10.
+PixELO is a rating like in chess, where every puzzle is an opponent with its own rating. Everyone starts at **500**.
 
-1. **Which solves count:** the **first solve of a puzzle under each rule set** (Easy, Normal, Hard), so one puzzle can be rated up to three times. Replays are unrated (the solved screen says so), and leaving a puzzle costs nothing, since puzzles are always kept and can be continued.
-2. **Your score for a solve,** between 0 and 1, from your time against the par time: score = 1 / (1 + (time / par)^1.5). At par you score 0.5, in half the time about 0.74, in double the time about 0.26. Help makes the time count longer: Easy (mistakes are caught for you) ×1.5, logic hints ×1.2, each spin of the hint roulette +30 s.
-3. **What was expected** of you against that puzzle: expected = 1 / (1 + 10^((puzzle − you) / 400)). Against a puzzle rated 200 above you, you're expected to score 0.24; 200 below you, 0.76.
-4. **The change:** K · (score − expected), rounded. K is 40 for your first 15 rated solves (so you find your level fast) and 20 after that. Until then your PixELO is *provisional* (shown with a "?"). It never drops below 100.
+1. **Which solves count:** the **first solve of a puzzle under each rule set** (Bronze, Silver, Gold, and Platinum’s own slot), so one puzzle can be rated more than once. Replays are unrated; leaving a puzzle costs nothing.
+2. **Your score for a solve,** between 0 and 1, from your time against the par time: score = 1 / (1 + (time / par)^1.5). At par you score 0.5. Help makes the time count longer: Bronze (mistakes caught for you) ×1.5, logic hints ×1.2, each hint-roulette spin +30 s.
+3. **What was expected** against that puzzle: expected = 1 / (1 + 10^((puzzle − you) / 400)).
+4. **The change:** K · (score − expected), rounded. K is 40 for your first 15 rated solves and 20 after that. Until then PixELO is *provisional* ("?"). Floor 100.
 
-Examples for a player at 1000: a 15×15 (rating ~1200) solved at par: +10; in half the par time: +20; in double the par time: +1. A 5×5 (rating ~650) at double par: −25, because a 1000 player should be much faster there.
-
-The highest PixELO you've reached is kept as your peak. Your PixELO isn't stored but recalculated from your rated solves in the order you made them, so a device that syncs later gets the same value. All constants are in `src/game/rating.ts` (`RATING`).
+When the formula version bumps, saved PixELO and points are **fully rebuilt** from stored times (and `firstMs` on new rated solves). Constants live in `src/game/rating.ts` (`RATING`); `tools/calibrate-rating.mjs` checks sparse vs dense fixtures.
 
 ## Platforms
 
@@ -232,7 +304,7 @@ When both sides changed something, the better result wins per puzzle and per pra
 | Zoom / move | pinch (stepless), two fingers to move, wheel, 🔍 (hold and move to look around) | `C` | Y |
 | Mark | ⬚ (third tool) | | |
 | Undo | ↶ | `U`, Ctrl+Z | L |
-| Try it out (Hard) | ✎ | | R |
+| Try it out (Gold) | ✎ | | R |
 | Menu | ☰ | Esc | Start |
 
 ## Building

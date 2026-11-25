@@ -81,22 +81,31 @@ function tocOf(utoc: Uint8Array): Toc {
   return { blockSize, records, blocks, paths };
 }
 
+const MAX_CHUNK = 32 * 1024 * 1024;
+
 async function chunk(toc: Toc, ucas: Uint8Array, index: number): Promise<Uint8Array> {
   const rec = index * 10;
+  if (rec + 10 > toc.records.length) throw new Error('IoStore chunk is not in the table.');
   const off = be5(toc.records, rec), len = be5(toc.records, rec + 5);
+  if (!toc.blockSize || !Number.isFinite(len) || len <= 0 || len > MAX_CHUNK) throw new Error('IoStore chunk is not readable.');
   const out = new Uint8Array(len);
-  let pos = off, w = 0;
+  let pos = off, w = 0, guard = 0;
   while (w < len) {
+    if (++guard > 1_000_000) throw new Error('IoStore chunk did not finish.');
     const bi = Math.floor(pos / toc.blockSize);
     const b = bi * 12;
+    if (b < 0 || b + 12 > toc.blocks.length) throw new Error('IoStore block is not in the table.');
     const rawOff = le5(toc.blocks, b);
     const csz = toc.blocks[b + 5] | (toc.blocks[b + 6] << 8) | (toc.blocks[b + 7] << 16);
     const usz = toc.blocks[b + 8] | (toc.blocks[b + 9] << 8) | (toc.blocks[b + 10] << 16);
     const method = toc.blocks[b + 11];
+    if (rawOff < 0 || csz <= 0 || rawOff + csz > ucas.length) throw new Error('IoStore block is not readable.');
+    if (method !== 0 && (usz <= 0 || usz > MAX_CHUNK)) throw new Error('IoStore block is not readable.');
     const src = ucas.subarray(rawOff, rawOff + csz);
     const plain = method === 0 ? src : await oodle(src, usz);
     const skip = pos % toc.blockSize;
     const take = Math.min(plain.length - skip, len - w);
+    if (!(take > 0)) throw new Error('IoStore block made no progress.');
     out.set(plain.subarray(skip, skip + take), w);
     w += take;
     pos += take;

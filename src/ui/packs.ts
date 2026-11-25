@@ -1,8 +1,8 @@
 // Pack manager: the installed packs, adding games and pack files, exporting .momopack files, and the packs on the
 // MomoGram server (download, update, upload).
-import { Pack, PackTheme, pickAny, mergePacks, scansOf, joinScans, songsOf, roleSongs, setRoleSongs, SongRole } from '../packs/format';
+import { Pack, PackTheme, pickAny, mergePacks, scansOf, joinScans, songsOf, roleSongs, setRoleSongs, SongRole, validatePack } from '../packs/format';
 import { readEntries, momopackOf, momopackName, packRev, newRev } from '../packs/io';
-import { importFileSet } from '../packs/importers/index';
+import { importFileSet, setImportAsk } from '../packs/importers/index';
 import { storage } from '../store';
 import { t, lang } from '../i18n';
 import { h, pickFiles, serverError } from '../app';
@@ -27,6 +27,9 @@ export async function filesToEntries(f: { name: string; data?: Uint8Array; file?
   if (isArchive(f.name)) return extractAll(f.file ?? new File([data as Uint8Array<ArrayBuffer>], f.name));
   return [{ name: f.name, data }];
 }
+
+// a game file of another version than the importer knows: the player decides
+setImportAsk(q => confirmBox(t('apkVersionAsk', { game: q.game, have: q.have, want: q.want }), t('tryAnyway')));
 
 export function openPackManager(pm: PM) {
   const list = h('div', { class: 'packlist' });
@@ -197,7 +200,7 @@ export function openPackManager(pm: PM) {
     status.append(results);
     const byName = new Map(files.map(f => [(f as any).webkitRelativePath || f.name, f]));
     const names = [...byName.keys()];
-    const loose = names.filter(n => /\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|app|hex|zip|7z|rar|momopack)$/i.test(n));
+    const loose = names.filter(n => /\.(gb|gbc|sfc|smc|bs|nds|srl|3ds|cci|cxi|cia|app|hex|apk|xapk|apkm|apks|zip|7z|rar|momopack)$/i.test(n));
     let done = 0;
     // packs this run added or changed, each counted once (a game in several files is read several times)
     const changed = new Set<string>();
@@ -387,11 +390,14 @@ export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: 
       const split = sps[i].split ? await steady(sig => Sync.packSplit(sps[i].id), () => step(`${i + 1}/${sps.length} · ${t('waiting')}`)) : null;
       let made: Pack[];
       if (split) {
-        const p = split.pack as Pack;
+        const raw = split.pack as Pack;
+        if (!validatePack(raw) || raw.id !== sps[i].id) throw new Error(t('downloadBroken'));
+        const p = raw;
         p.assets = [];
         const want = split.assets.filter(a => music || !a.music);
         for (let k = 0; k < want.length; k++) {
           const a = want[k];
+          if (!a.name || a.name.length > 240 || a.name.includes('..') || a.name.startsWith('/') || a.name.includes('\\') || a.name.includes('\0') || !/^[0-9a-f]{40}$/.test(a.hash)) throw new Error(t('downloadBroken'));
           step(`${i + 1}/${sps.length} · ${k + 1}/${want.length}`);
           // a file this device has (any pack's, or one an interrupted download already got) isn't fetched again
           let data = await storage.loadBlob(a.hash).catch(() => undefined);
@@ -403,7 +409,10 @@ export async function fetchServerPacks(pm: Pick<PM, 'packs' | 'setPacks'>, sps: 
           p.assets.push({ name: a.name, data });
         }
         made = [p];
-      } else made = (await readEntries(unzipAll(await steady(() => Sync.downloadPack(sps[i].id))), lang(), t)).made;
+      } else {
+        made = (await readEntries(unzipAll(await steady(() => Sync.downloadPack(sps[i].id))), lang(), t)).made.filter(p => p.id === sps[i].id && validatePack(p));
+        if (!made.length) throw new Error(t('downloadBroken'));
+      }
       // a pack from the server keeps its revision (old uploads without one count as 1)
       for (const p of made) if (p.rev === undefined && sps[i].meta?.rev) p.rev = sps[i].meta.rev;
       if (made.length) {

@@ -88,7 +88,7 @@ const WHITE = 250; // near-white only counts as empty; the art uses light beige/
 
 registerSetImporter({
   name: 'Paint it Back (Steam)',
-  version: 1,
+  version: 2, // 2: flip the texture; Unity stores the bottom row first
   find(names) {
     // this game's Unity player data, not every resources.assets (Picross S uses that name too)
     return names.filter(n => /(?:^|\/)(?:pib_Data|Paint it Back_Data)\/resources\.assets$/i.test(n))
@@ -127,7 +127,7 @@ function readPack(data: Uint8Array): Pack {
       const e = tex.get(norm(title)) ?? tex.get(norm(title.replace(/['']/g, "'")));
       if (!e) { skipped.push(title); continue; }
       if (ETC_PORTRAITS.has(title)) { skipped.push(title); continue; }
-      const rows = gridFromTexture(e.o, e.w, e.h, e.fmt, e.complete, WHITE);
+      const rows = gridFromTexture(e.o, e.w, e.h, e.fmt, e.complete, WHITE, true);
       if (!rows) { skipped.push(title); continue; }
       const id = `pib-${room.id}-${i}-${slug(title)}`;
       puzzles.push({ id, width: e.w, height: e.h, rows: rows.map(r => r.map(c => c ? '#' : '.').join('')), name: { en: title } });

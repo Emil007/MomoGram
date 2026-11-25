@@ -17,6 +17,14 @@ let current = '';
 const listeners: Array<(id: string) => void> = [];
 const changed = () => { for (const f of [...listeners]) f(current); };
 let pending: (() => void) | null = null;
+/** bumped on every playPack/stop so a late load does not steal Now Playing */
+let playGen = 0;
+function flushPending() {
+  if (paused || !pending) return;
+  const p = pending;
+  pending = null;
+  p();
+}
 
 // pack music: decoded streams are cached (a few per session); sound archives get their own sequencer
 const buffers = new Map<string, AudioBuffer>();
@@ -36,7 +44,11 @@ const chipData = new Map<string, Uint8Array>();
 
 function ensure(): boolean {
   if (!ac) {
-    try { ac = new AudioContext(); } catch { return false; }
+    try {
+      ac = new AudioContext();
+      // any resume (tab shown, unlock, unpause) must play the track queued while suspended
+      ac.onstatechange = () => { if (!paused && ac?.state === 'running') flushPending(); };
+    } catch { return false; }
     master = ac.createGain();
     master.gain.value = settings.musicVolume;
     master.connect(ac.destination);
@@ -56,14 +68,14 @@ const unlock = () => {
   // resume() is asynchronous: start the queued track once the context really runs (it was lost before)
   sfxAc?.resume().catch(() => {});
   if (paused) return;
-  ac!.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } });
+  ac!.resume().then(flushPending).catch(() => {});
 };
 window.addEventListener('pointerdown', unlock);
 // app in the background (other app, locked phone, hidden tab): pause all sound, continue when it comes back
 document.addEventListener('visibilitychange', () => {
   if (!ac) return;
   if (document.hidden) { ac.suspend().catch(() => {}); sfxAc?.suspend().catch(() => {}); }
-  else { if (!paused) ac.resume().catch(() => {}); sfxAc?.resume().catch(() => {}); }
+  else { if (!paused) ac.resume().then(flushPending).catch(() => {}); sfxAc?.resume().catch(() => {}); }
 });
 window.addEventListener('pagehide', () => { ac?.suspend().catch(() => {}); sfxAc?.suspend().catch(() => {}); });
 (window as any).__music = () => current;
@@ -164,12 +176,15 @@ async function loadBuffer(packId: string, name: string): Promise<AudioBuffer | n
   } else if (data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46) {
     buf = await ac!.decodeAudioData(data.slice().buffer);
     (buf as any).loopInfo = null;
-  } else {
-    if (!isBcstm(data)) return null;
+  } else if (isBcstm(data)) {
     const s = decodeBcstm(data);
     buf = ac!.createBuffer(s.channels.length, s.channels[0].length, s.sampleRate);
     s.channels.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
     (buf as any).loopInfo = s;
+  } else {
+    // MP3 (Android games) and anything else the browser decodes
+    try { buf = await ac!.decodeAudioData(data.slice().buffer); } catch { return null; }
+    (buf as any).loopInfo = null;
   }
   if (buffers.size > 6) buffers.delete(buffers.keys().next().value!);
   buffers.set(key, buf);
@@ -187,9 +202,19 @@ export const Audio = {
     const id = packId + '/' + ref;
     if (paused && id !== current) Audio.resume();
     if (id === current && (stream || packSeqPlaying?.playing || chip?.playing)) return true;
-    if (!ac || ac.state !== 'running') { pending = () => Audio.playPack(packId, ref, loop); return true; }
+    // context suspended (hidden tab, not yet unlocked): keep the track and play it when audio actually runs
+    if (!ac || ac.state !== 'running') { pending = () => { void Audio.playPack(packId, ref, loop); }; return true; }
+    pending = null;
     ensure();
-    current = id; changed();
+    const gen = ++playGen;
+    // load failed and this is still the request: do not leave the previous song playing, and do not name a track that never started
+    const failed = (): false => {
+      if (gen !== playGen) return false;
+      current = '';
+      changed();
+      stopPackMusic(0.1);
+      return false;
+    };
     try {
       const [file, seq] = ref.split('#');
       const cm = seq?.match(/^(gb|spc):(\d+)$/);
@@ -198,39 +223,43 @@ export const Audio = {
         let d = chipData.get(key);
         if (!d) {
           d = await storage.loadAsset(packId, file) ?? undefined;
-          if (!d) return false;
+          if (!d) return failed();
           if (chipData.size > 3) chipData.delete(chipData.keys().next().value!);
           chipData.set(key, d);
         }
-        if (current !== id) return true;
+        if (gen !== playGen) return false;
         stopPackMusic();
         chip ??= new ChipPlayer(ac!, master!);
         const fromChip = songLevel.get(id) ?? chipTrim;
         chip.setTrim(fromChip);
         const started = await chip.play(cm[1] as 'gb' | 'spc', key, d, +cm[2]);
-        if (started && current === id && !songLevel.has(id)) matchLive(id, chip.monitor, fromChip, (g, ramp) => { chipTrim = g; if (current === id) chip!.setTrim(g, ramp); });
-        return started;
+        if (!started || gen !== playGen) return failed();
+        current = id; changed();
+        if (!songLevel.has(id)) matchLive(id, chip.monitor, fromChip, (g, ramp) => { chipTrim = g; if (current === id) chip!.setTrim(g, ramp); });
+        return true;
       }
       if (seq) {
         let sp = packSeq.get(packId + '/' + file);
         if (!sp) {
           const d = await storage.loadAsset(packId, file);
-          if (!d) return false;
+          if (!d) return failed();
           sp = new SeqPlayer(ac!, master!, new Sdat(d));
           packSeq.set(packId + '/' + file, sp);
         }
-        if (current !== id) return true;
+        if (gen !== playGen) return false;
         stopPackMusic();
         packSeqPlaying = sp;
         const fromSeq = songLevel.get(id) ?? seqTrim;
         sp.setTrim(fromSeq);
         const started = sp.play(seq, loop);
-        if (started && !songLevel.has(id)) matchLive(id, sp.monitor, fromSeq, (g, ramp) => { seqTrim = g; if (current === id) sp!.setTrim(g, ramp); });
-        return started;
+        if (!started || gen !== playGen) return failed();
+        current = id; changed();
+        if (!songLevel.has(id)) matchLive(id, sp.monitor, fromSeq, (g, ramp) => { seqTrim = g; if (current === id) sp!.setTrim(g, ramp); });
+        return true;
       }
       const buf = await loadBuffer(packId, file);
-      if (!buf) return false;
-      if (current !== id) return true; // something else was requested meanwhile
+      if (!buf || buf.length === 0) return failed();
+      if (gen !== playGen) return false;
       stopPackMusic();
       const src = ac!.createBufferSource(), gain = ac!.createGain();
       src.buffer = buf;
@@ -242,16 +271,17 @@ export const Audio = {
       src.start();
       stream = { src, gain };
       src.onended = () => { if (stream?.src === src) stream = null; };
+      current = id; changed();
       return true;
     } catch (e) {
       console.warn('pack music', e);
-      return false;
+      return failed();
     }
   },
-  stop() { current = ''; if (paused) Audio.resume(); changed(); stopPackMusic(0.1); },
+  stop() { playGen++; pending = null; current = ''; if (paused) Audio.resume(); changed(); stopPackMusic(0.1); },
   /** hold the music where it is (the whole music context stops, so every kind of music continues exactly) */
   pause() { if (!ac || paused) return; paused = true; ac.suspend().catch(() => {}); changed(); },
-  resume() { if (!paused) return; paused = false; ac?.resume().then(() => { if (pending) { const p = pending; pending = null; p(); } }).catch(() => {}); changed(); },
+  resume() { if (!paused) return; paused = false; ac?.resume().then(flushPending).catch(() => {}); changed(); },
   paused: () => paused,
   /** called whenever the track changes ("packId/ref", or '' when silent) */
   onChange(f: (id: string) => void) { listeners.push(f); },

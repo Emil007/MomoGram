@@ -79,7 +79,7 @@ function colourOf(cells: number[], hex: (idx: number) => string): { palette: str
 
 registerImporter({
   name: 'Oekaki Puzzle Battle: GaoGaiGar (DS)',
-  version: 1,
+  version: 2, // 2: board chrome
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode === 'AMRJ',
   read: d => {
     const rom = new NdsRom(d);
@@ -121,7 +121,18 @@ registerImporter({
       title: { en: 'Oekaki Puzzle Battle: GaoGaiGar', ja: 'おえかきパズルバトル！ 勇者王ガオガイガー編' },
       source: { game: 'Oekaki Puzzle Battle! - Yuusha Ou GaoGaiGar Hen', platform: 'Nintendo DS', region: 'JPN', developer: 'Sunrise Interactive', year: 2003 },
       levels, icon: px ? makeIcon(32, 32, px) : undefined, assets: music.assets,
-      theme: { ...music.theme, palette: { style: 'logic', accent: '#3a6fd8', cursor: '#7fb4f0', fill: '#1c2840', grid5: '#3a6fd8' } },
+      theme: {
+        ...music.theme,
+        palette: {
+          style: 'ds', accent: '#3a6fd8', cursor: '#7fb4f0', fill: '#1c2840', grid5: '#3a6fd8',
+          cell: '#e8f0fa', clue: '#1a2840', bg: '#d0e0f4', cross: '#4a70a0',
+          board: {
+            clueArea: '#d8e6f4', clueAreaAlt: '#c8d8ec', clueBg: '#b8d0ec', clueBgAlt: '#e8f0fa',
+            grid5: '#3a6fd8', bg: '#e8f0fa', cell: '#e8f0fa', clueFocusBg: '#7fb4f088',
+          },
+          screen: { bg: '#c0d4ec', panel: '#e8f0fa', top: '#8ab0e0' },
+        },
+      },
     }];
   },
 });

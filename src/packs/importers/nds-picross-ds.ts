@@ -279,11 +279,11 @@ export function readPicrossDs(data: Uint8Array): PicrossDsData {
       const list = o ? nameOverlay(o) : null;
       if (list) for (let li = 0; li < 5; li++) for (let k = 0; k < 15; k++) out[k][EU_LANGS[li]] = list[li * 15 + k];
     }
-    for (const [code, lang] of [['ENG', 'en'], ['FRE', 'fr'], ['SPA', 'es']] as const) {
+    for (const [code, lang] of [['ENG', 'en'], ['FRE', 'fr'], ['SPA', 'es'], ['KOR', 'ko'], ['KO', 'ko']] as const) {
       const all = msgList(rom, `Msg/PicrossDS_messageList_${code}_JP_${kind}.dat`);
       if (all) {
         const idx = kind === 'Easy' ? 0 : set * 15;
-        for (let k = 0; k < 15; k++) if (all[idx + k]) out[k][region === 'KOR' ? 'ko' : lang] = all[idx + k];
+        for (let k = 0; k < 15; k++) if (all[idx + k]) out[k][lang] = all[idx + k];
       }
     }
     return out;
@@ -422,7 +422,7 @@ export function dsTheme(): NonNullable<Pack['theme']> {
 // ---------------------------------------------------------------- the importer
 registerImporter({
   name: 'Picross DS',
-  version: 2, // raise when the importer reads more or reads differently
+  version: 3, // 3: Korean message lists keep en/fr/es; they no longer all overwrite ko
   detect: d => NdsRom.looksLike(d) && new NdsRom(d).gameCode.startsWith('AXP') || (NdsRom.looksLike(d) && new NdsRom(d).title.startsWith('PICROSS')),
   read: d => {
     const px = new NdsRom(d).icon();

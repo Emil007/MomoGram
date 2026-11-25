@@ -20,12 +20,13 @@
 //
 // Challenge variants are the same subjects at other sizes; normal and Challenge are separate modes.
 import { registerSetImporter, GameFiles } from './index';
-import { Pack, PackLevel, PackPuzzle } from '../format';
-import { readSerialized } from '../../rom/unity';
+import { Pack, PackLevel, PackPuzzle, PackAsset } from '../format';
+import { readSerialized, audioClip } from '../../rom/unity';
+import { fsbClipOgg } from '../../audio/fsb5';
 
 registerSetImporter({
   name: 'Squeakross: Home Squeak Home (Switch)',
-  version: 1,
+  version: 3, // 3: raw grids use transpose(vreverse); BGM is a bounded set of clips
   find(names) {
     // Only this game: puzzles live in Data/resources.assets, and that same Data/ folder has an
     // Addressables catalog (catalog.json or catalog.bundle). A bare catalog is not enough —
@@ -108,6 +109,7 @@ registerSetImporter({
     // Challenge unlocks after the normal mode: leave both open (they are parallel sets, not a progression).
 
     const counts = levels.map(l => `${l.puzzles.length} ${l.group}`).join(', ');
+    const music = await gameMusic(files, root);
     return [{
       format: 'momogram-pack', version: 1,
       id: 'nsw-squeakross-home-squeak-home',
@@ -118,20 +120,75 @@ registerSetImporter({
         file: `Addressables + resources.assets (${counts})`,
       },
       theme: {
+        ...music.theme,
         palette: {
-          accent: '#7ab65c',      // leafy green from the game's logo
-          fill: '#3a3a33',        // pencil-dark furniture browns
-          bg: '#f6f1e3',          // warm paper
+          // warm paper board, leafy green accents (logo / UI)
+          style: 'notebook',
+          accent: '#7ab65c',
+          fill: '#3a3a33',
+          bg: '#f6f1e3',
+          cell: '#fbf7ec',
           grid: '#cbbf9e',
           clue: '#5a5547',
           cursor: '#9bc86e',
-          style: 'default',
+          cross: '#8a7050',
+          board: {
+            clueArea: '#f3ecd8', clueAreaAlt: '#e8dfc4', clueBg: '#e4f0d4', clueBgAlt: '#fbf7ec',
+            grid5: '#7ab65c', bg: '#fbf7ec', cell: '#fbf7ec',
+          },
+          screen: { bg: '#efe6cf', panel: '#fbf7ec', top: '#d4e8b8' },
         },
       },
       levels,
+      assets: music.assets.length ? music.assets : undefined,
     }];
   },
 });
+
+/** BGM clips of resources.assets → resources.resource (FSB5 Vorbis) as Ogg */
+async function gameMusic(files: GameFiles, root: string): Promise<{ theme: Pack['theme']; assets: PackAsset[] }> {
+  const ra = root + 'resources.assets', rr = root + 'resources.resource';
+  const assetsFile = await files.get(ra), res = await files.get(rr);
+  if (!assetsFile || !res) return { theme: undefined, assets: [] };
+  const title = 'Squeakross_Title_V3_Master';
+  const skip = /^(Private_|Enemy_|Player_|Sergeant_|ui_|rod_|house_|decor_|Alblune_|Squeakross_Catalog|Squeakross_Editors_)/i;
+  // Puzzle loops are Jazz, Breeze, Puffed, … The Squeakross_ prefix is the title, the catalog, and the editor cues.
+  const play: string[] = [];
+  const byName = new Map<string, { offset: number; size: number }>();
+  for (const o of readSerialized(assetsFile)) {
+    const a = audioClip(o);
+    if (!a || !/resources\.resource$/i.test(a.source) || a.size < 200_000) continue;
+    byName.set(a.name, { offset: a.offset, size: a.size });
+    if (!skip.test(a.name) && a.name !== title && !/^Squeakross_/i.test(a.name)) play.push(a.name);
+  }
+  play.sort();
+  const want = [title, ...play.slice(0, 8)];
+  const assets: PackAsset[] = [], made = new Set<string>();
+  let bytes = 0;
+  const MAX_OGG = 32 * 1024 * 1024;
+  for (const name of want) {
+    const loc = byName.get(name); if (!loc) continue;
+    try {
+      const ogg = fsbClipOgg(res.subarray(loc.offset, loc.offset + loc.size), name);
+      if (!ogg) continue;
+      if (made.size && bytes + ogg.length > MAX_OGG) continue;
+      bytes += ogg.length;
+      assets.push({ name: name + '.ogg', data: ogg });
+      made.add(name);
+    } catch (e) { console.warn(`FSB5 ${name}: ${e instanceof Error ? e.message : e}`); }
+  }
+  if (!made.size) return { theme: undefined, assets: [] };
+  const f = (c?: string) => (c && made.has(c) ? c + '.ogg' : undefined);
+  const tracks = play.filter(c => made.has(c)).map(c => c + '.ogg');
+  const menu = f(title) ?? tracks[0];
+  return {
+    theme: {
+      music: { title: menu, menu, play: tracks[0] },
+      tracks, songs: [...made].sort().map(c => c + '.ogg'),
+    },
+    assets,
+  };
+}
 
 /** a puzzle out of a MonoBehaviour blob: (name, w, h, rows) or null. */
 function puzzleFromBlob(b: Uint8Array): { name: string; w: number; h: number; rows: string[] } | null {
@@ -238,10 +295,10 @@ function rawGrid(b: Uint8Array, W: number, H: number): string | null {
   return s;
 }
 
-/** canonical row-major picture out of the raw array (which is transpose(vreverse)). */
+/** canonical W×H picture. The raw bytes are stored H wide × W high: transpose(vreverse(raw)). */
 function norm(raw: string, W: number, H: number): string[] {
-  const transposed = transpose(raw, W, H);   // W x H raw → H x W
-  return toRows(rev(transposed, H, W), H, W);
+  const flipped = rev(raw, H, W);
+  return toRows(transpose(flipped, H, W), W, H);
 }
 function transpose(g: string, W: number, H: number): string {   // W wide, H high → H wide, W high
   let out = '';

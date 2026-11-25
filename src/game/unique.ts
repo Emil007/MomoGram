@@ -41,10 +41,11 @@ function solveLine(cur: Int8Array, cl: number[]): number {
 const cluesOf = (l: ArrayLike<number>) => { const c: number[] = []; let r = 0; for (let i = 0; i < l.length; i++) { if (l[i] === 1) r++; else if (r) { c.push(r); r = 0; } } if (r) c.push(r); return c; };
 
 /**
- * 1: only the stored picture fits the clues; 2: there is another one; 0: undecided within the budget
- * (very large grids). rows use '#' for filled.
+ * 1: only the stored picture fits the clues; 2: there is another one; 0: none;
+ * `null`: undecided within the budget (do not cache as unplayable / unique).
+ * rows use '#' for filled.
  */
-export function solutionCount(rows: string[], budgetMs = 300): 0 | 1 | 2 {
+export function solutionCount(rows: string[], budgetMs = 300): 0 | 1 | 2 | null {
   const until = Date.now() + budgetMs;
   const h = rows.length, w = rows[0]?.length ?? 0;
   const goal = rows.join('').split('').map(c => (c === '#' ? 1 : 0));
@@ -81,5 +82,62 @@ export function solutionCount(rows: string[], budgetMs = 300): 0 | 1 | 2 {
     for (const v of [1, 0]) { const c = g.slice(); c[open] = v; search(c); if (found > 1 || gaveUp) return; }
   };
   search(new Int8Array(w * h).fill(-1));
-  return found > 1 ? 2 : gaveUp ? 0 : found === 1 ? 1 : 0;
+  if (gaveUp) return null;
+  return found > 1 ? 2 : found === 1 ? 1 : 0;
+}
+
+/**
+ * Bounded guess depth for puzzles that need more than line logic: how deep a forced branch goes
+ * before the picture is filled (capped). Returns 0 when line-solvable; ~3 mid default when undecided.
+ */
+export function guessDepth(rows: string[], budgetMs = 80): number {
+  const until = Date.now() + budgetMs;
+  const h = rows.length, w = rows[0]?.length ?? 0;
+  if (!w || !h) return 0;
+  const goal = rows.join('').split('').map(c => (c === '#' ? 1 : 0));
+  const rc: number[][] = [], cc: number[][] = [];
+  for (let y = 0; y < h; y++) rc.push(cluesOf(goal.slice(y * w, y * w + w)));
+  for (let x = 0; x < w; x++) { const l: number[] = []; for (let y = 0; y < h; y++) l.push(goal[y * w + x]); cc.push(cluesOf(l)); }
+  const row = new Int8Array(w), col = new Int8Array(h);
+  const propagate = (g: Int8Array): boolean => {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) row[x] = g[y * w + x];
+        const r = solveLine(row, rc[y]);
+        if (r < 0) return false;
+        if (r) { changed = true; for (let x = 0; x < w; x++) g[y * w + x] = row[x]; }
+      }
+      for (let x = 0; x < w; x++) {
+        for (let y = 0; y < h; y++) col[y] = g[y * w + x];
+        const r = solveLine(col, cc[x]);
+        if (r < 0) return false;
+        if (r) { changed = true; for (let y = 0; y < h; y++) g[y * w + x] = col[y]; }
+      }
+    }
+    return true;
+  };
+  let maxDepth = 0, gaveUp = false;
+  const search = (g: Int8Array, depth: number) => {
+    if (gaveUp) return;
+    if (Date.now() > until) { gaveUp = true; return; }
+    if (!propagate(g)) return;
+    const open = g.indexOf(-1);
+    if (open < 0) { maxDepth = Math.max(maxDepth, depth); return; }
+    // prefer the goal value first so we measure depth along a real solution path
+    const prefer = goal[open];
+    for (const v of [prefer, 1 - prefer]) {
+      const c = g.slice();
+      c[open] = v;
+      search(c, depth + 1);
+      if (gaveUp) return;
+    }
+  };
+  const start = new Int8Array(w * h).fill(-1);
+  if (!propagate(start)) return 3;
+  if (start.indexOf(-1) < 0) return 0;
+  search(start, 0);
+  if (gaveUp && maxDepth === 0) return 3;
+  return Math.min(6, maxDepth);
 }

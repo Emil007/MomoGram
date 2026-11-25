@@ -4,23 +4,34 @@
 // Written from the publicly documented file layout (as also implemented by UnityPy / AssetStudio).
 import { lzma } from './lzma';
 
-/** LZ4 block format (no frame) */
+const MAX_LZ4 = 512 * 1024 * 1024;
+
+/** LZ4 block format (no frame). A short decode is a failure, not a truncated assets file. */
 export function lz4(src: Uint8Array, outSize: number): Uint8Array {
+  if (outSize < 0 || outSize > MAX_LZ4) throw new Error('LZ4 output is too large.');
   const out = new Uint8Array(outSize);
   let i = 0, o = 0;
+  const fail = () => { throw new Error('LZ4 block is truncated.'); };
   while (i < src.length) {
     const tok = src[i++];
     let lit = tok >> 4;
-    if (lit === 15) { let b; do { b = src[i++]; lit += b; } while (b === 255); }
-    out.set(src.subarray(i, i + lit), o); i += lit; o += lit;
+    if (lit === 15) { let b = 255; while (b === 255) { if (i >= src.length) fail(); b = src[i++]; lit += b; } }
+    if (lit) {
+      if (i + lit > src.length || o + lit > outSize) fail();
+      out.set(src.subarray(i, i + lit), o); i += lit; o += lit;
+    }
     if (i >= src.length) break;
+    if (i + 2 > src.length) fail();
     const off = src[i] | (src[i + 1] << 8); i += 2;
+    if (!off || off > o) fail();
     let len = tok & 15;
-    if (len === 15) { let b; do { b = src[i++]; len += b; } while (b === 255); }
+    if (len === 15) { let b = 255; while (b === 255) { if (i >= src.length) fail(); b = src[i++]; len += b; } }
     len += 4;
+    if (o + len > outSize) fail();
     for (let k = 0; k < len; k++, o++) out[o] = out[o - off];
   }
-  return o === outSize ? out : out.subarray(0, o);
+  if (o !== outSize) fail();
+  return out;
 }
 
 class R {
@@ -66,8 +77,15 @@ export function readBundle(d: Uint8Array): Map<string, Uint8Array> {
   const nodes: Array<{ off: number; size: number; path: string }> = [];
   for (let i = 0, n = info.i32(); i < n; i++) { const off = info.i64(), size = info.i64(); info.u32(); nodes.push({ off, size, path: info.cstr() }); }
   if (flags & 0x200) r.align(16);
-  // all blocks one after another
-  const total = blocks.reduce((a, b) => a + b.u, 0);
+  // all blocks one after another; refuse a claimed size that would allocate without a bound
+  const MAX_BUNDLE = 512 * 1024 * 1024;
+  let total = 0, cursor = r.o;
+  for (const b of blocks) {
+    if (b.u > MAX_BUNDLE || b.c > d.length || cursor + b.c > d.length) throw new Error('Unity bundle block is not readable.');
+    total += b.u;
+    cursor += b.c;
+    if (total > MAX_BUNDLE) throw new Error('Unity bundle is too large.');
+  }
   const data = new Uint8Array(total);
   let p = r.o, q = 0;
   for (const b of blocks) { data.set(unpack(d.subarray(p, p + b.c), b.f & 0x3f, b.u), q); p += b.c; q += b.u; }

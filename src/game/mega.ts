@@ -219,10 +219,10 @@ function solveBand(a: Int8Array, b: Int8Array, items: BandItem[]): number {
 }
 
 /**
- * 1: only the picture fits its clues (with these pairs); 2: another picture fits too; 0: undecided within the
- * budget. With no pairs this is the plain puzzle.
+ * 1: only the picture fits its clues (with these pairs); 2: another picture fits too; 0: none;
+ * `null`: undecided within the budget. With no pairs this is the plain puzzle.
  */
-export function megaSolutionCount(rows: string[], mega: MegaPairs | undefined, budgetMs = 300, maxSteps = Infinity): 0 | 1 | 2 {
+export function megaSolutionCount(rows: string[], mega: MegaPairs | undefined, budgetMs = 300, maxSteps = Infinity): 0 | 1 | 2 | null {
   // a step budget (instead of time) gives the same answer on every device
   const until = maxSteps < Infinity ? Infinity : Date.now() + budgetMs;
   let steps = 0;
@@ -266,7 +266,8 @@ export function megaSolutionCount(rows: string[], mega: MegaPairs | undefined, b
     for (const v of [1, 0]) { const c = g.slice(); c[open] = v; search(c); if (found > 1 || gaveUp) return; }
   };
   search(new Int8Array(w * h).fill(-1));
-  return found > 1 ? 2 : gaveUp ? 0 : found === 1 ? 1 : 0;
+  if (gaveUp) return null;
+  return found > 1 ? 2 : found === 1 ? 1 : 0;
 }
 
 // ---------------------------------------------------------------- pairs for games without Mega data

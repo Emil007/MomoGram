@@ -100,6 +100,7 @@ export function ctrCode(d: Uint8Array): Uint8Array | null {
     const c = d.slice(exefs + 0x200 + u32(d, e + 8), exefs + 0x200 + u32(d, e + 8) + u32(d, e + 12));
     if (!compressed) return c;
     const n = c.length, top = u32(c, n - 8), extra = u32(c, n - 4), hdr = c[n - 5];
+    if (extra > 32 * 1024 * 1024 || n + extra > 64 * 1024 * 1024) return null;
     const out = new Uint8Array(n + extra); out.set(c);
     let src = n - hdr, dst = out.length;
     const end = n - (top & 0xffffff);
@@ -121,6 +122,7 @@ export function lz11(d: Uint8Array): Uint8Array {
   if (d[0] !== 0x11 && d[0] !== 0x10) return d;
   let n = d[1] | (d[2] << 8) | (d[3] << 16), p = 4;
   if (!n) { n = u32(d, 4); p = 8; }
+  if (n <= 0 || n > 32 * 1024 * 1024) throw new Error('LZ11 output is too large.');
   const out = new Uint8Array(n);
   let o = 0;
   const lz10 = d[0] === 0x10;

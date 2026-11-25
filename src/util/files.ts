@@ -1,15 +1,41 @@
 // File helpers: zip in/out (fflate), downloads, hashing.
 import { unzipSync, zipSync, strToU8 } from 'fflate';
 
+/**
+ * Zip safety for local import / .momopack. One member at a time:
+ * skip path traversal, and skip a single absurd member (over 2 GiB).
+ * No total-size or file-count cap: a zip of every game must still open.
+ */
+const UNZIP_MAX_ONE = 2 * 1024 * 1024 * 1024;
+
+function unzipMemberOk(f: { name: string; originalSize: number }): boolean {
+  if (f.name.endsWith('/')) return false;
+  if (f.name.includes('..') || f.name.startsWith('/') || f.name.includes('\\') || /^[a-zA-Z]:/.test(f.name)) return false;
+  // Compare the real size. `>>> 0` would wrap a 4 GiB+ bomb back under 2 GiB.
+  if (!Number.isFinite(f.originalSize) || f.originalSize < 0 || f.originalSize > UNZIP_MAX_ONE) return false;
+  return true;
+}
+
 export async function unzipFirst(data: Uint8Array, name: RegExp): Promise<Uint8Array | null> {
-  const files = unzipSync(data, { filter: f => name.test(f.name) });
+  const files = unzipSync(data, { filter: f => unzipMemberOk(f) && name.test(f.name) });
   const k = Object.keys(files)[0];
   return k ? files[k] : null;
 }
 
 export function unzipAll(data: Uint8Array): Array<{ name: string; data: Uint8Array }> {
-  const files = unzipSync(data);
-  return Object.entries(files).filter(([n]) => !n.endsWith('/')).map(([name, d]) => ({ name, data: d }));
+  const files = unzipSync(data, { filter: unzipMemberOk });
+  return Object.entries(files).map(([name, d]) => ({ name, data: d }));
+}
+
+/** zip entry name with `..` and absolute bits removed, so an export cannot leave the archive */
+function zipMemberName(name: string): string | null {
+  if (name.includes('\0')) return null;
+  const out: string[] = [];
+  for (const p of name.replace(/\\/g, '/').split('/')) {
+    if (p === '' || p === '.' || p === '..') { if (p === '..') out.pop(); continue; }
+    out.push(p);
+  }
+  return out.length ? out.join('/') : null;
 }
 
 /** files that are compressed already (deflating them again only costs time): stored as they are */
@@ -18,9 +44,11 @@ const PACKED = /\.(ogg|opus|mp3|m4a|png|jpe?g|webp|gif|zip|7z|rar|gz|momopack|sp
 export function makeZip(entries: Array<{ name: string; text?: string; data?: Uint8Array }>): Uint8Array {
   const o: Record<string, [Uint8Array, { level: 0 | 6 | 9 }]> = {};
   for (const e of entries) {
+    const name = zipMemberName(e.name);
+    if (!name) continue;
     const d = e.data ?? strToU8(e.text ?? '');
     // text and small files: the best compression; big binaries (DS sound data, ADPCM streams): a faster level
-    o[e.name] = [d, { level: PACKED.test(e.name) ? 0 : d.length < 1 << 20 ? 9 : 6 }];
+    o[name] = [d, { level: PACKED.test(name) ? 0 : d.length < 1 << 20 ? 9 : 6 }];
   }
   return zipSync(o);
 }

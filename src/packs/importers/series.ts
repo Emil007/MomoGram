@@ -21,5 +21,6 @@ export function seriesOf(p: Pack): string {
   for (const [re, name] of rules) if (re.test(n)) return name;
   // one-off Steam games share a folder; a Steam game that matched a series above stays there
   if (p.source.platform === 'Steam') return 'Steam';
+  if (p.source.platform === 'Android') return 'Android';
   return n;
 }

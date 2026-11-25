@@ -31,18 +31,23 @@ export async function momopackOf(p: Pack): Promise<Uint8Array> {
 
 export interface ReadResult { made: Pack[]; msgs: string[]; fromPackFiles: number }
 
+/** an export zip holds .momopack files; deeper nesting than this is ignored */
+const MOMOPACK_NEST = 3;
+
 /**
  * What's in a set of files (already taken out of an archive): MomoGram packs (pack.json + assets/), with their
  * files, and games. .momopack files inside are opened too (an "export all" zip holds one per pack).
  */
-export async function readEntries(entries: Array<{ name: string; data: Uint8Array }>, lang: Lang, t: (k: string) => string, known: Pack[] = []): Promise<ReadResult> {
+
+export async function readEntries(entries: Array<{ name: string; data: Uint8Array }>, lang: Lang, t: (k: string) => string, known: Pack[] = [], depth = 0): Promise<ReadResult> {
   const out: ReadResult = { made: [], msgs: [], fromPackFiles: 0 };
   const count = (p: Pack) => p.levels.reduce((a, l) => a + l.puzzles.length, 0);
   entries = entries.filter(e => !/\.(url|txt|nfo|jpg|png|md)$/i.test(e.name) && !/(^|\/)(__MACOSX|\.)/.test(e.name));
   for (const e of entries.filter(e => /\.momopack$/i.test(e.name))) {
+    if (depth >= MOMOPACK_NEST) { out.msgs.push(`✕ ${e.name}`); continue; }
     let inner: Array<{ name: string; data: Uint8Array }>;
     try { inner = unzipAll(e.data); } catch { out.msgs.push(`✕ ${e.name}`); continue; }
-    const r = await readEntries(inner, lang, t, known);
+    const r = await readEntries(inner, lang, t, known, depth + 1);
     out.made.push(...r.made); out.msgs.push(...r.msgs); out.fromPackFiles += r.fromPackFiles;
   }
   const used = new Set<string>();
@@ -54,14 +59,25 @@ export async function readEntries(entries: Array<{ name: string; data: Uint8Arra
     used.add(e.name);
     const base = e.name.replace(/[^/]*$/, '');
     const dir = base + 'assets/';
-    const assets: PackAsset[] = entries.filter(x => x.name.startsWith(dir)).map(x => { used.add(x.name); return { name: x.name.slice(dir.length), data: x.data }; });
+    const assets: PackAsset[] = [];
+    for (const x of entries) {
+      if (!x.name.startsWith(dir)) continue;
+      const rel = x.name.slice(dir.length).replace(/\\/g, '/');
+      if (!rel || rel.split('/').some(p => !p || p === '.' || p === '..')) continue;
+      used.add(x.name);
+      assets.push({ name: rel, data: x.data });
+    }
     if (assets.length) p.assets = assets;
     out.made.push(p); out.fromPackFiles++;
     out.msgs.push(`✓ ${pickAny(p.title, lang)} (${count(p)})`);
   }
   // games that are folders (Switch): handed over as a whole
   const byName = new Map(entries.map(e => [e.name, e]));
-  const sets = await importFileSet({ names: entries.map(e => e.name), get: async n => byName.get(n)?.data }, undefined, known);
+  const sets = await importFileSet({
+    names: entries.map(e => e.name),
+    get: async n => byName.get(n)?.data,
+    size: n => byName.get(n)?.data.length,
+  }, undefined, known);
   for (const r of sets.results) {
     if (r.ok) {
       const rev = newRev();
@@ -83,7 +99,7 @@ export async function readEntries(entries: Array<{ name: string; data: Uint8Arra
       for (const p of r.packs) { p.source.file = e.name; p.rev = rev; out.made.push(p); }
       out.msgs.push(`✓ ${r.packs.map(p => `${pickAny(p.title, lang)} (${count(p)})`).join(', ')}`);
     } else {
-      out.msgs.push(`✕ ${e.name}: ${r.message === 'encrypted' ? t('encrypted') : r.message === 'unsupported' ? t('unsupported') : r.message}`);
+      out.msgs.push(`✕ ${e.name}: ${r.message === 'encrypted' ? t('encrypted') : r.message === 'unsupported' ? t('unsupported') : r.message === 'cancelled' ? t('importCancelled') : r.message}`);
     }
   }
   return out;

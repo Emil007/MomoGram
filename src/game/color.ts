@@ -151,7 +151,8 @@ export function colorLine(clues: ColorClue[], mask: ArrayLike<number>): { ok: bo
  * How many solutions a colour puzzle has: 0, 1, or 2 (two or more). Line logic first, then guesses, within a
  * step budget (the same result on every device). Returns 2 too when the budget runs out.
  */
-export function colorSolutionCount(cp: ColorPuzzle, maxSteps = 20000): 0 | 1 | 2 {
+/** 0 none, 1 unique, 2 more than one; `null` = budget exhausted (do not cache as unplayable) */
+export function colorSolutionCount(cp: ColorPuzzle, maxSteps = 20000): 0 | 1 | 2 | null {
   const { w, h } = cp, nCol = cp.palette.length;
   const all = (1 << (nCol + 1)) - 1;
   const rows = [...Array(h)].map((_, y) => colorClues(cp.cells.subarray(y * w, y * w + w)));
@@ -193,7 +194,7 @@ export function colorSolutionCount(cp: ColorPuzzle, maxSteps = 20000): 0 | 1 | 2
     }
   };
   search(new Uint32Array(w * h).fill(all));
-  if (steps > maxSteps) return 2;
+  if (steps > maxSteps) return null;
   return found >= 2 ? 2 : (found as 0 | 1);
 }
 

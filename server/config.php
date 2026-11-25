@@ -12,7 +12,9 @@ return [
   // Accounts can't be created while this is empty.
   'invite' => '',
 
-  // Where uploaded packs are kept. The folder must be writable by PHP and must not be reachable from the web
-  // (the .htaccess inside blocks it on Apache; outside the web root is even better).
-  'data_dir' => __DIR__ . '/data',
+  // Uploaded packs and the SQLite file. This must not be reachable from the web.
+  // Default is next to the web root when this folder is published as httpdocs/<name>/ (Plesk: beside httpdocs).
+  // `server/data` sits inside the web tree: Apache's .htaccess hides it, nginx does not.
+  // Already have data in the old folder? Set this back to __DIR__ . '/data' or move that folder here.
+  'data_dir' => dirname(__DIR__, 2) . '/momogram-data',
 ];

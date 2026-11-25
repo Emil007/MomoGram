@@ -215,12 +215,16 @@ registerSetImporter({
   find(names) {
     const roots = new Set<string>();
     // another importer owns this folder (NAMCO/Shield sn_|ta_, Doraemon sf_, Kemono, Sumikko prince_)
-    const owned = (root: string) => names.some(x => x.startsWith(root) && !/\.manifest$/i.test(x) && (
+    // a blank root is only the files next to a top-level resources.assets, never every path in the folder
+    const inRoot = (root: string, x: string) => root
+      ? x.startsWith(root)
+      : x === 'resources.assets' || x === 'puzzledata' || x === 'puzzledata.unity3d' || x.startsWith('StreamingAssets/') || x.startsWith('Data/');
+    const owned = (root: string) => names.some(x => inRoot(root, x) && !/\.manifest$/i.test(x) && (
       /\/gifanimations\/(sn_|ta_|sf_)/i.test(x) ||
       /\/kemochara\.unity3d$/i.test(x) ||
       /\/prince_/i.test(x)
     ));
-    const squeak = (root: string) => names.some(x => x.startsWith(root) && /StreamingAssets\/aa\/catalog\.(json|bundle)$/i.test(x));
+    const squeak = (root: string) => names.some(x => inRoot(root, x) && /StreamingAssets\/aa\/catalog\.(json|bundle)$/i.test(x));
     for (const n of names) {
       const m = n.match(/^(.*?)(?:StreamingAssets\/AssetBundles\/)?puzzledata(\.unity3d)?$/i) ?? n.match(/^(.*?)StreamingAssets\/aa\/[^/]+\/puzzledata_assets_all[^/]*\.bundle$/i);
       if (m && !/\.manifest$/i.test(n) && !owned(m[1])) { roots.add(m[1]); continue; }
@@ -256,7 +260,9 @@ registerSetImporter({
       return s;
     };
     // puzzles (and for PICROSS S also tables and music)
-    const mine = files.names.filter(n => n.startsWith(root) && !/\.manifest$/i.test(n));
+    const mine = files.names.filter(n => !/\.manifest$/i.test(n) && (root
+      ? n.startsWith(root)
+      : n === 'resources.assets' || n === 'puzzledata' || n === 'puzzledata.unity3d' || n.startsWith('StreamingAssets/') || n.startsWith('Data/')));
     const pd = [root + AB + 'puzzledata', root + AB + 'puzzledata.unity3d', root + 'puzzledata', root + 'puzzledata.unity3d'].find(has)
       ?? mine.find(n => /\/puzzledata_assets_all[^/]*\.bundle$/i.test(n)) ?? (has(root + 'resources.assets') ? root + 'resources.assets' : undefined);
     if (!pd) throw new Error('Puzzle data not found.');

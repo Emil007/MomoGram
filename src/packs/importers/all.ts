@@ -1,4 +1,21 @@
 // Written by build.mjs: loads every import method in this folder. Do not edit.
+import './android-cat-sitter-nonogram';
+import './android-eyes';
+import './android-gem-nonogram';
+import './android-kimbuja';
+import './android-kungfu-nonogram';
+import './android-netwitch-nonogram';
+import './android-no2g-nonogram';
+import './android-nono-classic-games';
+import './android-nonogram-color';
+import './android-nonogram-com';
+import './android-nonogram-jigsaw';
+import './android-nonogram-king';
+import './android-nonograms-110';
+import './android-picross-crossing-logic';
+import './android-sky-castle-nonogram';
+import './android-somnus-nonogram';
+import './android';
 import './arduboy';
 import './ctr-picross';
 import './dsi-puzzle-iro-iro';

@@ -50,41 +50,40 @@ export function textureSize(o: UObject): { w: number; h: number; format: number;
   const ok1 = plausible(w1, h1), ok2 = plausible(w2, h2);
   if (ok1 && ok2) {
     // prefer the layout whose completeImageSize matches the cell area (w*h*bpp)
-    const s1 = sizeFits(w1, h1, size1), s2 = sizeFits(w2, h2, size2);
+    const s1 = sizeFits(w1, h1, size1, fmt1), s2 = sizeFits(w2, h2, size2, fmt2);
     if (s1 && !s2) return { w: w1, h: h1, format: fmt1, complete: size1 > 0 ? size1 : undefined };
     if (s2 && !s1) return { w: w2, h: h2, format: fmt2, complete: size2 > 0 ? size2 : undefined };
-    // complete is often absent/unreliable; fall back to the known-format one (RGB-family)
+    // complete is often absent; a known uncompressed format wins. A tie keeps the Unity 4.x
+    // layout (width right after the name). 2017+ only wins when its byte size matches and the old one does not.
     const k1 = RGB_BPP[fmt1] != null, k2 = RGB_BPP[fmt2] != null;
     if (k2 && !k1) return { w: w2, h: h2, format: fmt2, complete: size2 > 0 ? size2 : undefined };
-    if (k1 && !k2) return { w: w1, h: h1, format: fmt1, complete: size1 > 0 ? size1 : undefined };
-    return { w: w2, h: h2, format: fmt2, complete: size2 > 0 ? size2 : undefined }; // modern mostly
+    return { w: w1, h: h1, format: fmt1, complete: size1 > 0 ? size1 : undefined };
   }
   if (ok1) return { w: w1, h: h1, format: fmt1, complete: size1 > 0 ? size1 : undefined };
   if (ok2) return { w: w2, h: h2, format: fmt2, complete: size2 > 0 ? size2 : undefined };
   return null;
 }
-function sizeFits(w: number, h: number, size: number): boolean {
-  if (!(size > 0)) return false;
-  const area = w * h;
-  if (!(area > 0)) return false;
-  // completeImageSize counts the raw image bytes (incl. mips): ≥ area, ≤ ~12×area for 1-4 bpp
-  return size >= area && size <= area * 12 && (size % 1 === 0);
+function sizeFits(w: number, h: number, size: number, fmt: number): boolean {
+  const bpp = RGB_BPP[fmt];
+  if (!bpp || size <= 0 || w <= 0 || h <= 0) return false;
+  const raw = w * h * bpp;
+  // mip0 exactly, or mip0 plus the smaller chain (about a third more) and a little padding
+  return size === raw || (size > raw && size <= raw + Math.floor(raw / 3) + 64);
 }
-const KNOWN_FORMATS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 41, 45, 47, 62, 63]);
 function plausible(w: number, h: number): boolean { return w > 0 && h > 0 && w <= 4096 && h <= 4096; }
 
-/** Unity TextureFormat ids we can turn into RGB24 directly. */
+/** Unity TextureFormat → bytes per pixel, for formats we can turn into RGB24.
+ *  1 Alpha8, 2 ARGB4444, 3 RGB24, 4 RGBA32, 5 ARGB32, 7 RGB565, 13 RGBA4444.
+ *  9 is R16, 10 is DXT1, 15 is RHalf — not these layouts. */
 const RGB_BPP: Record<number, number> = {
-  2: 1,     // Alpha8
-  3: 3,     // RGB24
-  4: 4,     // RGBA32
-  5: 4,     // ARGB32
-  9: 2,     // RGB565
-  15: 2,    // RGBA4444
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 4,
+  7: 2,
+  13: 2,
 };
-/** formats we recognise but cannot decode yet (compressed/Android-only). */
-const UNSUPPORTED = new Set([12 /*ETC2_RGB*/, 13, 14 /*PVRTC*/, 20, 21, 22, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35, 36, 41, 45, 47, 62, 63]);
-
 /**
  * Raw RGB24 rows of an inline Texture2D object (width*height RGB bytes, row-major).
  * The tail length depends on the format: w*h*bpp, with the "complete image" at the very
@@ -95,7 +94,8 @@ export function textureRgb24(o: UObject, w: number, h: number, format = 3, compl
   const d = o.data;
   const area = w * h;
   const bpp = RGB_BPP[format];
-  if (bpp == null) return UNSUPPORTED.has(format) ? null : autoTail(d, area, 3);
+  // DXT1 (10), R16 (9), RHalf (15) and every other compressed format are rejected, not read as raw RGB.
+  if (bpp == null || area <= 0) return null;
   const want = area * bpp;
   let px: Uint8Array | null = null;
   // Prefer the exact blob position (m_CompleteImageSize). Unity keeps the embedded image at
@@ -112,21 +112,14 @@ export function textureRgb24(o: UObject, w: number, h: number, format = 3, compl
   if (!px) return null;
   switch (format) {
     case 3: return px;
-    case 2: return gray(px);
+    case 1: return gray(px);
     case 4: return rgba32(px);
     case 5: return argb32(px);
-    case 9: return rgb565(px);
-    case 15: return rgba16(px);
+    case 7: return rgb565(px);
+    case 2: return argb4444(px);
+    case 13: return rgba4444(px);
     default: return null;
   }
-}
-function autoTail(d: Uint8Array, area: number, bpp: number): Uint8Array | null {
-  for (const x of [bpp, 4, 2, 1]) {
-    const want = area * x;
-    const header = d.length - want;
-    if (want > 0 && header >= 12 && header <= 600) return d.subarray(d.length - want, d.length);
-  }
-  return null;
 }
 function gray(px: Uint8Array): Uint8Array {
   const out = new Uint8Array(px.length * 3);
@@ -152,11 +145,21 @@ function rgb565(px: Uint8Array): Uint8Array {
   }
   return out;
 }
-function rgba16(px: Uint8Array): Uint8Array {
+function argb4444(px: Uint8Array): Uint8Array {
   const n = px.length >> 1, out = new Uint8Array(n * 3);
   for (let i = 0; i < n; i++) {
     const v = px[i * 2] | (px[i * 2 + 1] << 8);
-    out[i * 3] = ((v >> 12) & 15) << 4; out[i * 3 + 1] = ((v >> 8) & 15) << 4; out[i * 3 + 2] = ((v >> 4) & 15) << 4;
+    const r = (v >> 8) & 15, g = (v >> 4) & 15, b = v & 15;
+    out[i * 3] = (r << 4) | r; out[i * 3 + 1] = (g << 4) | g; out[i * 3 + 2] = (b << 4) | b;
+  }
+  return out;
+}
+function rgba4444(px: Uint8Array): Uint8Array {
+  const n = px.length >> 1, out = new Uint8Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = px[i * 2] | (px[i * 2 + 1] << 8);
+    const r = (v >> 12) & 15, g = (v >> 8) & 15, b = (v >> 4) & 15;
+    out[i * 3] = (r << 4) | r; out[i * 3 + 1] = (g << 4) | g; out[i * 3 + 2] = (b << 4) | b;
   }
   return out;
 }

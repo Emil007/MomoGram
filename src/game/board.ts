@@ -121,8 +121,12 @@ export class Board {
     this.cells = s.cells;
     this.trial = s.trial;
     this.colors = s.colors; this.trialColors = s.trialColors;
+    this.version++; this.cache.clear();
     return true;
   }
+
+  /** drop undo history (after starting/ending Try it so undo cannot revive a hidden trial) */
+  clearUndo() { this.undoStack.length = 0; }
 
   /**
    * Apply a mark. Returns 'mistake' if Normal rules caught a wrong fill.
@@ -162,8 +166,8 @@ export class Board {
     if (this.rules !== 'free' && value === FILL && (!this.solution[i] || (this.color && this.solColor(i) !== color))) {
       this.mistakes++;
       if (this.rules === 'normal') this.penaltyMs += Board.penaltyFor(this.mistakes);
-      // black and white: the cell is crossed out; colour: the right colour is shown (the cell is known now)
-      if (this.color && this.solution[i]) { this.cells[i] = FILL; this.colors[i] = this.solColor(i); }
+      // black and white: crossed out; colour wrong: clear the cell (mistake only — do not auto-paint the solution)
+      if (this.color && this.solution[i]) { this.cells[i] = EMPTY; this.colors[i] = 0; }
       else { this.cells[i] = CROSS; this.colors[i] = 0; }
       return 'mistake';
     }
@@ -190,14 +194,28 @@ export class Board {
     this.touch();
     return mistakes;
   }
-  startTrial() { this.touch(); if (!this.trial) { this.trial = new Uint8Array(this.w * this.h); this.trialColors = new Uint8Array(this.w * this.h); } }
+  startTrial() {
+    this.touch();
+    if (!this.trial) {
+      this.clearUndo();
+      this.trial = new Uint8Array(this.w * this.h);
+      this.trialColors = new Uint8Array(this.w * this.h);
+    }
+  }
   /** keep the trial marks */
   commitTrial() { this.touch();
     if (!this.trial) return;
     for (let i = 0; i < this.trial.length; i++) if (this.trial[i]) { this.cells[i] = this.trial[i]; this.colors[i] = this.trialColors?.[i] ?? 0; }
     this.trial = null; this.trialColors = null;
+    this.clearUndo();
+    this.version++; this.cache.clear();
   }
-  discardTrial() { this.touch(); this.trial = null; this.trialColors = null; }
+  discardTrial() {
+    this.touch();
+    this.trial = null; this.trialColors = null;
+    this.clearUndo();
+    this.version++; this.cache.clear();
+  }
 
   filledAt(i: number): boolean {
     const t = this.trial?.[i];

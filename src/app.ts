@@ -11,8 +11,8 @@ import { PictureAnimator, thumbnail, PckGetter, addPictures } from './game/pictu
 import { Pack, PackLevel, PackPuzzle, PackTheme, Lang, pickText, pickAny, songsOf, roleSongs, setRoleSongs, SongRole } from './packs/format';
 import { readEntries, packRev, newRev } from './packs/io';
 import { upgradeStoredPack } from './packs/importers/index';
-import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark } from './store';
-import { puzzleRating, performance as perfScore, points, RatedRules } from './game/rating';
+import { storage, settings, saveSettings, getProgress, recordClear, getQuickSave, saveBoard, clearBoard, getBoard, resetProgress, packProgress, Medal, makeSave, importSave, isSaveFile, progressSummary, profiles, activeProfile, switchProfile, createProfile, renameProfile, deleteProfile, SaveFile, QuickSave, localStats, Mode, unpointed, setPoints, setKnownPuzzles, songMark, setSongMark, needsRatingRebuild, applyRatingRebuild, Rules, PuzzleProgress } from './store';
+import { puzzleRating, performance as perfScore, points, RatedRules, RATING } from './game/rating';
 import { choose, confirmBox, askText, message, panel } from './ui/dialog';
 export { choose };
 import { t, setLang, lang, LANG_NAMES, hasTexts } from './i18n';
@@ -31,7 +31,7 @@ import { puzzleLevel } from './game/difficulty';
 import { offerTutorial, tutorialScreen, techniqueScreen, techniqueTitle } from './ui/tutorial';
 import { fastestRow, scoresScreen } from './ui/scores';
 import { practiceScreen } from './ui/practice';
-import { toggleLibEdit, libraryPacks, megaOrbLevels, progressText, renderLibrary } from './ui/library';
+import { toggleLibEdit, libraryPacks, libPrefs, megaOrbLevels, progressText, renderLibrary } from './ui/library';
 
 const TIME_LIMIT = 60 * 60_000;
 
@@ -76,14 +76,14 @@ export function packLang(): Lang { return lang(); }
 
 function clearedInGroup(pack: Pack, group: string | undefined): number {
   let n = 0;
-  for (const l of pack.levels) if (l.group === group) for (const p of l.puzzles) if (getProgress(pack.id, p.id).cleared) n++;
+  for (const l of pack.levels) if (l.group === group) for (const p of l.puzzles) if (progressOf(pack, p).cleared) n++;
   return n;
 }
 
 export function levelUnlocked(pack: Pack, lv: PackLevel): boolean {
   if (settings.unlockAll) return true;
   if (lv.extra) {
-    return pack.levels.filter(l => l.group === lv.group && !l.extra).every(l => l.puzzles.every(p => getProgress(pack.id, p.id).underLimit));
+    return pack.levels.filter(l => l.group === lv.group && !l.extra).every(l => l.puzzles.every(p => progressOf(pack, p).underLimit));
   }
   return !lv.unlockAfter || clearedInGroup(pack, lv.group) >= lv.unlockAfter;
 }
@@ -115,7 +115,7 @@ export async function boot() {
   home();
   // a new player (nothing solved yet) is offered the tutorial once
   setTimeout(() => { if (document.querySelector('.home')) offerTutorial(); }, 600);
-  setTimeout(backfillPoints, 1500);
+  setTimeout(() => { void rebuildRatings(); void backfillPoints(); }, 1500);
   // installed web app: .momopack files opened with it (File Handling API, Chromium)
   (window as any).launchQueue?.setConsumer(async (p: { files?: Array<{ getFile(): Promise<File> }> }) => {
     const files = [];
@@ -182,7 +182,7 @@ function logo(): HTMLElement {
   const m = curMode();
   const g = h('div', { class: 'logo-grid', 'aria-hidden': 'true' });
   rows.forEach((r, y) => [...r].forEach((c, x) => g.append(h('i', { class: c === '#' ? 'on' : '', style: c === '#' && m === 'color' ? `--k:${(x + y * 3) % 6}` : undefined }))));
-  // Colour mode: every letter of the name in its own colour
+  // Color mode: every letter of the name in its own colour
   const name = m === 'color' ? h('div', { class: 'logo-name rainbow' }, ...[...'MomoGram'].map((ch, i) => h('span', { style: `--k:${i % 6}` }, ch))) : h('div', { class: 'logo-name' }, 'MomoGram');
   return h('div', { class: 'logo' + (m !== 'normal' ? ' ' + m : '') }, g, h('div', {},
     // "MEGA" / "COLOR" is a stamp over the name: the logo keeps its size and place in every mode
@@ -252,18 +252,59 @@ function profileChip(): HTMLElement {
     h('small', { class: 'elo-line' + (prov ? ' prov' : ''), title: prov ? t('provisional') : '' }, 'PixELO ' + (st.rated ? st.elo + (prov ? '?' : '') : '–')));
 }
 
+function puzzleIndex(): Map<string, PackPuzzle> {
+  const find = new Map<string, PackPuzzle>();
+  for (const p of [STARTER, ...ctx.packs]) for (const v of [p, megaView(p), colorView(p)]) for (const l of v.levels) for (const z of l.puzzles) find.set(p.id + '/' + z.id, z);
+  return find;
+}
+
+/** progress for list/UI: daily puzzles link to the original game's progress (no second score) */
+function progressOf(pack: Pack, pz: PackPuzzle): PuzzleProgress {
+  if (pz.origin) {
+    const i = pz.origin.lastIndexOf('/');
+    return getProgress(pz.origin.slice(0, i), pz.origin.slice(i + 1));
+  }
+  return getProgress(pack.id, pz.id);
+}
+
+async function rebuildRatings() {
+  if (!needsRatingRebuild()) return;
+  const find = puzzleIndex();
+  const updates: Array<{ key: string; rated: NonNullable<PuzzleProgress['rated']>; pts?: number }> = [];
+  // progress keys are packId/puzzleId, with Mega/Colour as puzzleId suffixes (@mega / @color)
+  for (const id of new Set([STARTER.id, ...ctx.packs.map(p => p.id)])) {
+    for (const [pzid, pr] of packProgress(id)) {
+      if (!pr.cleared) continue;
+      const key = id + '/' + pzid;
+      const z = find.get(key);
+      if (!z) continue;
+      const mega = pzid.endsWith(MEGA);
+      const { pr: newPr, par } = puzzleRating(z.rows, mega);
+      const rated: NonNullable<PuzzleProgress['rated']> = {};
+      for (const [rk, rv] of Object.entries(pr.rated ?? {})) {
+        if (!rv) continue;
+        const ms = rv.firstMs ?? pr.times?.[rk as Rules] ?? pr.best ?? 0;
+        rated[rk as Rules] = { at: rv.at, pr: newPr, s: perfScore(ms, par, rk as RatedRules), firstMs: ms };
+      }
+      const ms = pr.times?.[RULES_OF[pr.medal ?? 'bronze'] as Rules] ?? pr.best;
+      updates.push({ key, rated, pts: pr.medal ? points(z.rows, mega, pr.medal, ms, par) : pr.pts });
+      if (updates.length % 40 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  applyRatingRebuild(updates);
+}
+
 async function backfillPoints() {
   const todo = unpointed();
   if (!todo.length) return;
-  const find = new Map<string, PackPuzzle>();
-  for (const p of [STARTER, ...ctx.packs]) for (const v of [p, megaView(p)]) for (const l of v.levels) for (const z of l.puzzles) find.set(p.id + '/' + z.id, z);
+  const find = puzzleIndex();
   const out: Array<[string, string, number]> = [];
   for (let i = 0; i < todo.length; i++) {
     const [pid, pzid, pr] = todo[i];
     const z = find.get(pid + '/' + pzid);
     if (!z) continue; // a game not on this device: counted once it is
     const mega = pzid.endsWith(MEGA);
-    out.push([pid, pzid, points(z.rows, mega, pr.medal, pr.times?.[RULES_OF[pr.medal ?? 'bronze'] as 'easy'] ?? pr.best, puzzleRating(z.rows, mega).par)]);
+    out.push([pid, pzid, points(z.rows, mega, pr.medal, pr.times?.[RULES_OF[pr.medal ?? 'bronze'] as Rules] ?? pr.best, puzzleRating(z.rows, mega).par)]);
     if (i % 50 === 49) await new Promise(r => setTimeout(r, 0));
   }
   setPoints(out);
@@ -296,7 +337,7 @@ function megaSwitch(): HTMLElement {
 
 export function countPack(pack: Pack): [number, number] {
   let a = 0, b = 0;
-  for (const l of pack.levels) for (const p of l.puzzles) { b++; if (getProgress(pack.id, p.id).cleared) a++; }
+  for (const l of pack.levels) for (const p of l.puzzles) { b++; if (progressOf(pack, p).cleared) a++; }
   return [a, b];
 }
 
@@ -406,7 +447,7 @@ function groupLevels(pack: Pack, g: string, back: () => void, packBack: () => vo
   const list = h('div', { class: 'levels' });
   for (const lv of levels) {
     const open = levelUnlocked(pack, lv);
-    const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
+    const done = lv.puzzles.filter(p => progressOf(pack, p).cleared).length;
     const sizes = [...new Set(lv.puzzles.map(p => `${p.width}×${p.height}`))];
     const sz = sizes.length === 1 ? sizes[0] : `${sizes[0]}–${sizes[sizes.length - 1]}`;
     const hint = lv.extra ? t('extraHint') : t('unlockHint', { n: lv.unlockAfter ?? 0 });
@@ -427,16 +468,16 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
   // info strip: the focused puzzle, otherwise the level summary
   const info = h('div', { class: 'puzzle-info' });
   const showLevel = () => {
-    const done = lv.puzzles.filter(p => getProgress(pack.id, p.id).cleared).length;
+    const done = lv.puzzles.filter(p => progressOf(pack, p).cleared).length;
     const sizes = [...new Set(lv.puzzles.map(p => `${p.width}×${p.height}`))];
-    const stars = lv.puzzles.filter(p => getProgress(pack.id, p.id).underLimit).length;
+    const stars = lv.puzzles.filter(p => progressOf(pack, p).underLimit).length;
     info.replaceChildren(h('div', { class: 'ring', style: `--p:${(done / lv.puzzles.length) * 100}%` }, h('span', {}, String(done))),
       h('b', {}, `${done} / ${lv.puzzles.length} ${t('puzzles')}` + (stars ? `  ★ ${stars}` : '')),
       h('small', {}, sizes.length === 1 ? sizes[0] : `${sizes[0]} – ${sizes[sizes.length - 1]}`),
       ...(megaLevelBadge(lv) ? [megaLevelBadge(lv)!] : []));
   };
   const showPuzzle = (p: PackPuzzle, i: number) => {
-    const pr = getProgress(pack.id, p.id);
+    const pr = progressOf(pack, p);
     const name = pr.cleared ? pickText(p.name, packLang()) : '';
     info.replaceChildren(pr.cleared ? thumbnail(p, pck, 48, pack.id) : h('span', { class: 'qmark' }, '?'),
       h('b', {}, `${t('puzzleNo')} ${i + 1}` + (name ? ` · ${name}` : '')),
@@ -446,7 +487,7 @@ function puzzleList(pack: Pack, lv: PackLevel, back: () => void) {
   };
   showLevel();
   lv.puzzles.forEach((p, i) => {
-    const pr = getProgress(pack.id, p.id);
+    const pr = progressOf(pack, p);
     const tile = h('button', { class: 'btn puzzle' + (pr.cleared ? ' cleared' : ''), onClick: () => puzzleStart(pack, lv, i, () => puzzleList(pack, lv, back)),
       onMouseenter: () => showPuzzle(p, i), onFocus: () => showPuzzle(p, i), onMouseleave: () => showLevel(),
       'aria-label': `${t('puzzleNo')} ${i + 1}` });
@@ -478,7 +519,12 @@ function colorCountOf(pz: PackPuzzle): 0 | 1 | 2 {
   const cp = colorOfPz(pz)!;
   const k = 'c' + pz.rows.join('/') + '|' + Array.from(cp.cells).join('') + '|' + cp.palette.join();
   let c = solutionCounts.get(k);
-  if (c === undefined) { c = colorSolutionCount(cp, 30000); solutionCounts.set(k, c); }
+  if (c === undefined) {
+    const n = colorSolutionCount(cp, 30000);
+    if (n === null) return 0; // budget exhausted: do not cache
+    c = n;
+    solutionCounts.set(k, c);
+  }
   return c;
 }
 /** whether a puzzle has more than one solution (worked out once per pattern) */
@@ -486,7 +532,12 @@ const solutionCounts = new Map<string, 0 | 1 | 2>();
 function solutionCountOf(rows: string[], mega: MegaPairs | null = null): 0 | 1 | 2 {
   const k = rows.join('/') + (mega ? '|' + JSON.stringify(mega) : '');
   let c = solutionCounts.get(k);
-  if (c === undefined) { c = mega ? megaSolutionCount(rows, mega, 400) : solutionCount(rows, 400); solutionCounts.set(k, c); }
+  if (c === undefined) {
+    const n = mega ? megaSolutionCount(rows, mega, 2000) : solutionCount(rows, 2000);
+    if (n === null) return 0; // budget exhausted: do not cache as “not unique”
+    c = n;
+    solutionCounts.set(k, c);
+  }
   return c;
 }
 
@@ -494,7 +545,7 @@ function solutionCountOf(rows: string[], mega: MegaPairs | null = null): 0 | 1 |
 function puzzleStart(pack: Pack, lv: PackLevel, i: number, back: () => void) {
   usePack(pack, 'menu');
   const pz = lv.puzzles[i];
-  const pr = getProgress(pack.id, pz.id);
+  const pr = progressOf(pack, pz);
   const pck = pckOf(pack);
   const name = pr.cleared ? pickText(pz.name, packLang()) : '';
   const pic = pr.cleared ? thumbnail(pz, pck, 160, pack.id) : h('div', { class: 'qbig', style: `aspect-ratio:${pz.width}/${pz.height}` }, '?');
@@ -597,7 +648,7 @@ function rulesFor(lv: PackLevel): PlayRules {
   return d === 'easy' ? 'easy' : d === 'normal' ? 'normal' : d === 'hard' ? 'free' : lv.rules;
 }
 function rulesText(r: PlayRules) { return r === 'easy' ? t('rulesEasy') : r === 'normal' ? t('rulesNormal') : t('rulesHard'); }
-export function rulesName(r: PlayRules) { return r === 'easy' ? t('easy') : r === 'normal' ? t('normal') : t('hard'); }
+export function rulesName(r: PlayRules) { return r === 'easy' ? t('easy') : r === 'normal' ? t('normal') : t('hard'); } // i18n: Bronze / Silver / Gold
 
 function difficultyPicker(lv: PackLevel, rerender: () => void): HTMLElement {
   const cur = rulesFor(lv);
@@ -627,7 +678,7 @@ export const curMode = (): Mode => (settings.mode && settings.mode !== 'normal' 
 function setMode(m: Mode) { settings.mode = m; settings.mega = m === 'mega'; saveSettings(); }
 export const COLOR = '@color';
 /** which rules a medal is earned with (its time is what points look at) */
-export const RULES_OF: Record<string, string> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'free' };
+export const RULES_OF: Record<string, Rules> = { bronze: 'easy', silver: 'normal', gold: 'free', platinum: 'platinum' };
 const views = new WeakMap<Pack, Pack>(), megaViews = new WeakMap<Pack, Pack>(), originals = new WeakMap<Pack, Pack>();
 const keep = (levels: PackLevel[]) => levels.filter(l => l.puzzles.length);
 export function plainView(p: Pack): Pack {
@@ -647,7 +698,7 @@ export function megaView(p: Pack): Pack {
   }
   return v;
 }
-/** Colour mode: the puzzles with a colour version (the game's own colour puzzles, or a colour picture with few colours) */
+/** Color mode: the puzzles with a colour version (the game's own colour puzzles, or a colour picture with few colours) */
 const colorViews = new WeakMap<Pack, Pack>();
 export function colorView(p: Pack): Pack {
   let v = colorViews.get(p);
@@ -673,12 +724,14 @@ function colorPlayable(z: PackPuzzle): boolean {
   for (const c of z.rows.join('/') + Array.from(cp.cells).join('') + cp.palette.join()) { hsh ^= c.charCodeAt(0); hsh = Math.imul(hsh, 16777619); }
   const k = `1:${z.width}x${z.height}:${(hsh >>> 0).toString(36)}`;
   if (!(k in colorOkCache)) {
-    colorOkCache[k] = colorSolutionCount(cp, 30000) === 1 ? 1 : 0;
+    const n = colorSolutionCount(cp, 30000);
+    if (n === null) return false; // budget exhausted: try again later, do not cache as unplayable
+    colorOkCache[k] = n === 1 ? 1 : 0;
     if (!colorOkDirty) { colorOkDirty = true; setTimeout(() => { colorOkDirty = false; try { localStorage.setItem(COLOR_KEY, JSON.stringify(colorOkCache)); } catch { /* full */ } }, 500); }
   }
   return colorOkCache[k] === 1;
 }
-/** the colour version a puzzle is played with in Colour mode */
+/** the colour version a puzzle is played with in Color mode */
 export function colorOfPz(pz: PackPuzzle) { return pz.id.endsWith(COLOR) ? colorOf(pz) : null; }
 /** the stored pack behind a view (for changes that are saved) */
 const original = (p: Pack) => originals.get(p) ?? p;
@@ -881,11 +934,14 @@ function menuMusic(pack: Pack | null = null, fresh = false) {
 /** seeded random numbers (the same daily selection all day) */
 function rng(seed: number) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; }; }
 
-/** every puzzle of the visible games, with where it comes from */
+/** every plain puzzle of the visible games (never Mega/Color views — Daily and Random ignore the mode switch) */
 function puzzlePool(stable = false): Array<{ pack: Pack; lv: PackLevel; i: number }> {
   const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
+  // plainView only: Mega/Color mode must not change which puzzles Daily draws or where origin points
+  const hidden = libPrefs().hidden;
+  let packs = [STARTER, ...ctx.packs].map(plainView).filter(p => p.levels.length && !hidden.includes(p.id));
   // the daily puzzles must not change when the library is arranged differently: then the packs go by id
-  const packs = stable ? libraryPacks().sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : libraryPacks();
+  if (stable) packs = packs.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   for (const p of packs) for (const lv of p.levels) lv.puzzles.forEach((z, i) => { if (z.rows.some(r => r.includes('#'))) out.push({ pack: p, lv, i }); });
   return out;
 }
@@ -912,20 +968,6 @@ function drawBySize(rand: () => number, bucket: 5 | 10 | 15 | 0, n: number, skip
   return out;
 }
 
-/** n puzzles of a measured difficulty, drawn at random (difficulty is computed only for the ones looked at) */
-function drawPuzzles(rand: () => number, level: 1 | 2 | 3, n: number, skip = new Set<string>(), stable = false) {
-  const pool = puzzlePool(stable);
-  const out: Array<{ pack: Pack; lv: PackLevel; i: number }> = [];
-  for (let tries = 0; tries < 4000 && out.length < n && pool.length; tries++) {
-    const k = Math.floor(rand() * pool.length);
-    const e = pool[k]; pool.splice(k, 1);
-    const pz = e.lv.puzzles[e.i];
-    if (skip.has(pz.rows.join('/'))) continue;
-    if (puzzleLevel(pz) === level) { out.push(e); skip.add(pz.rows.join('/')); }
-  }
-  return out;
-}
-
 /** a short id for a puzzle's pattern (FNV-1a, 2 × 32 bit) */
 function patternId(rows: string[]): string {
   let a = 0x811c9dc5, b = 0x01000193 ^ rows.length;
@@ -942,7 +984,7 @@ export const fromText = (e: { pack: Pack; lv: PackLevel }) => `${pickAny(e.pack.
 let dailyChecked = '';
 function dailyToGames() {
   const done = packProgress('daily').filter(([, p]) => p.cleared && p.best !== undefined);
-  // the plain puzzles only: a daily solve isn't a solve of the Mega or Colour puzzle of the same picture
+  // the plain puzzles only: a daily solve isn't a solve of the Mega or Color puzzle of the same picture
   const packs = [STARTER, ...ctx.packs].map(plainView);
   const key = activeProfile().id + ':' + packs.length + ':' + done.length;
   if (!done.length || key === dailyChecked) return;
@@ -955,12 +997,16 @@ function dailyToGames() {
   for (const [id, p] of done) {
     const m = id.match(/^daily-\d+-(.+)$/), target = m && byPattern.get(m[1]);
     if (!target || getProgress(target[0], target[1]).cleared) continue;
-    const rules = (['hard', 'normal', 'easy'] as const).find(r => p.times?.[r] !== undefined);
+    const rules = (['platinum', 'free', 'hard', 'normal', 'easy'] as const).find(r => p.times?.[r] !== undefined);
     recordClear(target[0], target[1], rules ? p.times![rules]! : p.best!, !!p.underLimit, p.medal, rules);
   }
 }
 
-/** 15 puzzles a day, 5 per size, from all visible games; solved ones are saved for the day */
+/**
+ * 20 puzzles a day, 5 per size (5×5 / 10×10 / 15×15 / Big), from all visible games.
+ * Daily always uses Normal/Silver rules and plain (non-Mega, non-Color) pictures — document that for players.
+ * Clears score once on the original puzzle via `origin` (see progressOf / solved).
+ */
 async function daily() {
   const d = new Date();
   const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
@@ -979,15 +1025,15 @@ async function daily() {
   packLevels(pack, home);
 }
 
-/** "Surprise me": pick a difficulty, then a random puzzle of it from the whole library */
+/** "Surprise me": pick a size (the daily puzzles' four), then a random puzzle of it from the whole library */
 function randomPuzzle() {
-  const go = async (level: 1 | 2 | 3) => {
-    const [e] = drawPuzzles(Math.random, level, 1);
+  const go = async (bucket: 5 | 10 | 15 | 0) => {
+    const [e] = drawBySize(Math.random, bucket, 1);
     if (!e) return;
     await loadExtras(e.pack);
     puzzleStart(e.pack, e.lv, e.i, home);
   };
-  choose(t('randomFrom'), [[t('diff1'), () => go(1)], [t('diff2'), () => go(2)], [t('diff3'), () => go(3)], [t('back'), () => {}]]);
+  choose(t('randomFrom'), [['5×5', () => go(5)], ['10×10', () => go(10)], ['15×15', () => go(15)], ['Big', () => go(0)], [t('back'), () => {}]]);
 }
 
 // ---------------------------------------------------------------- play
@@ -1342,20 +1388,19 @@ function play(pack: Pack, lv: PackLevel, index: number, back: () => void, restor
     else { Snd.stop(); Snd.sfx('clear'); }
     const under = board.totalMs < TIME_LIMIT;
     const medal: Medal = rules === 'easy' || usedWrong ? 'bronze' : rules === 'normal' || usedLazy ? 'silver' : usedHints ? 'gold' : 'platinum';
-    // points and PixELO (the first solve under these rules is rated); a daily puzzle counts in its own game
+    // points and PixELO once on the original puzzle; daily UI links via origin (no second recordClear)
     const mode = curMode(), mega = pz.id.endsWith(MEGA);
-    // shown mistakes: counts like Easy. Lazy mode on Hard counts like Normal (silver).
-    const rr = usedWrong ? 'easy' : usedLazy && rules === 'free' ? 'normal' : rules;
+    // shown mistakes → Easy. Lazy on Hard → Normal. Platinum keeps its own times/rated slot (not shared with gold).
+    const rr: Rules = usedWrong ? 'easy' : usedLazy && rules === 'free' ? 'normal' : medal === 'platinum' ? 'platinum' : rules;
     const { pr, par } = puzzleRating(pz.rows, mega);
     const before = localStats(mode);
     const extra = {
-      rated: { pr, s: perfScore(board.totalMs, par, rr as RatedRules, { logic: usedHints, roulette }) },
+      rated: { pr, s: perfScore(board.totalMs, par, rr as RatedRules, { logic: usedHints, roulette }), firstMs: board.totalMs },
       pts: (p: { medal?: Medal; times?: Partial<Record<string, number>> }) => points(pz.rows, mega, p.medal, p.times?.[RULES_OF[p.medal ?? 'bronze']], par),
     };
     const target = pz.origin ? [pz.origin.slice(0, pz.origin.lastIndexOf('/')), pz.origin.slice(pz.origin.lastIndexOf('/') + 1)] : [pack.id, pz.id];
     const wasRated = !!getProgress(target[0], target[1]).rated?.[rr as RatedRules];
-    let newMedal = recordClear(target[0], target[1], board.totalMs, under, medal, rr, extra);
-    if (pz.origin) newMedal = recordClear(pack.id, pz.id, board.totalMs, under, medal, rr) || newMedal;
+    const newMedal = recordClear(target[0], target[1], board.totalMs, under, medal, rr, extra);
     const after = localStats(mode);
     clearBoard(pack.id, lv.id, pz.id);
     cleanup();
@@ -1372,7 +1417,7 @@ function showSolved(pack: Pack, lv: PackLevel, index: number, board: Board, unde
   const pz = lv.puzzles[index];
   const cv = h('canvas', { class: 'solved-pic' });
   const anim = new PictureAnimator(pz as any, pck, pack.id);
-  const best = getProgress(pack.id, pz.id).best;
+  const best = progressOf(pack, pz).best;
   const next = index + 1 < lv.puzzles.length ? h('button', { class: 'btn primary', onClick: () => { stop(); play(pack, lv, index + 1, back); } }, t('next') + ' ›') : null;
   screen(h('div', { class: 'solved' },
     h('div', { class: 'stamp' }, t('cleared')),
@@ -1586,7 +1631,8 @@ function profileDialog(after: () => void) {
 /** where a song file comes from, for games with the songs of several releases (3DS and Switch) */
 function songPlatform(ref: string): string {
   const f = ref.split('#')[0].toLowerCase();
-  return f.endsWith('.bcstm') ? '3DS' : f.endsWith('.ogg') ? 'Switch' : f.endsWith('.sdat') ? 'DS' : f.endsWith('.gbsnd') ? 'Game Boy' : f.endsWith('.spcsnap') ? 'Super Famicom' : '';
+  // .ogg is used on Switch and Android — don't label it Switch (wrong for Android packs)
+  return f.endsWith('.bcstm') ? '3DS' : f.endsWith('.mp3') ? 'Android' : f.endsWith('.ogg') ? 'Ogg' : f.endsWith('.sdat') ? 'DS' : f.endsWith('.gbsnd') ? 'Game Boy' : f.endsWith('.spcsnap') ? 'Super Famicom' : '';
 }
 
 /** change where a game plays its songs (sound test): saved in the pack as a new revision, so it goes to the server */
