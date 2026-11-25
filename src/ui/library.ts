@@ -10,7 +10,7 @@ import * as Sync from '../sync';
 import { confirmBox, message } from './dialog';
 import { icon } from './icons';
 import { fetchServerPacks } from './packs';
-import { allPacks, countPack, ctx, curMode, h, header, home, openPack, packLang, screen, serverError, themeRoot } from '../app';
+import { allPacks, countPack, ctx, curMode, h, header, home, openPack, packHasGameMega, packLang, packsChanged, screen, serverError, themeRoot } from '../app';
 
 // ---------------------------------------------------------------- library: folders, order, hidden games
 
@@ -20,17 +20,16 @@ export function toggleLibEdit(): boolean { libEdit = !libEdit; return libEdit; }
 
 const groupKey = (p: Pack, mode: LibPrefs['group']) => p.id === 'momogram-starter' ? '' : mode === 'system' ? p.source.platform : mode === 'series' ? seriesOf(p) : '';
 
-/** visible games in the player's order (hidden ones only while arranging) */
-export function libraryPacks(includeHidden = false): Pack[] {
+/** visible games in the player's order (hidden ones only while arranging). Pass `from` to reuse one allPacks() result. */
+export function libraryPacks(includeHidden = false, from?: Pack[]): Pack[] {
   const pr = libPrefs();
-  const idx = (id: string) => { const i = pr.order.indexOf(id); return i < 0 ? 1e6 : i; };
-  return allPacks().filter(p => includeHidden || !pr.hidden.includes(p.id)).sort((a, b) => idx(a.id) - idx(b.id));
+  const order = new Map(pr.order.map((id, i) => [id, i]));
+  const idx = (id: string) => order.get(id) ?? 1e6;
+  return (from ?? allPacks()).filter(p => includeHidden || !pr.hidden.includes(p.id)).sort((a, b) => idx(a.id) - idx(b.id));
 }
 
-
-const hasGameMega = (p: Pack) => p.levels.some(l => l.puzzles.some(z => z.mega));
 function megaOrb(packs: Pack[]): HTMLElement | null {
-  if (curMode() !== 'mega' || settings.megaMark !== 'mark' || !packs.some(hasGameMega)) return null;
+  if (curMode() !== 'mega' || settings.megaMark !== 'mark' || !packs.some(packHasGameMega)) return null;
   return h('span', { class: 'mega-orb', title: t('megaFromGameHelp'), 'aria-label': t('megaFromGame') });
 }
 /** the same dot on a game's modes and levels, so the way to its own Mega puzzles is marked all along */
@@ -48,7 +47,7 @@ async function offerUpdate(p: Pack, open: () => void) {
   document.body.append(box);
   try {
     const sp = (await Sync.serverPacks()).find(x => x.id === p.id);
-    if (sp) await fetchServerPacks({ packs: () => ctx.packs, setPacks: ps => { ctx.packs = ps; ctx.pcks.delete(p.id); } }, [sp], text => { note.textContent = '⬆ ' + text; });
+    if (sp) await fetchServerPacks({ packs: () => ctx.packs, setPacks: ps => { ctx.packs = ps; ctx.pcks.delete(p.id); packsChanged(); } }, [sp], text => { note.textContent = '⬆ ' + text; });
   } catch (e) { message(serverError(e)); }
   finally { box.remove(); }
   open();
@@ -68,21 +67,24 @@ function gameCard(p: Pack, onOpen: () => void): HTMLElement {
 
 /**
  * The library grid: single games as cards, several games of a series (or system) as a folder. While arranging,
- * every entry gets arrows to move it and an eye to hide it.
+ * every entry gets arrows to move it and an eye to hide it. `from` reuses home's allPacks() result.
  */
-export function renderLibrary(el: HTMLElement, folder: string | null) {
+export function renderLibrary(el: HTMLElement, folder: string | null, from?: Pack[]) {
   const pr = libPrefs();
-  const packs = libraryPacks(libEdit);
+  const packs = libraryPacks(libEdit, from);
+  const byKey = new Map<string, Pack[]>();
   const entries: Array<{ key: string; packs: Pack[] }> = [];
   for (const p of packs) {
     const k = folder !== null ? p.id : groupKey(p, pr.group) || p.id;
     if (folder !== null && (groupKey(p, pr.group) || p.id) !== folder) continue;
-    const e = entries.find(x => x.key === k);
-    if (e) e.packs.push(p); else entries.push({ key: k, packs: [p] });
+    let list = byKey.get(k);
+    if (!list) { list = []; byKey.set(k, list); entries.push({ key: k, packs: list }); }
+    list.push(p);
   }
   el.replaceChildren();
   el.classList.remove('v-cards', 'v-tiles', 'v-list');
   el.classList.add('v-' + (pr.view ?? 'cards'));
+  const redraw = () => renderLibrary(el, folder, from);
   const move = (e: { packs: Pack[] }, d: number) => {
     // order is kept per game; moving an entry moves all games in it past the neighbour entry
     const flat = entries.flatMap(x => x.packs.map(p => p.id));
@@ -92,12 +94,12 @@ export function renderLibrary(el: HTMLElement, folder: string | null) {
     const order = entries.flatMap(x => x.packs.map(p => p.id));
     const rest = pr.order.filter(id => !flat.includes(id));
     setLibPrefs({ ...pr, order: [...order, ...rest] });
-    renderLibrary(el, folder);
+    redraw();
   };
   for (const e of entries) {
     const hidden = e.packs.every(p => pr.hidden.includes(p.id));
     const card = e.packs.length === 1
-      ? gameCard(e.packs[0], () => offerUpdate(e.packs[0], () => openPack(allPacks().find(x => x.id === e.packs[0].id) ?? e.packs[0], folder !== null ? () => folderScreen(folder) : home)))
+      ? gameCard(e.packs[0], () => offerUpdate(e.packs[0], () => openPack((from ?? allPacks()).find(x => x.id === e.packs[0].id) ?? e.packs[0], folder !== null ? () => folderScreen(folder) : home)))
       : folderCard(e.key, e.packs);
     const wrap = h('div', { class: 'lib-entry' + (hidden ? ' hidden' : '') }, card);
     if (libEdit) {
@@ -107,16 +109,16 @@ export function renderLibrary(el: HTMLElement, folder: string | null) {
         h('button', { class: 'btn eye', onClick: () => {
           const ids = e.packs.map(p => p.id);
           setLibPrefs({ ...pr, hidden: hidden ? pr.hidden.filter(id => !ids.includes(id)) : [...pr.hidden, ...ids] });
-          renderLibrary(el, folder);
+          redraw();
         } }, hidden ? t('show') : t('hide')),
         h('button', { class: 'rbtn ghost', 'aria-label': t('moveRight'), onClick: () => move(e, 1) }, icon('next'))));
     }
     el.append(wrap);
   }
   if (libEdit && folder === null) el.prepend(h('div', { class: 'lib-group' }, h('span', {}, t('groupBy')),
-    ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); renderLibrary(el, folder); } }, t('group_' + m)))),
+    ...(['series', 'system', 'none'] as const).map(m => h('button', { class: 'tab' + (pr.group === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, group: m }); redraw(); } }, t('group_' + m)))),
     h('div', { class: 'lib-group' }, h('span', {}, t('viewAs')),
-      ...(['cards', 'tiles', 'list'] as const).map(m => h('button', { class: 'tab' + ((pr.view ?? 'cards') === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, view: m }); renderLibrary(el, folder); } }, t('view_' + m)))));
+      ...(['cards', 'tiles', 'list'] as const).map(m => h('button', { class: 'tab' + ((pr.view ?? 'cards') === m ? ' on' : ''), onClick: () => { setLibPrefs({ ...pr, view: m }); redraw(); } }, t('view_' + m)))));
 }
 
 /** an icon with a picture on it (some files have a blank one: all white, or all one colour) */
