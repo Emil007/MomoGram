@@ -27,7 +27,7 @@ const SIZE_NAME: Record<string, string> = {
 
 registerSetImporter({
   name: 'SherloCAT Holmes Nonogram (Steam)',
-  version: 1,
+  version: 2, // 2: texture header prefers the Unity 4/5 layout unless the 2017+ size is the one that fits
   find(names) {
     // only this game: every Unity player has a data.unity3d
     return names.filter(n => /sherlocat/i.test(n) && /data\.unity3d$/i.test(n))

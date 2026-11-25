@@ -192,7 +192,7 @@ function colourRows(w: number, h: number, cells: Uint8Array, paletteOf: (id: num
 
 registerImporter({
   name: 'Hatena Satena (Game Boy Advance)',
-  version: 2, // v2: the proprietary LZ77 cell decoder landed (v1 threw the documented half-blocker)
+  version: 3, // v3: board chrome
   detect(d, fileName) {
     return d.length === 0x400000 && gbaCode(d) === 'AHSJ' && /^HATENA.?SATENA/i.test(gbaTitle(d)) && d[0x11D8A4] === 0x60;
   },
@@ -240,7 +240,15 @@ registerImporter({
       format: 'momogram-pack', version: 1, id: GAME.id, title: GAME.title,
       source: { game: GAME.title.en!, platform: GAME.platform, region: GAME.region, developer: GAME.developer, year: GAME.year },
       theme: {
-        palette: { style: 'logic', accent: '#c98020', cursor: '#ffd060', fill: '#1a1a1a', cross: '#888', grid: '#aaa' },
+        palette: {
+          style: 'logic', accent: '#c98020', cursor: '#ffd060', fill: '#1a1a1a', cross: '#888', grid: '#aaa',
+          cell: '#ffffff', clue: '#202020', bg: '#f4ecd8',
+          board: {
+            clueArea: '#f4ecd8', clueAreaAlt: '#e8dcc0', clueBg: '#f0d8a0', clueBgAlt: '#ffffff',
+            grid5: '#c98020', bg: '#ffffff', cell: '#ffffff', clueFocusBg: '#ffd06088',
+          },
+          screen: { bg: '#e8dcc0', panel: '#ffffff', top: '#e0c080' },
+        },
       },
       levels,
     };

@@ -651,8 +651,12 @@ export class BoardView {
       ctx.save();
       ctx.strokeStyle = T.mistake; ctx.lineWidth = Math.max(2, cs / 8);
       for (let y = vy0; y < vy1; y++) for (let x = vx0; x < vx1; x++) {
-        const i = y * b.w + x, v = b.cells[i];
-        if ((v === FILL && !b.solution[i]) || (v === CROSS && b.solution[i])) {
+        const i = y * b.w + x;
+        const v = b.trial?.[i] || b.cells[i];
+        const col = b.trial?.[i] ? (b.trialColors?.[i] ?? 0) : b.colors[i];
+        const wrongFill = v === FILL && (!b.solution[i] || (b.color && b.solColor(i) !== col));
+        const wrongCross = v === CROSS && !!b.solution[i];
+        if (wrongFill || wrongCross) {
           ctx.fillStyle = T.mistake; ctx.globalAlpha = 0.4; ctx.fillRect(ox + x * cs, oy + y * cs, cs, cs);
           ctx.globalAlpha = 1;
           // a light ring, then the error colour: still visible when the theme itself is red
@@ -729,10 +733,12 @@ export class BoardView {
       ctx.restore();
       text(String(n), cx, cy + 1, col);
     };
-    for (let x = vx0; x < (this.rowsOnly ? vx0 : vx1); x++) {
+    // include one cell past the scroll edge so mega pairs that straddle the viewport still draw full boxes
+    const cx0 = Math.max(0, vx0 - 1), cy0 = Math.max(0, vy0 - 1);
+    for (let x = cx0; x < (this.rowsOnly ? cx0 : vx1); x++) {
       const band = b.colBand(x);
       if (band) {
-        if (b.colPair[x] !== x && x !== vx0) continue; // drawn with the pair's first column
+        if (b.colPair[x] !== x && x !== cx0) continue; // drawn with the pair's first column
         const x0 = b.colPair[x], done = b.colDone(x0)[0] ?? true, blue = this.logicHints && b.colCanProgress(x0);
         const col = this.ink(done ? T.clueDone : x0 === cueX || x0 + 1 === cueX ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(x0, cueX), done);
         const slots = bandSlots(band);
@@ -762,10 +768,10 @@ export class BoardView {
     ctx.beginPath(); ctx.rect(0, this.clueH, this.clueW - frameW, viewH - this.clueH); ctx.clip();
     if (cueY >= 0 && (this.spin || !T.clueFocusBg)) { ctx.fillStyle = this.spin ? T.roulette : T.hl; ctx.fillRect(0, oy + cueY * cs, this.clueW, cs); }
     const stepH = Math.min(cc * 0.62, 26, fs * 1.05);
-    for (let y = vy0; y < vy1; y++) {
+    for (let y = cy0; y < vy1; y++) {
       const band = b.rowBand(y);
       if (band) {
-        if (b.rowPair[y] !== y && y !== vy0) continue;
+        if (b.rowPair[y] !== y && y !== cy0) continue;
         const y0 = b.rowPair[y], done = b.rowDone(y0)[0] ?? true, blue = this.logicHints && b.rowCanProgress(y0);
         const col = this.ink(done ? T.clueDone : y0 === cueY || y0 + 1 === cueY ? T.cursor : blue ? T.hint : T.clue, this.clueBgOf(y0, cueY), done);
         const slots = bandSlots(band), u = slotUnits(slots, true);

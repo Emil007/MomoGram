@@ -1,12 +1,12 @@
 // MomoGram's own starter puzzles (original designs, part of MomoGram and MIT licensed), playable without any ROM.
 import type { Pack } from './format';
 
-// colour puzzles (Colour mode only), original MomoGram designs
+// colour puzzles (Color mode only), original MomoGram designs
 const COLOR_LEVEL: Pack['levels'][number] = {
  "id": "colour",
  "title": {
-  "en": "Colour",
-  "de": "Farbe"
+  "en": "Color",
+  "de": "Color"
  },
  "rules": "normal",
  "group": "",

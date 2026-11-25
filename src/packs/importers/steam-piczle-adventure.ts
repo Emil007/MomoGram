@@ -36,10 +36,10 @@
 // Pure black/white nonograms: every solution cell is 0 or 1. No mega-picross, no color-picross.
 
 import { registerSetImporter, GameFiles } from './index';
-import { Pack, PackLevel } from '../format';
+import { Pack, PackLevel, PackAsset } from '../format';
 import { puzzleScore } from '../../game/difficulty';
 import { ueFString, ueSolutionGrids, cellRows } from '../../rom/uexp';
-import { withPakPuzzles } from '../../rom/uepak';
+import { withPakPuzzles, readUe4Pak } from '../../rom/uepak';
 
 const KEY = /^([A-Z]\d{3})_solution_([a-z]{2})$/;
 /** the game's own board sizes for a given cell count (first entry = most common true orientation). */
@@ -50,7 +50,7 @@ const SIZES: Record<number, Array<[number, number]>> = {
 
 registerSetImporter({
   name: 'Piczle Cross Adventure (Steam)',
-  version: 2, // 2: reads the Steam pak (UE4 v8, zlib) as well as a loose uexp
+  version: 4, // 4: texture pairing, loose bgm uexp, Ogg trimmed to its last page
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {
@@ -70,7 +70,7 @@ registerSetImporter({
     if (!uexp) throw new Error('puzzledata.uexp not in the picked files.');
     const data = await opened.files.get(uexp);
     if (!data) throw new Error('puzzledata.uexp could not be read.');
-    return [await packOf(data, opened.files, opened.root)];
+    return [await packOf(data, opened.files, opened.root, files, root)];
   },
 });
 
@@ -97,7 +97,72 @@ function indexOfBytes(d: Uint8Array, pat: Uint8Array): number {
   return -1;
 }
 
-async function packOf(data: Uint8Array, files: GameFiles, root: string): Promise<Pack> {
+/** bytes of one Ogg bitstream, stopping at the end-of-stream page (no trailing uexp). */
+function oggBytes(d: Uint8Array, start: number): Uint8Array | null {
+  let p = start, end = start;
+  while (p + 27 <= d.length && d[p] === 0x4f && d[p + 1] === 0x67 && d[p + 2] === 0x67 && d[p + 3] === 0x53) {
+    const segs = d[p + 26];
+    if (p + 27 + segs > d.length) break;
+    let body = 0;
+    for (let i = 0; i < segs; i++) body += d[p + 27 + i];
+    const next = p + 27 + segs + body;
+    if (next > d.length) break;
+    end = next;
+    const eos = (d[p + 5] & 4) !== 0;
+    p = next;
+    if (eos) break;
+  }
+  return end - start >= 10_000 ? d.subarray(start, end) : null;
+}
+
+/** Ogg Vorbis payloads cooked into SoundWave .uexp. Loose bgms/*.uexp count; the Windows pak is the fallback. */
+async function gameMusic(files: GameFiles, root: string): Promise<{ theme: Pack['theme']; assets: PackAsset[] }> {
+  const pre = root === '.' ? '' : root;
+  const waves = new Map<string, Uint8Array>();
+  for (const n of files.names) {
+    if (!n.startsWith(pre) || !/\/bgms\/[^/]+\.uexp$/i.test(n) || /_Cue\.uexp$/i.test(n)) continue;
+    const d = await files.get(n);
+    if (d) waves.set(n, d);
+  }
+  if (!waves.size) {
+    const pakName = files.names.find(n => n.startsWith(pre) && /WindowsNoEditor\.pak$/i.test(n))
+      ?? files.names.find(n => n.startsWith(pre) && /\.pak$/i.test(n) && !/-Switch\.pak$/i.test(n));
+    if (pakName) {
+      try {
+        const pak = await files.get(pakName);
+        if (pak) for (const [k, v] of readUe4Pak(pak, n => /\/bgms\/[^/]+\.uexp$/i.test(n) && !/_Cue\.uexp$/i.test(n))) waves.set(k, v);
+      } catch (e) { console.warn(`pak ${pakName}: ${e instanceof Error ? e.message : e}`); }
+    }
+  }
+  if (!waves.size) return { theme: undefined, assets: [] };
+  const assets: PackAsset[] = [], made = new Set<string>();
+  for (const [path, d] of waves) {
+    if (d.length < 10_000) continue;
+    let ogg = -1;
+    for (let i = 0; i + 4 <= d.length; i++) if (d[i] === 0x4f && d[i + 1] === 0x67 && d[i + 2] === 0x67 && d[i + 3] === 0x53) { ogg = i; break; }
+    const slice = ogg < 0 ? null : oggBytes(d, ogg);
+    if (!slice) continue;
+    const name = path.replace(/^.*\//, '').replace(/\.uexp$/i, '') + '.ogg';
+    assets.push({ name, data: slice });
+    made.add(name);
+  }
+  if (!made.size) return { theme: undefined, assets: [] };
+  const has = (n: string) => made.has(n) ? n : undefined;
+  const play = ['puzzlebgm_1', 'puzzlebgm_2', 'puzzlebgm_3', 'puzzlebgm_4', 'puzzlebgm_5', 'puzzlebgm_6']
+    .map(n => n + '.ogg').filter(n => made.has(n));
+  const menu = has('titlebgm_1.ogg') ?? has('titlebgm_0.ogg') ?? play[0];
+  const songs = [...made].sort();
+  return {
+    theme: {
+      music: { title: menu, menu, play: play[0], clear: has('creditsbgm_1.ogg') },
+      tracks: play.length ? play : songs.filter(s => /puzzlebgm|worldbgm/.test(s)),
+      songs,
+    },
+    assets,
+  };
+}
+
+async function packOf(data: Uint8Array, files: GameFiles, root: string, allFiles?: GameFiles, allRoot?: string): Promise<Pack> {
   // 1) rows: every "<id>_solution_<lang>" in file order, with its localized title. We find the row
   //    names by their bytes (…_solution_xx\0 with a valid length prefix) and re-read them as FStrings,
   //    so the owner (table) name does not matter — this reads puzzledata / _demo / _gb alike.
@@ -131,21 +196,28 @@ async function packOf(data: Uint8Array, files: GameFiles, root: string): Promise
   // 2) every solution grid in the export (space-separated 0/1, row-major)
   const grids = ueSolutionGrids(data);
 
-  // 3) pair by cell count; the puzzle texture gives the definitive width×height
+  // 3) pair by cell count. Textures claim their grid first (P066/C021 are out of file order).
+  //    A missing texture must not take the next grid of any size — that shifts every later puzzle.
   const cellsOf = new Map<string, number[]>();
   const dims = new Map<string, [number, number]>();
   const used = new Set<number>();
+  const pending: string[] = [];
   for (const pid of order) {
     const t = await textureDims(files, root, pid);
-    if (t) dims.set(pid, t);
-    const target = t ? t[0] * t[1] : null;
+    if (!t) { pending.push(pid); continue; }
+    dims.set(pid, t);
+    const target = t[0] * t[1];
     let chosen = -1;
     for (let gi = 0; gi < grids.length; gi++) {
-      if (used.has(gi)) continue;
-      if (target === null || grids[gi].count === target) { chosen = gi; break; }
+      if (used.has(gi) || grids[gi].count !== target) continue;
+      chosen = gi; break;
     }
     if (chosen >= 0) { used.add(chosen); cellsOf.set(pid, grids[chosen].cells); }
+    else pending.push(pid);
   }
+  const left: number[] = [];
+  for (let gi = 0; gi < grids.length; gi++) if (!used.has(gi)) left.push(gi);
+  for (let i = 0; i < pending.length && i < left.length; i++) cellsOf.set(pending[i], grids[left[i]].cells);
 
   // 4) puzzles in file order, grouped into size levels
   const bySize = new Map<string, PackLevel>();
@@ -172,6 +244,7 @@ async function packOf(data: Uint8Array, files: GameFiles, root: string): Promise
   const levels = [...bySize.values()].sort((a, b) => a.puzzles.length - b.puzzles.length || a.id.localeCompare(b.id));
   if (!levels.length) throw new Error('No puzzles found.');
 
+  const music = await gameMusic(allFiles ?? files, allRoot ?? root);
   return {
     format: 'momogram-pack',
     version: 1,
@@ -179,14 +252,22 @@ async function packOf(data: Uint8Array, files: GameFiles, root: string): Promise
     title: { en: 'Piczle Cross Adventure' },
     source: { game: 'Piczle Cross Adventure', platform: 'Steam', developer: 'Score Studios' },
     theme: {
+      ...music.theme,
       palette: {
         style: 'logic',
         accent: '#2f9ee0',   // the game's sky blue (from its clue/UI art)
         fill: '#e63b49',     // the game's red filled cells (from the C001 solution art)
         grid: '#8ab6d0', cursor: '#f0b020', hint: '#2f9ee0', clue: '#202020', bg: '#eaf4fb',
+        cell: '#ffffff', cross: '#7090a8',
+        board: {
+          clueArea: '#eaf4fb', clueAreaAlt: '#dceaf6', clueBg: '#d0e6f4', clueBgAlt: '#ffffff',
+          grid5: '#2f9ee0', bg: '#ffffff', cell: '#ffffff', clueFocusBg: '#f0b02088',
+        },
+        screen: { bg: '#d0e4f4', panel: '#ffffff', top: '#9ecce8' },
       },
     },
     levels,
+    assets: music.assets.length ? music.assets : undefined,
   };
 }
 

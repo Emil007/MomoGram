@@ -38,6 +38,7 @@ import { readPiczleIoStore } from '../../rom/iostore';
 import { readUe5File } from '../../rom/uepak';
 import { registerSetImporter, GameFiles } from './index';
 import { Pack, PackLevel, PackPuzzle, Text } from '../format';
+import { puzzleScore } from '../../game/difficulty';
 
 /** the game's own board dimensions for a given cell count (both orientations that occur). */
 const SIZES: Record<number, Array<[number, number]>> = {
@@ -50,34 +51,32 @@ const LANGS = ['en', 'fr', 'it', 'de', 'es', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] a
 
 interface Raw { w: number; h: number; cells: string; name: Text | undefined; palette?: string[] }
 
-/** resolve a dense '0'/'1' grid to (w,h,polarity) using line-solvability; null when no standard
- *  size matches (a nonstandard/bonus puzzle, skipped). */
+/** '#' / '.' rows for the line solver. */
+function scoreRows(cells: string, w: number, h: number): string[] {
+  const out: string[] = [];
+  for (let y = 0; y < h; y++) {
+    let row = '';
+    for (let x = 0; x < w; x++) row += cells.charCodeAt(y * w + x) === 0x31 ? '#' : '.';
+    out.push(row);
+  }
+  return out;
+}
+
+/** resolve a dense '0'/'1' grid to (w,h,polarity). A candidate is kept only when the line solver
+ *  finishes it (puzzleScore). Non-square sizes and inverted solutions are both tried; the first
+ *  listed size that actually solves wins. Null when none do (a nonstandard/bonus puzzle). */
 function orient(cells: string): { w: number; h: number; cells: string } | null {
-  const n = cells.length, size: Array<[number, number]> = SIZES[n];
+  const n = cells.length, size = SIZES[n];
   if (!size) return null;
   for (const inv of [false, true]) {
-    const cl: number[] = [];
-    for (let i = 0; i < n; i++) cl.push(((cells.charCodeAt(i) === 0x31) !== inv) ? 1 : 0);
+    let cs = cells;
+    if (inv) { cs = ''; for (let i = 0; i < n; i++) cs += cells.charCodeAt(i) === 0x31 ? '0' : '1'; }
     for (const [w, h] of size) {
-      if (w * h !== n || !solvable(cl, w, h)) continue;
-      let cs = cells;
-      if (inv) { cs = ''; for (let i = 0; i < n; i++) cs += cl[i] ? '1' : '0'; }
-      return { w, h, cells: cs };
+      if (w * h !== n) continue;
+      if (puzzleScore(scoreRows(cs, w, h)).solvable) return { w, h, cells: cs };
     }
   }
   return null;
-}
-
-/** line-solvable: every row and column has at least one filled cell (a correct nonogram's rows and
- *  columns are never all-empty). */
-function solvable(c: number[], w: number, h: number): boolean {
-  for (let y = 0; y < h; y++) {
-    let any = false; for (let x = 0; x < w; x++) any = any || !!c[y * w + x]; if (!any) return false;
-  }
-  for (let x = 0; x < w; x++) {
-    let any = false; for (let y = 0; y < h; y++) any = any || !!c[y * w + x]; if (!any) return false;
-  }
-  return true;
 }
 
 function rowsOf(cells: string, w: number, h: number, color = false): string[] {
@@ -188,14 +187,24 @@ function pack(id: string, title: string, accent: string, raws: Raw[]): Pack {
     format: 'momogram-pack', version: 1, id,
     title: { en: title },
     source: { game: title, platform: 'Nintendo Switch', developer: 'Score Studios' },
-    theme: { palette: { style: 'logic', accent, fill: '#e63b49', grid: '#8ab6d0', cursor: '#f0b020', hint: accent, clue: '#202020', bg: '#eaf4fb' } },
+    theme: {
+      palette: {
+        style: 'logic', accent, fill: '#e63b49', grid: '#8ab6d0', cursor: '#f0b020', hint: accent,
+        clue: '#202020', bg: '#eaf4fb', cell: '#ffffff', cross: '#7090a8',
+        board: {
+          clueArea: '#eaf4fb', clueAreaAlt: '#dceaf6', clueBg: '#d0e6f4', clueBgAlt: '#ffffff',
+          grid5: accent, bg: '#ffffff', cell: '#ffffff', clueFocusBg: '#f0b02088',
+        },
+        screen: { bg: '#d0e4f4', panel: '#ffffff', top: '#9ecce8' },
+      },
+    },
     levels,
   };
 }
 
 registerSetImporter({
   name: 'Piczle Cross (Nintendo Switch)',
-  version: 3,
+  version: 5, // 5: orientation and polarity from the line solver, not "no blank line"
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {

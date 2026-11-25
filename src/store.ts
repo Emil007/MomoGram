@@ -1,5 +1,5 @@
 // Persistent storage: the user's ROM and packs in IndexedDB, progress/settings in localStorage.
-import { replay } from './game/rating';
+import { replay, RATING } from './game/rating';
 import type { Pack } from './packs/format';
 import { compressAsset, decompressAsset, sha1 } from './util/files';
 import type { BoardSnapshot } from './game/board';
@@ -126,15 +126,16 @@ export const storage = {
 
 export type Medal = 'bronze' | 'silver' | 'gold' | 'platinum';
 export const MEDALS: Medal[] = ['bronze', 'silver', 'gold', 'platinum'];
-export type Rules = 'easy' | 'normal' | 'hard' | 'free';
+/** play/rules keys for times & PixELO; `platinum` is separate from Hard/`free` so gold and platinum times (and points) stay honest */
+export type Rules = 'easy' | 'normal' | 'hard' | 'free' | 'platinum';
 export interface PuzzleProgress {
   best?: number; cleared?: boolean; underLimit?: boolean; medal?: Medal;
   /** best time per rules (times under different rules can't be compared) */
   times?: Partial<Record<Rules, number>>;
   /** first solved (for "this week" in the high scores) */
   at?: string;
-  /** PixELO: the first solve under each rule set (game/rating.ts) */
-  rated?: Partial<Record<Rules, { at: string; pr: number; s: number }>>;
+  /** PixELO: the first solve under each rule set (game/rating.ts); firstMs = clock used for that rated solve */
+  rated?: Partial<Record<Rules, { at: string; pr: number; s: number; firstMs?: number }>>;
   /** points this puzzle is worth so far (its best result; only goes up) */
   pts?: number;
 }
@@ -362,12 +363,14 @@ export function packProgress(packId: string): Array<[string, PuzzleProgress]> {
 
 /** returns true when the medal is better than the one the puzzle had */
 export function recordClear(packId: string, puzzleId: string, totalMs: number, underLimit: boolean, medal?: Medal, rules?: Rules,
-  extra?: { rated?: { pr: number; s: number }; pts?: (best: PuzzleProgress) => number }): boolean {
+  extra?: { rated?: { pr: number; s: number; firstMs?: number }; pts?: (best: PuzzleProgress) => number }): boolean {
   loadActive(); // another tab / the installed app may have saved meanwhile: never write back an old copy
   const k = packId + '/' + puzzleId;
   const p = progress[k] ?? {};
   // PixELO: only the first solve under these rules is rated
-  if (rules && extra?.rated && !p.rated?.[rules]) (p.rated ??= {})[rules] = { at: nowIso(), ...extra.rated };
+  if (rules && extra?.rated && !p.rated?.[rules]) {
+    (p.rated ??= {})[rules] = { at: nowIso(), ...extra.rated, firstMs: extra.rated.firstMs ?? totalMs };
+  }
   if (!p.cleared) p.at = nowIso();
   p.cleared = true;
   if (rules) { p.times ??= {}; if (p.times[rules] === undefined || totalMs < p.times[rules]!) p.times[rules] = totalMs; }
@@ -379,6 +382,33 @@ export function recordClear(packId: string, puzzleId: string, totalMs: number, u
   progress[k] = p;
   persist([packId]);
   return better;
+}
+
+const ratingVerKey = () => pk('ratingVer');
+export function ratingVersionStored(): number {
+  return Number(localStorage.getItem(ratingVerKey()) || 0) || 0;
+}
+export function setRatingVersionStored(v: number) {
+  localStorage.setItem(ratingVerKey(), String(v));
+}
+/** true when PixELO/points need a full rebuild for RATING.version */
+export function needsRatingRebuild(): boolean {
+  return ratingVersionStored() < RATING.version;
+}
+/** overwrite rated pr/s (and optional pts) after a formula bump; marks version current when done */
+export function applyRatingRebuild(updates: Array<{ key: string; rated: NonNullable<PuzzleProgress['rated']>; pts?: number }>) {
+  loadActive();
+  const packs = new Set<string>();
+  for (const u of updates) {
+    const p = progress[u.key];
+    if (!p) continue;
+    p.rated = u.rated;
+    if (u.pts !== undefined) p.pts = u.pts;
+    packs.add(u.key.slice(0, u.key.indexOf('/')));
+  }
+  setRatingVersionStored(RATING.version);
+  if (packs.size) persist([...packs]);
+  else persist();
 }
 
 export function resetProgress(packId: string) {
@@ -672,7 +702,7 @@ export function rekeyProfile(from: string, to: string, name?: string) {
 /** the active profile's numbers as the server's high scores count them (this device may be newer than the server) */
 export interface ModeStats { solved: number; week: number; medals: Record<Medal, number>; packs: Record<string, number>; time: number; points: number; elo: number; peak: number; rated: number }
 export function localStats(mode: Mode = 'normal'): ModeStats {
-  const out = { solved: 0, week: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0, points: 0, elo: 1000, peak: 1000, rated: 0 };
+  const out = { solved: 0, week: 0, medals: { bronze: 0, silver: 0, gold: 0, platinum: 0 } as Record<Medal, number>, packs: {} as Record<string, number>, time: 0, points: 0, elo: RATING.start, peak: RATING.start, rated: 0 };
   const week = new Date(Date.parse(nowIso()) - 7 * 86400000).toISOString();
   const solves: Array<{ at: string; pr: number; s: number }> = [];
   for (const [k, v] of Object.entries(progress)) {

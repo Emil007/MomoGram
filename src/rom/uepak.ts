@@ -103,16 +103,37 @@ function inflate(chunk: Uint8Array): Uint8Array | null {
 
 interface NamedFiles { names: string[]; get(name: string): Promise<Uint8Array | undefined> }
 
-/** loose puzzle files when the folder already has them, otherwise the puzzle uexps inside the pak. */
+const baseName = (n: string) => n.slice(n.lastIndexOf('/') + 1).toLowerCase();
+
+/** loose puzzle files when the folder already has them; solution textures that exist only in the pak are still added. */
 export async function withPakPuzzles(files: NamedFiles, root: string): Promise<{ files: NamedFiles; root: string }> {
   const pre = root === '.' ? '' : root;
-  if (files.names.some(n => n.startsWith(pre) && /\/puzzledata\.uexp$/i.test(n))) return { files, root };
+  const loose = files.names.some(n => n.startsWith(pre) && /\/puzzledata\.uexp$/i.test(n));
   const pakName = files.names.find(n => n.startsWith(pre) && /PiczleCrossAdvntr[^/]*\.pak$/i.test(n));
   if (!pakName) return { files, root };
   const pak = await files.get(pakName);
   if (!pak) return { files, root };
-  const map = readUe4Pak(pak, n => /\/puzzles\/.+\.uexp$/i.test(n));
-  return { files: { names: [...map.keys()], get: async n => map.get(n) }, root: '' };
+  let map: Map<string, Uint8Array>;
+  try { map = readUe4Pak(pak, n => /\/puzzles\/.+\.uexp$/i.test(n)); }
+  catch (e) { console.warn(`pak ${pakName}: ${e instanceof Error ? e.message : e}`); return { files, root }; }
+  if (!loose) return { files: { names: [...map.keys()], get: async n => map.get(n) }, root: '' };
+  const have = new Set(files.names.filter(n => n.startsWith(pre)).map(baseName));
+  const extra = new Map<string, Uint8Array>();
+  for (const [k, v] of map) {
+    if (have.has(baseName(k))) continue;
+    extra.set(pre + k.replace(/^\/+/, ''), v);
+  }
+  if (!extra.size) return { files, root };
+  return {
+    files: { names: [...files.names, ...extra.keys()], get: async n => extra.get(n) ?? files.get(n) },
+    root,
+  };
+}
+
+const MAX_ENTRY = 64 * 1024 * 1024;
+
+function inFile(pak: Uint8Array, off: number, len: number): boolean {
+  return Number.isFinite(off) && Number.isFinite(len) && off >= 0 && len >= 0 && len <= MAX_ENTRY && off + len <= pak.length;
 }
 
 /** files whose pak path matches `want`, decompressed. Names keep the path inside the pak. */
@@ -122,21 +143,25 @@ export function readUe4Pak(pak: Uint8Array, want: (name: string) => boolean): Ma
     if (!want(e.name)) continue;
     let data: Uint8Array | null = null;
     if (!(e.flags & 1) || !e.blocks.length) {
+      if (!inFile(pak, e.off, e.raw)) { console.warn(`pak skip ${e.name}: bad offset ${e.off} size ${e.raw}`); continue; }
       data = pak.subarray(e.off, e.off + e.raw);
     } else {
       const parts: Uint8Array[] = [];
+      let sum = 0, failed = false;
       for (const [s, t] of e.blocks) {
+        if (!Number.isFinite(s) || !Number.isFinite(t) || s < 0 || t < s || !inFile(pak, e.off + s, t - s)) { failed = true; break; }
         const chunk = pak.subarray(e.off + s, e.off + t);
         const one = e.method === 1 || chunk[0] === 0x78 ? inflate(chunk) : null;
-        if (!one) { parts.length = 0; break; }
+        if (!one) { console.warn(`pak skip ${e.name}: compression ${e.method} failed`); failed = true; break; }
+        sum += one.length;
+        if (sum > MAX_ENTRY) { console.warn(`pak skip ${e.name}: uncompressed size ${sum}`); failed = true; break; }
         parts.push(one);
       }
-      if (parts.length) {
-        const n = parts.reduce((a, b) => a + b.length, 0);
-        data = new Uint8Array(n);
+      if (!failed && parts.length) {
+        data = new Uint8Array(sum);
         let w = 0;
         for (const part of parts) { data.set(part, w); w += part.length; }
-        if (e.raw && data.length !== e.raw) data = null;
+        if (e.raw && data.length !== e.raw) { console.warn(`pak skip ${e.name}: inflated ${data.length}, index says ${e.raw}`); data = null; }
       }
     }
     if (data) out.set(e.name, data);
@@ -194,6 +219,7 @@ export async function readUe5File(pak: Uint8Array, want: (name: string) => boole
   const hit = [...paths.keys()].find(want);
   if (!hit) return null;
   const eoff = paths.get(hit)!;
+  if (eoff < 0 || eoff + 4 > encoded.length) return null;
   const bits = u32(encoded, eoff);
   let q = eoff + 4;
   const compField = (bits >> 23) & 0x3f;
@@ -209,14 +235,25 @@ export async function readUe5File(pak: Uint8Array, want: (name: string) => boole
     return v;
   };
   const off = vi(31), unc = vi(30);
-  if (comp < 0) return pak.subarray(off, off + unc);
+  if (!Number.isFinite(off) || !Number.isFinite(unc) || unc <= 0 || unc > MAX_ENTRY || off < 0 || off > pak.length) return null;
+  if (comp < 0) {
+    if (off + unc > pak.length) return null;
+    return pak.subarray(off, off + unc);
+  }
   vi(29);
+  if (blocks < 0 || blocks > 4096 || bsize < 0 || bsize > MAX_ENTRY) return null;
   const sizes: number[] = [];
-  for (let i = 0; i < blocks; i++) { sizes.push(u32(encoded, q)); q += 4; }
+  for (let i = 0; i < blocks; i++) {
+    if (q + 4 > encoded.length) return null;
+    const sz = u32(encoded, q); q += 4;
+    if (sz <= 0 || sz > MAX_ENTRY) return null;
+    sizes.push(sz);
+  }
   let rel = 48 + 4 + 16 * blocks + 1 + 4;
   const chunks: Uint8Array[] = [];
   for (const sz of sizes) {
     const end = encr ? (rel + sz + 15) & ~15 : rel + sz;
+    if (end < rel || off + end > pak.length) return null;
     chunks.push(pak.subarray(off + rel, off + end));
     rel = end;
   }

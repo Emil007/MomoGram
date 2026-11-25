@@ -18,6 +18,15 @@ export interface Importer {
 
 const importers: Importer[] = [];
 export function registerImporter(i: Importer) { importers.push(i); }
+
+/** a question an importer asks the player while reading (the file is another version of the game than it knows) */
+export interface ImportQuestion { kind: 'version'; game: string; have: string; want: string }
+let ask: (q: ImportQuestion) => Promise<boolean> = async () => true;
+/** how the app asks (without one, every question is answered yes: the command-line tools) */
+export function setImportAsk(fn: (q: ImportQuestion) => Promise<boolean>) { ask = fn; }
+/** asks the player; an importer that gets "no" throws ImportCancelled */
+export function importAsk(q: ImportQuestion): Promise<boolean> { return ask(q); }
+export class ImportCancelled extends Error { constructor() { super('cancelled'); } }
 /** every importer's upgrade for a stored pack (see Importer.upgrade); true when the pack changed */
 export function upgradeStoredPack(p: Pack): boolean {
   let changed = false;
@@ -30,6 +39,8 @@ export interface GameFiles {
   /** paths relative to what the player picked, with "/" */
   names: string[];
   get(name: string): Promise<Uint8Array | undefined>;
+  /** byte length when the caller already knows it, so a folder reimport can see a replaced file */
+  size?(name: string): number | undefined;
 }
 export interface SetImporter {
   name: string;
@@ -46,13 +57,42 @@ export function importerVersion(name: string): number { return ([...importers, .
 
 /** which importer (and version) read a pack, from which file: lets a later import of the same file be skipped */
 function stamp(packs: Pack[], imp: { name: string; version?: number }, file: string, size: number) {
-  for (const p of packs) { delete p.source.scan; p.source.scans = [{ by: imp.name, v: imp.version ?? 1, file: file.split('/').pop() ?? file, size }]; }
+  const id = file.replace(/\\/g, '/');
+  for (const p of packs) { delete p.source.scan; p.source.scans = [{ by: imp.name, v: imp.version ?? 1, file: id, size }]; }
 }
 
-/** a file read before by the same version of its importer: nothing new can come out of it */
+/** a file read before by the same version of its importer: nothing new can come out of it.
+ *  A newer stamp is not final — the importer in this build is what gets to read the file. */
 export function alreadyRead(packs: Pack[], file: string, size: number): Pack | null {
-  const base = file.split('/').pop() ?? file;
-  return packs.find(p => scansOf(p).some(s => s.file === base && s.size === size && s.v >= importerVersion(s.by))) ?? null;
+  const id = file.replace(/\\/g, '/').replace(/\/$/, '');
+  const base = id.split('/').pop() ?? id;
+  return packs.find(p => scansOf(p).some(s => (s.file === id || s.file === base) && s.size === size && s.v === importerVersion(s.by))) ?? null;
+}
+
+/** '' / '.' is a game sitting at the top of the pick, not a prefix of every path in the folder */
+const blankRoot = (r: string) => r === '' || r === '.' || r === '/';
+function topLevelGame(path: string): boolean {
+  return path === 'resources.assets' || path === 'puzzledata' || path === 'puzzledata.unity3d'
+    || path.startsWith('StreamingAssets/') || path.startsWith('Data/');
+}
+function underRoot(root: string, path: string): boolean {
+  if (blankRoot(root)) return topLevelGame(path);
+  return path.startsWith(root);
+}
+
+/** identity of a folder import: the full root, plus a hash of each file's path and byte length.
+ *  Null when lengths are unknown — a same file-count patch must be read again, not skipped. */
+function folderStamp(root: string, files: GameFiles, impName: string): { file: string; size: number } | null {
+  if (!files.size) return null;
+  const mine = files.names.filter(n => underRoot(root, n)).sort();
+  let h = 2166136261;
+  for (const n of mine) {
+    const sz = files.size(n);
+    if (sz == null || !Number.isFinite(sz) || sz < 0) return null;
+    const token = n + '\0' + sz;
+    for (let i = 0; i < token.length; i++) h = Math.imul(h ^ token.charCodeAt(i), 16777619);
+  }
+  return { file: root.replace(/\/$/, '') || impName, size: (h >>> 0) || 1 };
 }
 
 /** read the folder games among the files; returns the results and which files they took */
@@ -63,21 +103,24 @@ export async function importFileSet(files: GameFiles, each?: (r: ImportResult) =
   const push = async (r: ImportResult) => { if (each) { await each(r); r = { ...r, packs: [] }; } results.push(r); };
   for (const imp of setImporters) {
     for (const root of imp.find(files.names)) {
-      if (roots.some(r => root.startsWith(r))) continue;
+      // a blank root must not hide every later game, and must not be treated as already covered by "" 
+      if (!blankRoot(root) && roots.some(r => !blankRoot(r) && root.startsWith(r))) continue;
       roots.push(root);
-      const name = root.replace(/\/$/, '') || imp.name, size = files.names.filter(n => n.startsWith(root)).length;
-      const seen = alreadyRead(known, name, size);
-      if (seen) { await push({ file: name, ok: false, packs: [], message: 'uptodate' }); continue; }
+      const label = root.replace(/\/$/, '') || imp.name;
+      const token = folderStamp(root, files, imp.name);
+      if (token && known.some(p => scansOf(p).some(s => s.file === token.file && s.size === token.size && s.v === importerVersion(s.by)))) {
+        await push({ file: label, ok: false, packs: [], message: 'uptodate' }); continue;
+      }
       try {
         const packs = await imp.read(files, root);
-        stamp(packs, imp, name, size);
-        await push({ file: root.replace(/\/$/, '') || imp.name, ok: packs.length > 0, packs, message: packs.length ? imp.name : 'unsupported' });
+        stamp(packs, imp, token?.file ?? label, token?.size ?? 0);
+        await push({ file: label, ok: packs.length > 0, packs, message: packs.length ? imp.name : 'unsupported' });
       } catch (e: any) {
-        await push({ file: root.replace(/\/$/, '') || imp.name, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` });
+        await push({ file: label, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` });
       }
     }
   }
-  return { results, used: n => roots.some(r => n.startsWith(r)) };
+  return { results, used: n => roots.some(r => underRoot(r, n)) };
 }
 
 export function is3dsEncrypted(d: Uint8Array): boolean | null {
@@ -100,6 +143,7 @@ export async function importGameFile(name: string, data: Uint8Array): Promise<Im
       stamp(packs, imp, name, data.length);
       if (packs.length) return { file: name, ok: true, packs, message: imp.name };
     } catch (e: any) {
+      if (e instanceof ImportCancelled) return { file: name, ok: false, packs: [], message: 'cancelled' };
       return { file: name, ok: false, packs: [], message: `${imp.name}: ${e.message || e}` };
     }
   }

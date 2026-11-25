@@ -53,7 +53,7 @@ const SIZES: Record<number, Array<[number, number]>> = {
 
 registerSetImporter({
   name: 'Piczle Cross Adventure (Nintendo Switch)',
-  version: 2, // 2: reads the Switch pak (UE4 v8, zlib) as well as a loose uexp
+  version: 4, // 4: pair grids by texture size first; pak solutions still apply when a loose uexp is present
   find(names) {
     const roots = new Set<string>();
     for (const n of names) {
@@ -130,21 +130,28 @@ async function packOf(data: Uint8Array, files: GameFiles, root: string): Promise
   // 2) every solution grid in the export (space-separated 0/1, row-major)
   const grids = ueSolutionGrids(data);
 
-  // 3) pair by cell count; the puzzle texture gives the definitive width×height
+  // 3) pair by cell count. Textures claim their grid first (P066/C021 are out of file order).
+  //    A missing texture must not take the next grid of any size — that shifts every later puzzle.
   const cellsOf = new Map<string, number[]>();
   const dims = new Map<string, [number, number]>();
   const used = new Set<number>();
+  const pending: string[] = [];
   for (const pid of order) {
     const t = await textureDims(files, root, pid);
-    if (t) dims.set(pid, t);
-    const target = t ? t[0] * t[1] : null;
+    if (!t) { pending.push(pid); continue; }
+    dims.set(pid, t);
+    const target = t[0] * t[1];
     let chosen = -1;
     for (let gi = 0; gi < grids.length; gi++) {
-      if (used.has(gi)) continue;
-      if (target === null || grids[gi].count === target) { chosen = gi; break; }
+      if (used.has(gi) || grids[gi].count !== target) continue;
+      chosen = gi; break;
     }
     if (chosen >= 0) { used.add(chosen); cellsOf.set(pid, grids[chosen].cells); }
+    else pending.push(pid);
   }
+  const left: number[] = [];
+  for (let gi = 0; gi < grids.length; gi++) if (!used.has(gi)) left.push(gi);
+  for (let i = 0; i < pending.length && i < left.length; i++) cellsOf.set(pending[i], grids[left[i]].cells);
 
   // 4) puzzles in file order, grouped into size levels
   const bySize = new Map<string, PackLevel>();
@@ -182,6 +189,12 @@ async function packOf(data: Uint8Array, files: GameFiles, root: string): Promise
         accent: '#2f9ee0',   // the game's sky blue (from its clue/UI art)
         fill: '#e63b49',     // the game's red filled cells (from the C001 solution art)
         grid: '#8ab6d0', cursor: '#f0b020', hint: '#2f9ee0', clue: '#202020', bg: '#eaf4fb',
+        cell: '#ffffff', cross: '#7090a8',
+        board: {
+          clueArea: '#eaf4fb', clueAreaAlt: '#dceaf6', clueBg: '#d0e6f4', clueBgAlt: '#ffffff',
+          grid5: '#2f9ee0', bg: '#ffffff', cell: '#ffffff', clueFocusBg: '#f0b02088',
+        },
+        screen: { bg: '#d0e4f4', panel: '#ffffff', top: '#9ecce8' },
       },
     },
     levels,

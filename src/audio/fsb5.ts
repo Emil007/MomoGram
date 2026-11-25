@@ -35,10 +35,17 @@ export function readFsb5(d: Uint8Array): { mode: number; samples: FsbSample[] } 
     }
     raw.push(s);
   }
-  // names: u32 offsets into the name table
+  // names: u32 offsets into the name table. A missing NUL used to pass -1 to subarray and read the rest of the bank.
   const names: string[] = [];
   const nt = head + shs;
-  for (let i = 0; i < n && nts; i++) { const o = nt + u32(nt + i * 4); names.push(new TextDecoder().decode(d.subarray(o, d.indexOf(0, o)))); }
+  const tableEnd = Math.min(d.length, nt + Math.max(0, nts));
+  for (let i = 0; i < n && nts; i++) {
+    const o = nt + u32(nt + i * 4);
+    if (o < nt || o >= tableEnd) { names.push(''); continue; }
+    let z = o;
+    while (z < tableEnd && d[z] !== 0) z++;
+    names.push(new TextDecoder().decode(d.subarray(o, z)));
+  }
   const data = head + shs + nts;
   const samples = raw.map((s, i) => {
     const end = i + 1 < raw.length ? raw[i + 1].off : d.length - data;
@@ -82,10 +89,19 @@ class OggWriter {
 
 const b64 = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
+const missingSetup = new Set<number>();
+
 /** a Vorbis FSB5 sample as an Ogg Vorbis file; null when its encoder setting is not in the table */
 export function fsbVorbisToOgg(s: FsbSample): Uint8Array | null {
   const setupInfo = s.crc !== undefined ? VORBIS_SETUPS[s.crc] : undefined;
-  if (!setupInfo) return null;
+  if (!setupInfo) {
+    const key = s.crc ?? -1;
+    if (!missingSetup.has(key)) {
+      missingSetup.add(key);
+      console.warn(`FSB5 Vorbis setup not in the table (CRC ${s.crc === undefined ? 'missing' : '0x' + (s.crc >>> 0).toString(16)}, sample ${s.name || '?'})`);
+    }
+    return null;
+  }
   const [bs0, bs1, setupB64] = setupInfo;
   const enc = new TextEncoder();
   const id = new Uint8Array(30);
@@ -123,6 +139,18 @@ export function fsbVorbisToOgg(s: FsbSample): Uint8Array | null {
   granule = s.samples || granule;
   flush(true);
   return w.bytes();
+}
+
+/** one AudioClip's bank as Ogg. A multi-sample bank is used only when a sample name matches the clip. */
+export function fsbClipOgg(bank: Uint8Array, clip: string): Uint8Array | null {
+  if (!isFsb5(bank)) { console.warn(`FSB5 header missing for ${clip}`); return null; }
+  const { mode, samples } = readFsb5(bank);
+  if (mode !== 15) { console.warn(`FSB5 ${clip} is not Vorbis (mode ${mode})`); return null; }
+  const want = clip.toLowerCase();
+  const s = samples.length === 1 ? samples[0]
+    : samples.find(x => x.name.replace(/\0/g, '').toLowerCase() === want);
+  if (!s) { console.warn(`FSB5 ${clip} has ${samples.length} samples and none is named ${clip}`); return null; }
+  return fsbVorbisToOgg(s);
 }
 
 /** loop points written by fsbVorbisToOgg, and the sample rate of an Ogg Vorbis file */

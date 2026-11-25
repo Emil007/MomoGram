@@ -12,7 +12,9 @@ export class ChipPlayer {
   private fallback: ChipEngine | null = null;
   private buf = new Float32Array(0);
   playing = false;
-  private last: { kind: ChipKind; key: string; data: Uint8Array; song: number } | null = null;
+  /** bumped by play() and stop(); a play() still in setup() must not start */
+  private epoch = 0;
+  private last: { kind: ChipKind; key: string; data: Uint8Array; song: number; epoch: number } | null = null;
 
   constructor(private ac: AudioContext, out: AudioNode) {
     this.trim = ac.createGain();
@@ -39,11 +41,18 @@ export class ChipPlayer {
         await this.ac.audioWorklet.addModule(new URL('worklet.js', location.href).href);
         const n = new AudioWorkletNode(this.ac, 'momo-chip', { numberOfInputs: 0, outputChannelCount: [2] });
         n.port.onmessage = e => {
-          if (e.data?.type === 'error') console.warn('chip music', e.data.message);
+          // startup or render failed: drop "playing" only if this is still that song
+          if (e.data?.type === 'error') {
+            console.warn('chip music', e.data.message);
+            if (e.data.epoch === this.epoch) this.playing = false;
+            return;
+          }
           const l = this.last;
-          if (e.data?.type === 'need' && l && l.key === e.data.key) n.port.postMessage({ type: 'play', kind: l.kind, key: l.key, song: l.song, data: l.data.slice() } as ChipMessage);
+          if (e.data?.type === 'need' && l && l.key === e.data.key && l.epoch === this.epoch && this.playing)
+            n.port.postMessage({ type: 'play', kind: l.kind, key: l.key, song: l.song, data: l.data.slice(), epoch: l.epoch } as ChipMessage);
         };
-        n.connect(this.gain);
+        // trim → gain → out (trim was previously skipped)
+        n.connect(this.trim);
         this.node = n;
       } catch (e) {
         // older browsers: emulate on the main thread
@@ -53,10 +62,10 @@ export class ChipPlayer {
           const ob = ev.outputBuffer, len = ob.length, l = ob.getChannelData(0), r = ob.getChannelData(1);
           if (!this.fallback) { l.fill(0); r.fill(0); return; }
           if (this.buf.length < len * 2) this.buf = new Float32Array(len * 2);
-          try { this.fallback.render(this.buf, len); } catch (err) { console.warn('chip music', err); this.fallback = null; return; }
+          try { this.fallback.render(this.buf, len); } catch (err) { console.warn('chip music', err); this.fallback = null; this.playing = false; l.fill(0); r.fill(0); return; }
           for (let i = 0; i < len; i++) { l[i] = this.buf[i * 2]; r[i] = this.buf[i * 2 + 1]; }
         };
-        n.connect(this.gain);
+        n.connect(this.trim);
         this.node = n;
       }
     })();
@@ -65,24 +74,31 @@ export class ChipPlayer {
 
   /** start `song` of asset `key` (data is only sent to the audio thread the first time) */
   async play(kind: ChipKind, key: string, data: Uint8Array, song: number): Promise<boolean> {
+    const epoch = ++this.epoch;
     await this.setup();
+    // Stop, or a newer play(), landed while the worklet was still loading
+    if (epoch !== this.epoch) return false;
     const t = this.ac.currentTime;
     this.gain.gain.cancelScheduledValues(t);
     this.gain.gain.setValueAtTime(1, t);
-    this.last = { kind, key, data, song };
+    this.last = { kind, key, data, song, epoch };
     if (this.node instanceof AudioWorkletNode) {
-      const msg: ChipMessage = { type: 'play', kind, key, song, data: this.sent.has(key) ? undefined : data.slice() };
+      if (epoch !== this.epoch) return false;
+      const msg: ChipMessage = { type: 'play', kind, key, song, epoch, data: this.sent.has(key) ? undefined : data.slice() };
       this.sent.add(key);
       if (this.sent.size > 4) this.sent.clear(); // the worklet keeps 4 as well; resend after that
       this.node.port.postMessage(msg);
     } else {
       try { this.fallback = createEngine(kind, data, song, this.ac.sampleRate); } catch (e) { console.warn('chip music', e); return false; }
+      if (epoch !== this.epoch) { this.fallback = null; return false; }
     }
     this.playing = true;
     return true;
   }
 
   stop(fade = 0.15) {
+    // even before play() has set `playing`: otherwise that song starts after Stop
+    this.epoch++;
     if (!this.playing) return;
     this.playing = false;
     const t = this.ac.currentTime;

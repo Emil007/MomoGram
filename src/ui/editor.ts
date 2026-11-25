@@ -1,6 +1,6 @@
 // Puzzle editor: draw or import a picture, check that it has exactly one solution (with suggested fixes), and keep
 // your puzzles in your own packs, which play and export like every other pack.
-import { Pack, PackLevel, PackPuzzle, pickAny } from '../packs/format';
+import { Pack, PackLevel, PackPuzzle, pickAny, safeColor } from '../packs/format';
 import { puzzleScore, puzzleLevel, suggestFix } from '../game/difficulty';
 import { colorOf, colorSolutionCount } from '../game/color';
 import { storage } from '../store';
@@ -8,6 +8,16 @@ import { t, lang } from '../i18n';
 import { h, pickFile } from '../app';
 import { askText, confirmBox, message } from './dialog';
 import { icon } from './icons';
+
+/** a swatch colour is written into a style attribute, so only plain hex is kept */
+function swatchHex(c: unknown): string {
+  const s = safeColor(c, '');
+  const m = /^#([0-9a-f]{3,8})$/i.exec(s);
+  if (!m) return '#1a1a1a';
+  let h = m[1];
+  if (h.length === 3 || h.length === 4) h = h.slice(0, 3).replace(/./g, ch => ch + ch);
+  return '#' + h.slice(0, 6).toLowerCase();
+}
 
 interface ED {
   packs(): Pack[];
@@ -69,7 +79,7 @@ function packEditor(ed: ED, pack: Pack) {
       pz.rows.forEach((r, y) => [...r].forEach((v, x) => {
         const ch = pz.color?.rows[y]?.[x];
         const k = ch && ch !== '.' ? parseInt(ch, 36) : -1;
-        g.fillStyle = v === '#' ? (k >= 0 && pz.color ? pz.color.palette[k] ?? '#1a1a1a' : '#1a1a1a') : '#fff';
+        g.fillStyle = v === '#' ? (k >= 0 && pz.color ? swatchHex(pz.color.palette[k]) : '#1a1a1a') : '#fff';
         g.fillRect(x, y, 1, 1);
       }));
       grid.append(h('button', { class: 'btn puzzle cleared', onClick: () => puzzleEditor(ed, pack, li, i) }, c, h('span', { class: 'num' }, String(i + 1))));
@@ -98,7 +108,7 @@ function puzzleEditor(ed: ED, pack: Pack, li: number, index: number) {
   const lv = pack.levels[li];
   const orig = index >= 0 ? lv.puzzles[index] : null;
   let w = orig?.width ?? 15, hgt = orig?.height ?? 15;
-  let palette = (orig?.color?.palette ?? ['#1a1a1a']).slice(0, 8);
+  let palette = (orig?.color?.palette ?? ['#1a1a1a']).slice(0, 8).map(swatchHex);
   const fromOrig = (): number[] => {
     if (!orig) return new Array(w * hgt).fill(0);
     return orig.rows.join('').split('').map((c, i) => {
@@ -149,7 +159,7 @@ function puzzleEditor(ed: ED, pack: Pack, li: number, index: number) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (let y = 0; y < hgt; y++) for (let x = 0; x < w; x++) {
       const i = y * w + x, v = cells[i];
-      const base = v ? palette[Math.min(v - 1, palette.length - 1)] ?? '#1a1a1a' : (x & 1) ^ (y & 1) ? '#f4f8fb' : '#ffffff';
+      const base = v ? swatchHex(palette[Math.min(v - 1, palette.length - 1)]) : (x & 1) ^ (y & 1) ? '#f4f8fb' : '#ffffff';
       g.fillStyle = marks.has(i) ? '#e07a10' : open.has(i) && !v ? '#c5ddf5' : base;
       g.fillRect(x * s, y * s, s, s);
       if (marks.has(i)) { g.strokeStyle = '#7a3e00'; g.lineWidth = 2; g.strokeRect(x * s + 1, y * s + 1, s - 2, s - 2); }
@@ -337,7 +347,7 @@ function puzzleEditor(ed: ED, pack: Pack, li: number, index: number) {
     const add = palette.length < 8 ? h('button', { class: 'swatch add', onClick: () => { const next = INK.find(c => !palette.some(p => p.toLowerCase() === c.toLowerCase())) ?? '#888'; palette = [...palette, next]; brush = palette.length; paintSwatches(); } }, '+') : null;
     swatches.replaceChildren(
       h('button', { class: 'swatch empty' + (brush === 0 ? ' on' : ''), title: t('edEraser'), onClick: () => { brush = 0; paintSwatches(); } }, '✕'),
-      ...palette.map((c, i) => h('button', { class: 'swatch' + (brush === i + 1 ? ' on' : ''), style: `background:${c}`, onClick: () => { brush = i + 1; paintSwatches(); } })),
+      ...palette.map((c, i) => h('button', { class: 'swatch' + (brush === i + 1 ? ' on' : ''), style: `background:${swatchHex(c)}`, onClick: () => { brush = i + 1; paintSwatches(); } })),
       ...(add ? [add] : []));
   }
   paintSwatches();

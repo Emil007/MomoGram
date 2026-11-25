@@ -19,6 +19,7 @@ export function blzDecompress(src: Uint8Array): Uint8Array {
   const extra = u32(src, n - 4);
   const headerLen = footer >>> 24;
   const compLen = footer & 0xffffff;
+  if (extra > 32 * 1024 * 1024 || n + extra > 64 * 1024 * 1024) throw new Error('BLZ output is too large.');
   const out = new Uint8Array(n + extra);
   out.set(src);
   let inPos = n - headerLen;

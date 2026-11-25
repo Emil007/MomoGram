@@ -1,7 +1,23 @@
 // Pack colours: pick an accent from the original game's own colours and derive a full, readable palette from it.
-import type { PackTheme } from './format';
+import { safeColor, type PackTheme } from './format';
 
 type RGB = [number, number, number];
+
+/** #rgb / #rrggbb / #rrggbbaa → #rrggbb. shade() and hexToHsl need six digits; anything else is not a pack colour. */
+function hex6(c: unknown, fallback = ''): string {
+  const s = safeColor(c, '');
+  const m = /^#([0-9a-f]{3,8})$/i.exec(s);
+  if (!m) return fallback;
+  let h = m[1];
+  if (h.length === 3 || h.length === 4) h = h.slice(0, 3).replace(/./g, ch => ch + ch);
+  return ('#' + h.slice(0, 6)).toLowerCase();
+}
+function optHex(c: string | undefined): string | undefined {
+  if (!c) return undefined;
+  return hex6(c) || undefined;
+}
+
+const BOARD_COLOR = new Set(['bg', 'grid', 'grid5', 'cell', 'cellDither', 'fill', 'fillDither', 'cross', 'clueBg', 'clueBgAlt', 'clue', 'clueDone', 'outline', 'cursor', 'hl', 'hint', 'clueArea', 'clueAreaAlt', 'clueFocusBg', 'mark', 'mistake', 'trialFill', 'cursorBox']);
 
 function rgb2hsl([r, g, b]: RGB): [number, number, number] {
   r /= 255; g /= 255; b /= 255;
@@ -79,8 +95,24 @@ function standOut(against: string[], current: string): string {
 
 /** a skin, then the game's exact values over it */
 function finish(c: ThemeColors, p: NonNullable<PackTheme['palette']>): ThemeColors {
-  if (p.board) Object.assign(c.board, p.board);
-  if (p.screen) { if (p.screen.bg) c.bg = p.screen.bg; if (p.screen.panel) c.panel = p.screen.panel; if (p.screen.top) c.top = p.screen.top; }
+  if (p.board) {
+    const board: Record<string, string | number | boolean | string[]> = { ...p.board };
+    for (const k of Object.keys(board)) {
+      const v = board[k];
+      if (Array.isArray(v)) { board[k] = v.map(x => typeof x === 'string' ? (safeColor(x, '') || '#000000') : x); continue; }
+      if (typeof v === 'string' && BOARD_COLOR.has(k)) {
+        const s = safeColor(v, '');
+        if (s) board[k] = s; else delete board[k];
+      }
+    }
+    Object.assign(c.board, board);
+  }
+  if (p.screen) {
+    const bg = p.screen.bg ? safeColor(p.screen.bg, '') : '';
+    const panel = p.screen.panel ? safeColor(p.screen.panel, '') : '';
+    const top = p.screen.top ? safeColor(p.screen.top, '') : '';
+    if (bg) c.bg = bg; if (panel) c.panel = panel; if (top) c.top = top;
+  }
   const b = c.board;
   b.mistake = standOut([b.fill, b.cell, b.cross, b.bg], b.mistake ?? '#e03030');
   return c;
@@ -88,7 +120,19 @@ function finish(c: ThemeColors, p: NonNullable<PackTheme['palette']>): ThemeColo
 
 /** full set of colours for the screens and the board, from a pack palette */
 export function themeColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
-  return finish(skinColors(p), p);
+  const q: NonNullable<PackTheme['palette']> = {
+    ...p,
+    accent: hex6(p.accent, '#1f9be0'),
+    fill: optHex(p.fill), bg: optHex(p.bg), cell: optHex(p.cell), grid: optHex(p.grid), grid5: optHex(p.grid5),
+    cross: optHex(p.cross), cursor: optHex(p.cursor), hint: optHex(p.hint), clue: optHex(p.clue),
+    mark: optHex(p.mark), mistake: optHex(p.mistake),
+    screen: p.screen ? {
+      bg: p.screen.bg ? safeColor(p.screen.bg, '') || undefined : undefined,
+      panel: p.screen.panel ? safeColor(p.screen.panel, '') || undefined : undefined,
+      top: p.screen.top ? safeColor(p.screen.top, '') || undefined : undefined,
+    } : undefined,
+  };
+  return finish(skinColors(q), q);
 }
 
 /** the Game Boy games' board: full stripes behind the clues, filled cells as inset squares, small crosses */
@@ -179,7 +223,7 @@ function skinColors(p: NonNullable<PackTheme['palette']>): ThemeColors {
       board: {
         ...plain, bg: '#ffffff', grid: p.grid ?? '#b0b0b0', grid5: p.grid5 ?? '#606060', cell: p.cell ?? '#ffffff', cellDither: p.cell ?? '#ffffff',
         fill: p.fill ?? '#202020', fillDither: p.fill ?? '#202020', cross: p.cross ?? '#707070', clueBg: '#ffffff', clueBgAlt: '#f0f0f0',
-        clue: '#202020', clueDone: '#b0b0b0', outline: '#404040', cursor: '#d02020', hint: '#1e50c0', hl: cur + '55',
+        clue: p.clue ?? '#202020', clueDone: '#b0b0b0', outline: '#404040', cursor: '#d02020', hint: '#1e50c0', hl: cur + '55',
         clueBands: 'flat', clueArea: '#ffffff', clueAreaAlt: '#f2f2f2', clueFocusBg: cur + '88', crossWidth: 0.09, crossCap: 'butt', crossMargin: 0.22,
         grid5Width: 0.08, cursorBox: '#d02020', clueFont: '700', trialFill: '#e09030',
       },
@@ -232,7 +276,8 @@ export function applyThemeCss(el: HTMLElement, c: ThemeColors | null) {
   // dark mode: the menus stay dark, only the game's accent colour comes along (its board is drawn as it is)
   if (document.body.classList.contains('dark')) for (const k of ['--bg', '--panel', '--top', '--top-line', '--board-bg']) delete vars[k];
   for (const k of ['--accent', '--accent-dark', '--bg', '--panel', '--top', '--top-line', '--board-bg']) {
-    if (vars[k]) el.style.setProperty(k, vars[k]); else el.style.removeProperty(k);
+    const s = vars[k] ? safeColor(vars[k], '') : '';
+    if (s) el.style.setProperty(k, s); else el.style.removeProperty(k);
   }
   el.classList.toggle('themed', !!c);
 }
